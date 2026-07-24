@@ -14,11 +14,6 @@ import { PlansModule } from './plans/plans.module';
       serveRoot: '/',
       exclude: ['/api/(.*)'],
     }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'frontend', 'public'),
-      serveRoot: '/brand-assets',
-      exclude: ['/api/(.*)'],
-    }),
     SupabaseModule,
     ConfigModule,
     HistoryModule,
