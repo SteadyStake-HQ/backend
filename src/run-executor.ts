@@ -1,0 +1,1113 @@
+/**
+ * DCA executor: reads registered users from Supabase, executes ready schedules by sending
+ * executeSwap from the relayer wallet, then deducts gas cost from user's GasTank.
+ * Run on a schedule via server (dashboard) or once via: node dist/run-executor.js
+ */
+import "dotenv/config";
+import { isSupabaseConfigured } from "./supabase/automation-users";
+import { getDcaPlanMembers, recordPlanExecuted } from "./supabase/dca-plans-store";
+import {
+  getPlanAdminControlMap,
+  planAdminControlKey,
+  type PlanAdminControl,
+} from "./supabase/plan-admin-controls";
+import {
+  clearPlanExecuting,
+  markPlanExecuting,
+} from "./plans/plan-execution-state";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type Chain,
+  encodeFunctionData,
+} from "viem";
+import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
+import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, getEnvChainIds, usesDirectSwapRouter, CHAIN_NAMES } from "./config";
+
+const ZERO_EX_BASE = "https://api.0x.org";
+
+/** Coingecko asset IDs for native token price (USD). */
+const COINGECKO_IDS: Record<number, string> = {
+  8453: "ethereum",
+  84532: "ethereum",
+  11155111: "ethereum", // Ethereum Sepolia
+  56: "binancecoin",
+  137: "matic-network",
+  2222: "kava",
+  // CoinGecko lists BOT Chain (platform "bot-chain", native coin "bot") but has no USD
+  // quote for it yet, so set NATIVE_PRICE_USD_677 / _968 until it does — otherwise gas
+  // cost resolves to 0 and the GasTank is never debited.
+  677: "bot",
+  968: "bot",
+};
+
+/** Manual native-token USD price per chain: NATIVE_PRICE_USD_<chainId>. Wins over CoinGecko. */
+function getNativePriceOverride(chainId: number): number | null {
+  const raw = process.env[`NATIVE_PRICE_USD_${chainId}`]?.trim();
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const GAS_LIMIT_EXECUTE_SWAP = 400_000n;
+const ESTIMATE_BUFFER_BPS = 15000; // 1.5x for balance check
+const RECORD_BUFFER_BPS = 11000; // 1.1x when recording actual cost
+const relayerNonceByChain = new Map<number, number>();
+
+async function getNextRelayerNonce(
+  chainId: number,
+  publicClient: ReturnType<typeof createPublicClient>,
+  address: `0x${string}`
+): Promise<number> {
+  const pendingNonce = await publicClient.getTransactionCount({
+    address,
+    blockTag: "pending",
+  });
+  const cachedNonce = relayerNonceByChain.get(chainId);
+  const nextNonce = cachedNonce != null && cachedNonce > pendingNonce ? cachedNonce : pendingNonce;
+  relayerNonceByChain.set(chainId, nextNonce + 1);
+  return nextNonce;
+}
+
+/** Fetch native token price in USD from Coingecko. Cached per chain for the run. */
+const nativePriceCache: Record<number, number> = {};
+async function getNativePriceUsd(chainId: number): Promise<number> {
+  const override = getNativePriceOverride(chainId);
+  if (override != null) return override;
+  if (nativePriceCache[chainId] != null) return nativePriceCache[chainId];
+  const id = COINGECKO_IDS[chainId];
+  if (!id) return 0;
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`
+    );
+    if (!res.ok) return 0;
+    const data = (await res.json()) as Record<string, { usd?: number }>;
+    const price = data[id]?.usd ?? 0;
+    nativePriceCache[chainId] = price;
+    return price;
+  } catch {
+    return 0;
+  }
+}
+
+/** Pre-fill native price cache for multiple chains in one Coingecko request. */
+async function prefetchNativePrices(chainIds: number[]): Promise<void> {
+  const ids = [...new Set(chainIds.map((cid) => COINGECKO_IDS[cid]).filter(Boolean))] as string[];
+  if (ids.length === 0) return;
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${ids.map((id) => encodeURIComponent(id)).join(",")}&vs_currencies=usd`
+    );
+    if (!res.ok) return;
+    const data = (await res.json()) as Record<string, { usd?: number }>;
+    for (const cid of chainIds) {
+      const id = COINGECKO_IDS[cid];
+      if (id && data[id]?.usd != null) nativePriceCache[cid] = data[id].usd!;
+    }
+  } catch {
+    // fallback: individual fetches already work via getNativePriceUsd
+  }
+}
+
+/**
+ * Compute gas cost in USDC (6 decimals) from gas used and gas price.
+ * costUsd = (gasUsed * gasPriceWei) / 1e18 * nativePriceUsd; then * 1e6 for USDC, with buffer (bps).
+ */
+function gasCostToUsdc6(gasUsed: bigint, gasPriceWei: bigint, nativePriceUsd: number, bufferBps: number): bigint {
+  if (nativePriceUsd <= 0) return 0n;
+  const weiSpent = gasUsed * gasPriceWei;
+  const usdScaled = (weiSpent * BigInt(Math.round(nativePriceUsd * 1e6)) * BigInt(bufferBps)) / (10n ** 18n) / 10000n;
+  return usdScaled; // already in 6 decimals
+}
+
+export const DCA_VAULT_ABI = [
+  { type: "function", name: "getActiveSchedules", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256[]" }], stateMutability: "view" },
+  { type: "function", name: "getReadyScheduleIds", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256[]" }], stateMutability: "view" },
+  { type: "function", name: "getEnrolledScheduleIds", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256[]" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "getSchedule",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "scheduleId", type: "uint256" },
+    ],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "targetToken", type: "address" },
+          { name: "frequency", type: "uint8" },
+          { name: "amountPerInterval", type: "uint256" },
+          { name: "lastExecutionTime", type: "uint256" },
+          { name: "totalAmount", type: "uint256" },
+          { name: "executedCount", type: "uint256" },
+          { name: "active", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  { type: "function", name: "isScheduleReady", inputs: [{ name: "user", type: "address" }, { name: "scheduleId", type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "view" },
+  { type: "function", name: "feePercentage", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "event",
+    name: "ScheduleCreated",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "scheduleId", type: "uint256", indexed: true },
+      { name: "targetToken", type: "address", indexed: false },
+      { name: "frequency", type: "uint8", indexed: false },
+      { name: "amountPerInterval", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "function",
+    name: "executeSwap",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "scheduleId", type: "uint256" },
+      { name: "swapData", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  { type: "function", name: "scheduleCount", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "event",
+    name: "ScheduleExecuted",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "scheduleId", type: "uint256", indexed: true },
+      { name: "targetToken", type: "address", indexed: false },
+      { name: "usdcAmount", type: "uint256", indexed: false },
+      { name: "tokenOut", type: "uint256", indexed: false },
+      { name: "fee", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ScheduleCancelled",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "scheduleId", type: "uint256", indexed: true },
+      { name: "returnedAmount", type: "uint256", indexed: false },
+      { name: "cancelFee", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+const GAS_TANK_ABI = [
+  { type: "function", name: "balanceOf", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "gasCostPerExecutionUsdc6", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "recordExecution",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "amountUsdc6", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const kavaChain: Chain = {
+  id: 2222,
+  name: "Kava",
+  nativeCurrency: { decimals: 18, name: "Kava", symbol: "KAVA" },
+  rpcUrls: { default: { http: [process.env.RPC_URL_2222 ?? "https://evm.kava.io"] } },
+};
+
+/** BOT Chain mainnet (677). EVM, Parlia consensus (BSC-derived) — legacy gas pricing. */
+const botChain: Chain = {
+  id: 677,
+  name: "BOT Chain",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "BOT" },
+  rpcUrls: { default: { http: [process.env.RPC_URL_677 ?? "https://rpc.botchain.ai"] } },
+  blockExplorers: { default: { name: "BOTScan", url: "https://scan.botchain.ai" } },
+  contracts: { multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" } },
+};
+
+/** BOT Chain testnet (968). */
+const botTestnet: Chain = {
+  id: 968,
+  name: "BOT Chain Testnet",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "tBOT" },
+  rpcUrls: { default: { http: [process.env.RPC_URL_968 ?? "https://rpc.bohr.life"] } },
+  blockExplorers: { default: { name: "BOTScan", url: "https://scan.bohr.life" } },
+  contracts: { multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" } },
+  testnet: true,
+};
+
+export function getChain(chainId: number): Chain | undefined {
+  if (chainId === 8453) return base;
+  if (chainId === 84532) return baseSepolia;
+  if (chainId === 11155111) return sepolia;
+  if (chainId === 56) return bsc;
+  if (chainId === 137) return polygon;
+  if (chainId === 2222) return kavaChain;
+  if (chainId === 677) return botChain;
+  if (chainId === 968) return botTestnet;
+  return undefined;
+}
+
+/** Chains to process. Empty AUTOMATION_CHAIN_IDS = all chains with DCAVault+GasTank in deployed-addresses.json. */
+export function getAllowedChainIds(): Set<number> {
+  const envChainIds = getEnvChainIds();
+  if (envChainIds) return new Set(envChainIds);
+  return new Set(getChainIdsWithGasTank());
+}
+
+async function get0xQuote(
+  chainId: number,
+  sellToken: string,
+  buyToken: string,
+  sellAmountWei: string,
+  apiKey?: string,
+  slippagePercent = 1
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    chainId: String(chainId),
+    sellToken,
+    buyToken,
+    sellAmount: sellAmountWei,
+    slippagePercentage: String(slippagePercent),
+  });
+  const url = `${ZERO_EX_BASE}/swap/v1/quote?${params}`;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey) headers["0x-api-key"] = apiKey;
+  const res = await fetch(url, { headers });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { data?: string };
+  return json.data ?? null;
+}
+
+function netAmountAfterFee(amount: bigint, feeBps: number): bigint {
+  const fee = (amount * BigInt(feeBps)) / 10000n;
+  return amount - fee;
+}
+
+/** Gas tank balance aggregated across all networks (CEX-style: one balance for any chain). Fetches all chains in parallel. */
+async function getGlobalGasBalance(userAddress: string): Promise<{ globalBalance: bigint; byChain: Record<number, bigint> }> {
+  const chainIds = getChainIdsWithGasTank();
+  const results = await Promise.all(
+    chainIds.map(async (cid): Promise<{ cid: number; bal: bigint }> => {
+      const cfg = getVaultUsdcGasTank(cid);
+      if (!cfg) return { cid, bal: 0n };
+      const rpcUrl = getRpc(cid);
+      const chain = getChain(cid);
+      if (!rpcUrl || !chain) return { cid, bal: 0n };
+      try {
+        const client = createPublicClient({ chain, transport: http(rpcUrl) });
+        const bal = (await client.readContract({
+          address: cfg.gasTank as `0x${string}`,
+          abi: GAS_TANK_ABI,
+          functionName: "balanceOf",
+          args: [userAddress as `0x${string}`],
+        })) as bigint;
+        return { cid, bal };
+      } catch {
+        return { cid, bal: 0n };
+      }
+    })
+  );
+  const byChain: Record<number, bigint> = {};
+  let globalBalance = 0n;
+  for (const { cid, bal } of results) {
+    byChain[cid] = bal;
+    globalBalance += bal;
+  }
+  return { globalBalance, byChain };
+}
+
+/** Pick chain to deduct gas cost from: prefer execution chain if enough balance, else chain with largest balance >= cost. */
+function pickDeductChain(byChain: Record<number, bigint>, executionChainId: number, costUsdc6: bigint): number | null {
+  if (byChain[executionChainId] != null && byChain[executionChainId] >= costUsdc6) return executionChainId;
+  let best: number | null = null;
+  let bestBal = 0n;
+  for (const [cid, bal] of Object.entries(byChain)) {
+    const chainId = parseInt(cid, 10);
+    if (bal >= costUsdc6 && bal > bestBal) {
+      best = chainId;
+      bestBal = bal;
+    }
+  }
+  return best;
+}
+
+export interface ExecutedTask {
+  chainId: number;
+  user: string;
+  scheduleId: string;
+  txHash: string;
+  /** Optional detail for UI/history */
+  targetToken?: string;
+  amountPerIntervalUsdc6?: string;
+  frequency?: number;
+  gasUsed?: string;
+  costUsdc6?: string;
+  /** False when the swap ran but the GasTank deduction did not land — the run was effectively free. */
+  gasDeducted?: boolean;
+  /** Chain the gas was actually deducted on (may differ from the execution chain). */
+  gasDeductChainId?: number;
+}
+
+export interface GasBalanceEntry {
+  chainId: number;
+  user: string;
+  balanceUsdc6: string;
+}
+
+export interface PlanSnapshotEntry {
+  member: string;
+  scheduleIds: string[];
+}
+
+/** Total deposited (USDC 6d) per user per chain at run time, for portfolio history chart */
+export interface PortfolioSnapshotEntry {
+  user: string;
+  chainId: number;
+  valueUsdc6: string;
+}
+
+export interface ExecutorResult {
+  ok: boolean;
+  executed: number;
+  executedTasks: string[];
+  /** Structured for history storage */
+  executedTasksDetail?: ExecutedTask[];
+  errors?: string[];
+  /** Gas tank balance per user after execution (for users we executed) */
+  gasBalances?: GasBalanceEntry[];
+  /** Active schedule IDs per member at time of run */
+  planSnapshots?: PlanSnapshotEntry[];
+  /** Total deposited per user per chain for portfolio value history */
+  portfolioSnapshots?: PortfolioSnapshotEntry[];
+}
+
+/** Optional progress callback for live execution tracking (e.g. SSE in dashboard). */
+export type ProgressCallback = (message: string) => void;
+
+export interface RunExecutorOptions {
+  /** When set, only run on these chain IDs. Otherwise use AUTOMATION_CHAIN_IDS env or all chains with GasTank. */
+  chainIds?: number[];
+  /**
+   * Explicit plans selected by an operator. When present, only these plans are
+   * considered and enrollment is not required because this is a manual backend action.
+   */
+  targets?: Array<{
+    chainId: number;
+    userAddress: string;
+    scheduleId: string;
+  }>;
+}
+
+
+/**
+ * Resolve the `${chainId}:${user}` member list to process, from the DB only: everyone with a
+ * recorded plan, unioned with the automation registry. Shared by the executor and the plans reader
+ * so both see the same set.
+ *
+ * This deliberately never falls back to on-chain ScheduleCreated discovery. That fallback scanned
+ * ~1500 block ranges per chain on every read (minutes of work, frequently rate-limited) to
+ * rediscover members the DB already knows, because it triggered whenever the registry was empty.
+ * Plans are now recorded at creation, so the DB is the source of truth. To recover members for
+ * plans created outside that path, run the manual backfill: POST /api/plans/reindex.
+ */
+export async function resolveMembers(
+  allowedChains: Set<number>,
+  log: ProgressCallback = () => {},
+): Promise<string[]> {
+  if (!isSupabaseConfigured()) {
+    log("Supabase not configured — no member registry available. Set SUPABASE_DB_URL.");
+    return [];
+  }
+  try {
+    log("Reading members from the database (dca_plans + automation_users)…");
+    const startedAt = Date.now();
+    const members = await getDcaPlanMembers([...allowedChains]);
+    log(`Database returned ${members.length} member(s) in ${Date.now() - startedAt}ms`);
+    if (members.length === 0) {
+      log("No members recorded yet. New plans register themselves on creation; for plans created earlier, run POST /api/plans/reindex to backfill.");
+    }
+    return members;
+  } catch (e) {
+    // Surface the failure rather than silently burning minutes on a block scan.
+    log(`Member read from database failed: ${(e as Error).message}`);
+    return [];
+  }
+}
+
+/** Run DCA execution once. Throws on missing env or KV failure. Use from server or CLI. */
+export async function runExecutor(onProgress?: ProgressCallback, options?: RunExecutorOptions): Promise<ExecutorResult> {
+  const log = (msg: string) => {
+    onProgress?.(msg);
+  };
+
+  const pk = process.env.RELAYER_PRIVATE_KEY;
+  if (!pk) {
+    throw new Error("Missing RELAYER_PRIVATE_KEY");
+  }
+
+  log("[Run started] Processing all networks — each registered chain:user will be checked for ready schedules.");
+  const requestedTargets = options?.targets?.filter(
+    (target) =>
+      Number.isInteger(target.chainId) &&
+      target.chainId > 0 &&
+      /^0x[a-fA-F0-9]{40}$/.test(target.userAddress) &&
+      /^\d+$/.test(target.scheduleId),
+  );
+  if (
+    options?.targets &&
+    requestedTargets?.length !== options.targets.length
+  ) {
+    throw new Error("Invalid targeted execution request");
+  }
+  const isTargetedRun = Boolean(options?.targets?.length);
+  // AUTOMATION_CHAIN_IDS is checked before the caller's list on purpose: the caller's list comes
+  // from the persisted scheduler config, which no UI can edit, so a chain deployed after it was
+  // last written (BOT Chain, on a config saved when only the Sepolia testnets existed) would never
+  // be scanned again and its plans would sit enrolled but unexecuted.
+  const envChainIds = getEnvChainIds();
+  const allowedChains =
+    isTargetedRun
+      ? new Set(requestedTargets!.map((target) => target.chainId))
+      : envChainIds
+      ? new Set(envChainIds)
+      : options?.chainIds?.length !== undefined && options.chainIds.length > 0
+      ? new Set(options.chainIds)
+      : getAllowedChainIds();
+  const chainSource = isTargetedRun
+    ? "targeted run"
+    : envChainIds
+    ? "AUTOMATION_CHAIN_IDS"
+    : options?.chainIds?.length
+    ? "scheduler config"
+    : "deployed chains with a GasTank";
+  log(`Allowed chains for execution: ${[...allowedChains].sort((a, b) => a - b).join(", ")} (from ${chainSource})`);
+  Object.keys(nativePriceCache).forEach((k) => delete nativePriceCache[Number(k)]);
+  const members = isTargetedRun
+    ? [
+        ...new Set(
+          requestedTargets!.map(
+            (target) => `${target.chainId}:${target.userAddress.toLowerCase()}`,
+          ),
+        ),
+      ]
+    : await resolveMembers(allowedChains, log);
+  log(`Registered members: ${members.length}`);
+
+  // Admin holds are read once per run rather than per plan. A hold is an explicit instruction not
+  // to touch someone's plan, so a failed read aborts the run instead of proceeding without it:
+  // executing a paused plan cannot be undone, whereas a skipped run is picked up by the next tick.
+  // This matches the rest of the executor, which already does nothing when the database is down.
+  let adminControls: Map<string, PlanAdminControl>;
+  try {
+    adminControls = isSupabaseConfigured()
+      ? await getPlanAdminControlMap([...allowedChains])
+      : new Map();
+    if (adminControls.size > 0) {
+      log(`Admin holds in force: ${adminControls.size} plan(s) will not be auto-executed.`);
+    }
+  } catch (e) {
+    const message = `Admin plan holds could not be read: ${(e as Error).message}. Aborting the run so no held plan is executed.`;
+    log(message);
+    return { ok: false, executed: 0, executedTasks: [], errors: [message] };
+  }
+
+  const account = privateKeyToAccount(pk as `0x${string}`);
+  const zeroExKey = process.env.ZERO_EX_API_KEY;
+  const gasCostFallbackUsdc6 = getGasCostPerExecutionUsdc6Fallback();
+  const executed: string[] = [];
+  const executedTasksDetail: ExecutedTask[] = [];
+  const gasBalances: GasBalanceEntry[] = [];
+  const planSnapshots: PlanSnapshotEntry[] = [];
+  const portfolioSnapshots: PortfolioSnapshotEntry[] = [];
+  const errors: string[] = [];
+
+  // Pre-fetch native token prices for all allowed chains in one Coingecko request
+  await prefetchNativePrices([...allowedChains]);
+  const gasPriceCache: Record<number, bigint> = {};
+
+  for (const member of members) {
+    const [chainIdStr, userAddress] = member.split(":");
+    const chainId = parseInt(chainIdStr, 10);
+    if (!userAddress || isNaN(chainId)) continue;
+    if (!allowedChains.has(chainId)) continue;
+
+    log(`  [${member}] Processing…`);
+    const cfg = getVaultUsdcGasTank(chainId);
+    if (!cfg) {
+      errors.push(`No vault/GasTank config for chain ${chainId} (deploy GasTank and set in backend deployed-addresses.json)`);
+      log(`  [${member}] Skip: no vault/GasTank config`);
+      continue;
+    }
+
+    const rpcUrl = getRpc(chainId);
+    const chain = getChain(chainId);
+    if (!rpcUrl || !chain) {
+      errors.push(`No RPC or chain for ${chainId}`);
+      log(`  [${member}] Skip: no RPC/chain`);
+      continue;
+    }
+
+    const transport = http(rpcUrl);
+    const publicClient = createPublicClient({ chain, transport });
+    const walletClient = createWalletClient({ account, chain, transport });
+
+    const vault = cfg.vault as `0x${string}`;
+    const user = userAddress as `0x${string}`;
+    const gasTankAddr = cfg.gasTank as `0x${string}`;
+
+    // Prefer on-chain gas cost per execution (editable by owner) when set
+    let gasCostPerExecutionFromContract = 0n;
+    try {
+      gasCostPerExecutionFromContract = (await publicClient.readContract({
+        address: gasTankAddr,
+        abi: GAS_TANK_ABI,
+        functionName: "gasCostPerExecutionUsdc6",
+        args: [],
+      })) as bigint;
+    } catch {
+      // ignore; will fall back to env or gas-price derived
+    }
+
+    // Global gas tank balance (CEX-style: top-up on any network, use on any chain)
+    let globalGas: { globalBalance: bigint; byChain: Record<number, bigint> };
+    try {
+      globalGas = await getGlobalGasBalance(userAddress);
+    } catch (e) {
+      errors.push(`Global gas balance ${member}: ${(e as Error).message}`);
+      log(`  [${member}] Skip: global gas balance failed`);
+      continue;
+    }
+
+    let gasPriceWei = 0n;
+    let nativePriceUsd = 0;
+    // Contract price first: it is what the frontend quoted and what the user prepaid into the
+    // tank. Env is only a fallback for a GasTank whose price was never set.
+    let estimatedCostUsdc6 = 0n;
+    if (gasCostPerExecutionFromContract > 0n) {
+      estimatedCostUsdc6 = gasCostPerExecutionFromContract;
+    } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
+      estimatedCostUsdc6 = gasCostFallbackUsdc6;
+    } else {
+      try {
+        if (gasPriceCache[chainId] === undefined) {
+          gasPriceCache[chainId] = await publicClient.getGasPrice();
+        }
+        gasPriceWei = gasPriceCache[chainId];
+        nativePriceUsd = await getNativePriceUsd(chainId);
+        if (nativePriceUsd > 0) {
+          estimatedCostUsdc6 = gasCostToUsdc6(GAS_LIMIT_EXECUTE_SWAP, gasPriceWei, nativePriceUsd, ESTIMATE_BUFFER_BPS);
+        } else {
+          errors.push(`Native price unavailable for chain ${chainId}, skipping`);
+          log(`  [${member}] Skip: native price unavailable`);
+          continue;
+        }
+      } catch (e) {
+        errors.push(`Gas price / native price ${chainId}: ${(e as Error).message}`);
+        log(`  [${member}] Skip: ${(e as Error).message}`);
+        continue;
+      }
+    }
+
+    let activeScheduleIds: bigint[];
+    try {
+      activeScheduleIds = (await publicClient.readContract({
+        address: vault,
+        abi: DCA_VAULT_ABI,
+        functionName: "getActiveSchedules",
+        args: [user],
+      })) as bigint[];
+    } catch (e) {
+      errors.push(`getActiveSchedules ${member}: ${(e as Error).message}`);
+      continue;
+    }
+    planSnapshots.push({ member, scheduleIds: activeScheduleIds.map((id) => id.toString()) });
+
+    const memberTargets = isTargetedRun
+      ? requestedTargets!.filter(
+          (target) =>
+            target.chainId === chainId &&
+            target.userAddress.toLowerCase() === userAddress.toLowerCase(),
+        )
+      : [];
+    const requestedScheduleIds = new Set(
+      memberTargets.map((target) => target.scheduleId),
+    );
+    if (isTargetedRun) {
+      const activeSet = new Set(activeScheduleIds.map((id) => id.toString()));
+      for (const requestedId of requestedScheduleIds) {
+        if (!activeSet.has(requestedId)) {
+          errors.push(`Schedule ${member} scheduleId=${requestedId} is not active`);
+          log(`  [${member}] Schedule ${requestedId}: skip (not active)`);
+        }
+      }
+    }
+
+    // Portfolio value = sum over schedules (totalAmount + amountPerInterval * executedCount); fetch all schedules in parallel
+    let userTotalDeposited = 0n;
+    if (activeScheduleIds.length > 0) {
+      const scheduleResults = await Promise.all(
+        activeScheduleIds.map((scheduleId) =>
+          publicClient
+            .readContract({
+              address: vault,
+              abi: DCA_VAULT_ABI,
+              functionName: "getSchedule",
+              args: [user, scheduleId],
+            })
+            .then((s) => s as { totalAmount: bigint; amountPerInterval: bigint; executedCount: bigint })
+            .catch(() => null)
+        )
+      );
+      for (const schedule of scheduleResults) {
+        if (schedule) userTotalDeposited += schedule.totalAmount + schedule.amountPerInterval * schedule.executedCount;
+      }
+    }
+    if (userTotalDeposited > 0n) {
+      portfolioSnapshots.push({ user: userAddress, chainId, valueUsdc6: userTotalDeposited.toString() });
+    }
+
+    // Fetch only schedule IDs that are ready to execute (avoids per-schedule isScheduleReady calls)
+    let readyScheduleIds: bigint[];
+    try {
+      readyScheduleIds = (await publicClient.readContract({
+        address: vault,
+        abi: DCA_VAULT_ABI,
+        functionName: "getReadyScheduleIds",
+        args: [user],
+      })) as bigint[];
+    } catch {
+      // Fallback for vaults not yet upgraded: filter active schedules by isScheduleReady
+      readyScheduleIds = [];
+      for (const scheduleId of activeScheduleIds) {
+        try {
+          const ready = (await publicClient.readContract({
+            address: vault,
+            abi: DCA_VAULT_ABI,
+            functionName: "isScheduleReady",
+            args: [user, scheduleId],
+          })) as boolean;
+          if (ready) readyScheduleIds.push(scheduleId);
+        } catch {
+          // skip
+        }
+      }
+    }
+
+    if (isTargetedRun) {
+      const readySet = new Set(readyScheduleIds.map((id) => id.toString()));
+      for (const requestedId of requestedScheduleIds) {
+        if (
+          activeScheduleIds.some((id) => id.toString() === requestedId) &&
+          !readySet.has(requestedId)
+        ) {
+          errors.push(`Schedule ${member} scheduleId=${requestedId} is not ready`);
+          log(`  [${member}] Schedule ${requestedId}: skip (cooldown not finished)`);
+        }
+      }
+      readyScheduleIds = readyScheduleIds.filter((id) =>
+        requestedScheduleIds.has(id.toString()),
+      );
+    }
+
+    // Drop any plan an admin has put on hold. This runs on the targeted path too: an operator who
+    // paused a plan and then clicked Execute on it is contradicting themselves, and the explicit
+    // error tells them to resume it first rather than silently overriding the hold.
+    if (adminControls.size > 0) {
+      readyScheduleIds = readyScheduleIds.filter((scheduleId) => {
+        const hold = adminControls.get(
+          planAdminControlKey(chainId, userAddress, scheduleId),
+        );
+        if (!hold) return true;
+        const detail = hold.reason ? ` — ${hold.reason}` : "";
+        if (isTargetedRun) {
+          errors.push(
+            `Schedule ${member} scheduleId=${scheduleId} is ${hold.status} by an admin${detail}`,
+          );
+        }
+        log(
+          `  [${member}] Schedule ${scheduleId}: skip (${hold.status} by admin${detail})`,
+        );
+        return false;
+      });
+    }
+
+    // Only auto-execute schedules that are enrolled for auto-execution (one free per user per network; extra require fee)
+    if (!isTargetedRun) {
+      let enrolledScheduleIds: bigint[] = [];
+      try {
+        enrolledScheduleIds = (await publicClient.readContract({
+          address: vault,
+          abi: DCA_VAULT_ABI,
+          functionName: "getEnrolledScheduleIds",
+          args: [user],
+        })) as bigint[];
+      } catch {
+        // Old vault without getEnrolledScheduleIds: do not auto-execute any (safe default)
+      }
+      const enrolledSet = new Set(enrolledScheduleIds.map((id) => id.toString()));
+      readyScheduleIds = readyScheduleIds.filter((id) => enrolledSet.has(id.toString()));
+    }
+
+    let feeBps = 25;
+    try {
+      feeBps = Number(await publicClient.readContract({
+        address: vault,
+        abi: DCA_VAULT_ABI,
+        functionName: "feePercentage",
+      }));
+    } catch {
+      // use default
+    }
+
+    type PendingItem = {
+      scheduleId: bigint;
+      targetToken: string;
+      amountPerInterval: bigint;
+      frequency: number;
+      executeSwapData: `0x${string}`;
+    };
+    const pendingItems: PendingItem[] = [];
+    for (const scheduleId of readyScheduleIds) {
+      let targetToken: `0x${string}` = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+      let amountPerInterval = 0n;
+      let frequency = 0;
+      try {
+        const schedule = (await publicClient.readContract({
+          address: vault,
+          abi: DCA_VAULT_ABI,
+          functionName: "getSchedule",
+          args: [user, scheduleId],
+        })) as { targetToken: `0x${string}`; amountPerInterval: bigint; frequency: number };
+        targetToken = schedule.targetToken;
+        amountPerInterval = schedule.amountPerInterval;
+        frequency = Number(schedule.frequency ?? 0);
+      } catch (e) {
+        errors.push(`getSchedule ${member} ${scheduleId}: ${(e as Error).message}`);
+        continue;
+      }
+      if (globalGas.globalBalance < estimatedCostUsdc6) {
+        errors.push(`Insufficient gas tank (global) ${member} scheduleId=${scheduleId}`);
+        log(`  [${member}] Schedule ${scheduleId}: skip (insufficient gas tank)`);
+        continue;
+      }
+      const netAmount = netAmountAfterFee(amountPerInterval, feeBps);
+      let swapData: string | null = null;
+      // Chains without a 0x deployment (Sepolia mocks, BOT Chain's BDEX adapter) route
+      // on-chain: empty swapData makes DCAVault call ISwapRouter.swap directly.
+      if (usesDirectSwapRouter(chainId)) {
+        swapData = "0x";
+      } else {
+        swapData = await get0xQuote(chainId, cfg.usdc, targetToken, netAmount.toString(), zeroExKey, 1);
+      }
+      if (swapData === null) {
+        errors.push(`0x quote failed ${member} ${scheduleId}`);
+        continue;
+      }
+      pendingItems.push({
+        scheduleId,
+        targetToken: targetToken as string,
+        amountPerInterval,
+        frequency,
+        executeSwapData: encodeFunctionData({
+          abi: DCA_VAULT_ABI,
+          functionName: "executeSwap",
+          args: [user, scheduleId, swapData as `0x${string}`],
+        }),
+      });
+    }
+
+    if (pendingItems.length === 0) continue;
+
+    // Submit executeSwap transactions sequentially and wait for each receipt before sending the next.
+    // This avoids "replacement transaction underpriced" when multiple plans are ready on the same chain
+    // (parallel sends can use the same nonce; sequential + wait ensures each tx gets a fresh nonce).
+    try {
+      log(`  [${member}] Executing ${pendingItems.length} schedule(s) sequentially…`);
+      for (const item of pendingItems) {
+        markPlanExecuting(
+          chainId,
+          userAddress,
+          item.scheduleId,
+          isTargetedRun ? "manual" : "auto",
+        );
+        try {
+        // Pre-flight the gas deduction BEFORE swapping. executeSwap is irreversible, so if the
+        // GasTank cannot be charged (executor unset, insufficient balance, etc.) we skip the
+        // schedule rather than perform the swap for free — "no chargeable tank, no execution".
+        // Uses the pre-swap cost estimate and the same pickDeductChain the real charge below uses;
+        // the post-swap block still recomputes and settles the exact cost.
+        {
+          const preflightChainId = pickDeductChain(globalGas.byChain, chainId, estimatedCostUsdc6);
+          if (preflightChainId == null) {
+            errors.push(`Insufficient gas tank (preflight) ${member} scheduleId=${item.scheduleId}`);
+            log(`  [${member}] Schedule ${item.scheduleId}: skip (insufficient gas tank, preflight)`);
+            continue;
+          }
+          const cfgPre = getVaultUsdcGasTank(preflightChainId);
+          const gasTankPre = cfgPre?.gasTank as `0x${string}` | undefined;
+          if (!cfgPre || !gasTankPre) {
+            errors.push(`Missing GasTank config for preflight deduct chain ${preflightChainId}`);
+            continue;
+          }
+          const rpcPre = preflightChainId === chainId ? rpcUrl : getRpc(preflightChainId);
+          const chainPre = preflightChainId === chainId ? chain : getChain(preflightChainId);
+          if (!rpcPre || !chainPre) {
+            errors.push(`No RPC/chain for preflight deduct chain ${preflightChainId}`);
+            continue;
+          }
+          const publicClientPre =
+            preflightChainId === chainId
+              ? publicClient
+              : createPublicClient({ chain: chainPre, transport: http(rpcPre) });
+          try {
+            await publicClientPre.simulateContract({
+              account,
+              address: gasTankPre,
+              abi: GAS_TANK_ABI,
+              functionName: "recordExecution",
+              args: [user, estimatedCostUsdc6],
+            });
+          } catch (e) {
+            const reason = (e as Error).message ?? String(e);
+            const hint = /OnlyExecutor/i.test(reason)
+              ? ` — the relayer ${account.address} is not the GasTank executor on chain ${preflightChainId}; run scripts/set-gastank-executor.js`
+              : "";
+            errors.push(
+              `Skipping swap: gas tank not chargeable (preflight) on chain ${preflightChainId} ${member} scheduleId=${item.scheduleId}: ${reason}${hint}`
+            );
+            log(`  [${member}] Schedule ${item.scheduleId}: skip — gas deduction would fail (preflight)${hint}`);
+            continue;
+          }
+        }
+
+        let hash: `0x${string}`;
+        let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
+        try {
+          const nonce = await getNextRelayerNonce(chainId, publicClient, account.address);
+          hash = await walletClient.sendTransaction({
+            to: vault,
+            data: item.executeSwapData,
+            gas: GAS_LIMIT_EXECUTE_SWAP,
+            nonce,
+          });
+          log(`  [${member}] Submitted scheduleId=${item.scheduleId} tx=${hash}`);
+          receipt = await publicClient.waitForTransactionReceipt({ hash });
+        } catch (e) {
+          errors.push(`executeSwap ${member} scheduleId=${item.scheduleId}: ${(e as Error).message}`);
+          log(`  [${member}] Schedule ${item.scheduleId}: ${(e as Error).message}`);
+          continue;
+        }
+        if (receipt.status !== "success") {
+          errors.push(`executeSwap reverted ${member} scheduleId=${item.scheduleId} tx=${hash}`);
+          log(`  [${member}] Schedule ${item.scheduleId}: reverted tx=${hash}`);
+          continue;
+        }
+        log(`  [${member}] Schedule ${item.scheduleId}: confirmed tx=${hash}`);
+        executed.push(`${member} scheduleId=${item.scheduleId} tx=${hash}`);
+
+        // Same precedence as the estimate above — deducting a different number than the user
+        // was quoted is what let a fully funded plan drain its tank early.
+        let costToRecordUsdc6: bigint;
+        if (gasCostPerExecutionFromContract > 0n) {
+          costToRecordUsdc6 = gasCostPerExecutionFromContract;
+        } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
+          costToRecordUsdc6 = gasCostFallbackUsdc6;
+        } else {
+          costToRecordUsdc6 = gasCostToUsdc6(
+            receipt.gasUsed,
+            receipt.effectiveGasPrice ?? gasPriceWei,
+            nativePriceUsd,
+            RECORD_BUFFER_BPS
+          );
+        }
+
+        const deductChainId = pickDeductChain(globalGas.byChain, chainId, costToRecordUsdc6);
+        if (deductChainId == null) {
+          errors.push(`No chain with enough gas balance to deduct ${costToRecordUsdc6} ${member} scheduleId=${item.scheduleId}`);
+          continue;
+        }
+        const cfgDeduct = getVaultUsdcGasTank(deductChainId);
+        const gasTankDeduct = cfgDeduct?.gasTank as `0x${string}` | undefined;
+        if (!cfgDeduct || !gasTankDeduct) {
+          errors.push(`Missing GasTank config for deduct chain ${deductChainId}`);
+          continue;
+        }
+        const recordData = encodeFunctionData({
+          abi: GAS_TANK_ABI,
+          functionName: "recordExecution",
+          args: [user, costToRecordUsdc6],
+        });
+
+        // Deduct, then confirm it. This used to be fire-and-forget with a hardcoded gas limit:
+        // the fixed gas skipped estimation (which would have surfaced the revert) and nothing
+        // waited for the receipt, so a GasTank whose executor was never set reverted every
+        // deduction while the run reported full success and the tank never moved. Simulate to
+        // fail fast with the real revert reason, then wait for the receipt before believing it.
+        let deductOk = false;
+        {
+          const rpcDeduct = deductChainId === chainId ? rpcUrl : getRpc(deductChainId);
+          const chainDeduct = deductChainId === chainId ? chain : getChain(deductChainId);
+          if (!rpcDeduct || !chainDeduct) {
+            errors.push(`No RPC/chain for deduct chain ${deductChainId}`);
+            continue;
+          }
+          const publicClientDeduct =
+            deductChainId === chainId
+              ? publicClient
+              : createPublicClient({ chain: chainDeduct, transport: http(rpcDeduct) });
+          const walletDeduct =
+            deductChainId === chainId
+              ? walletClient
+              : createWalletClient({ account, chain: chainDeduct, transport: http(rpcDeduct) });
+
+          try {
+            await publicClientDeduct.simulateContract({
+              account,
+              address: gasTankDeduct,
+              abi: GAS_TANK_ABI,
+              functionName: "recordExecution",
+              args: [user, costToRecordUsdc6],
+            });
+          } catch (e) {
+            const reason = (e as Error).message ?? String(e);
+            const hint = /OnlyExecutor/i.test(reason)
+              ? ` — the relayer ${account.address} is not the GasTank executor on chain ${deductChainId}; run scripts/set-gastank-executor.js`
+              : "";
+            errors.push(
+              `recordExecution would revert on chain ${deductChainId} ${member} scheduleId=${item.scheduleId}: ${reason}${hint}`
+            );
+            log(`  [${member}] Gas deduction FAILED (simulate) on chain ${deductChainId}${hint}`);
+          }
+
+          try {
+            const recordNonce = await getNextRelayerNonce(deductChainId, publicClientDeduct, account.address);
+            const recordHash = await walletDeduct.sendTransaction({
+              to: gasTankDeduct,
+              data: recordData,
+              gas: 100_000n,
+              nonce: recordNonce,
+            });
+            const recordReceipt = await publicClientDeduct.waitForTransactionReceipt({ hash: recordHash });
+            if (recordReceipt.status === "success") {
+              deductOk = true;
+              log(`  [${member}] Gas deducted ${costToRecordUsdc6} on chain ${deductChainId} tx=${recordHash}`);
+            } else {
+              errors.push(
+                `recordExecution reverted on chain ${deductChainId} ${member} scheduleId=${item.scheduleId} tx=${recordHash}`
+              );
+              log(`  [${member}] Gas deduction REVERTED on chain ${deductChainId} tx=${recordHash}`);
+            }
+          } catch (e) {
+            errors.push(
+              `recordExecution send failed on chain ${deductChainId} ${member} scheduleId=${item.scheduleId}: ${(e as Error).message}`
+            );
+            log(`  [${member}] Gas deduction send failed on chain ${deductChainId}: ${(e as Error).message}`);
+          }
+        }
+
+        // Only draw down the in-memory balance when the chain actually took the money. Decrementing
+        // on a failed deduction made every later schedule in the sweep reason about a balance the
+        // tank never had.
+        if (deductOk) {
+          globalGas.byChain[deductChainId] -= costToRecordUsdc6;
+          globalGas.globalBalance -= costToRecordUsdc6;
+        }
+
+        executedTasksDetail.push({
+          chainId,
+          user: userAddress,
+          scheduleId: item.scheduleId.toString(),
+          txHash: hash,
+          targetToken: item.targetToken,
+          amountPerIntervalUsdc6: item.amountPerInterval.toString(),
+          frequency: item.frequency,
+          gasUsed: receipt.gasUsed.toString(),
+          costUsdc6: costToRecordUsdc6.toString(),
+          gasDeducted: deductOk,
+          gasDeductChainId: deductOk ? deductChainId : undefined,
+        });
+
+        // Write the swap through to dca_plans while we're here: re-read the struct (one eth_call)
+        // so executed count / drawn-down deposit are exact, and a plan that just depleted is
+        // recorded as completed. Best-effort — a DB hiccup must not fail an executed swap.
+        if (isSupabaseConfigured()) {
+          try {
+            const after = (await publicClient.readContract({
+              address: vault,
+              abi: DCA_VAULT_ABI,
+              functionName: "getSchedule",
+              args: [user, item.scheduleId],
+            })) as { amountPerInterval: bigint; totalAmount: bigint; executedCount: bigint; active: boolean };
+            await recordPlanExecuted({
+              chainId,
+              userAddr: userAddress,
+              scheduleId: Number(item.scheduleId),
+              executedCount: Number(after.executedCount),
+              swappedUsdc6: (after.amountPerInterval * after.executedCount).toString(),
+              remainingUsdc6: after.totalAmount.toString(),
+              active: Boolean(after.active),
+              at: new Date(),
+            });
+          } catch (e) {
+            errors.push(`recordPlanExecuted ${member} ${item.scheduleId}: ${(e as Error).message}`);
+          }
+        }
+
+        try {
+          const clientDeduct =
+            deductChainId === chainId
+              ? publicClient
+              : createPublicClient({ chain: getChain(deductChainId)!, transport: http(getRpc(deductChainId)!) });
+          const balanceAfter = (await clientDeduct.readContract({
+            address: gasTankDeduct,
+            abi: GAS_TANK_ABI,
+            functionName: "balanceOf",
+            args: [user],
+          })) as bigint;
+          gasBalances.push({ chainId: deductChainId, user: userAddress, balanceUsdc6: balanceAfter.toString() });
+        } catch {
+          // ignore
+        }
+        } finally {
+          clearPlanExecuting(chainId, userAddress, item.scheduleId, { source: "relayer" });
+        }
+      }
+    } catch (e) {
+      errors.push(`executeSwap batch ${member}: ${(e as Error).message}`);
+      log(`  [${member}] Error: ${(e as Error).message}`);
+    }
+  }
+
+  log(`[Run finished] Executed: ${executed.length}, Errors: ${errors.length}`);
+  const result: ExecutorResult = {
+    ok: true,
+    executed: executed.length,
+    executedTasks: executed,
+    executedTasksDetail,
+    ...(errors.length ? { errors } : {}),
+    gasBalances: gasBalances.length ? gasBalances : undefined,
+    planSnapshots: planSnapshots.length ? planSnapshots : undefined,
+    portfolioSnapshots: portfolioSnapshots.length ? portfolioSnapshots : undefined,
+  };
+  return result;
+}
+
+/** CLI entry: run once and exit. */
+async function main() {
+  const result = await runExecutor();
+  console.log(JSON.stringify(result));
+}
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

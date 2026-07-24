@@ -1,0 +1,1185 @@
+:root {
+  color-scheme: dark;
+  --bg: #070a12;
+  --surface: #101727;
+  --surface-raised: #151e31;
+  --surface-soft: #0c1220;
+  --border: rgba(141, 159, 199, 0.16);
+  --border-strong: rgba(125, 149, 217, 0.3);
+  --text: #f4f7fc;
+  --muted: #8e9bb8;
+  --dim: #5f6c89;
+  --blue: #6e8cff;
+  --cyan: #41c9f3;
+  --green: #48d99a;
+  --amber: #f5b55e;
+  --red: #f07187;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background:
+    radial-gradient(circle at 12% -12%, rgba(65, 201, 243, 0.09), transparent 28rem),
+    radial-gradient(circle at 92% 0%, rgba(110, 140, 255, 0.1), transparent 30rem),
+    var(--bg);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, #000, transparent 88%);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--border);
+  background: rgba(7, 10, 18, 0.82);
+  backdrop-filter: blur(18px);
+}
+
+.header-inner {
+  width: min(1220px, calc(100% - 36px));
+  min-height: 68px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.brand img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(85, 134, 255, 0.28));
+}
+
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.nav-link:hover {
+  color: var(--text);
+  background: rgba(110, 140, 255, 0.08);
+}
+
+.nav-link.active {
+  color: #dfe6ff;
+  background: rgba(110, 140, 255, 0.13);
+}
+
+.nav-link svg {
+  width: 15px;
+  height: 15px;
+}
+
+.live-pill {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a9efd0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(72, 217, 154, 0.1);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.page-shell {
+  width: min(1220px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: 42px 0 72px;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.heading-copy {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: #91a6f3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.15;
+  letter-spacing: -0.045em;
+}
+
+.page-description {
+  max-width: 650px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.page-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-raised);
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  background: #1a253b;
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.execution-notice {
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: rgba(110, 140, 255, 0.07);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.execution-notice.running {
+  color: #c4d0ff;
+  border-color: rgba(110, 140, 255, 0.28);
+}
+
+.execution-notice.success {
+  color: #a9efd0;
+  border-color: rgba(72, 217, 154, 0.3);
+  background: rgba(72, 217, 154, 0.07);
+}
+
+.execution-notice.error {
+  color: #ffc0cb;
+  border-color: rgba(240, 113, 135, 0.3);
+  background: rgba(240, 113, 135, 0.07);
+}
+
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+/* Admin holds — pause is a reversible amber action, stopping automation is a
+   red one. Both sit beside Execute, so they are sized to match it. */
+.button.hold-plan,
+.button.resume-plan {
+  min-height: 32px;
+  padding: 6px 11px;
+}
+
+.button.hold-plan {
+  color: var(--amber);
+  border-color: rgba(245, 181, 94, 0.28);
+  background: rgba(245, 181, 94, 0.07);
+}
+
+.button.hold-plan:not(:disabled):hover {
+  border-color: rgba(245, 181, 94, 0.5);
+  background: rgba(245, 181, 94, 0.12);
+}
+
+.button.hold-plan .execute-icon {
+  color: var(--amber);
+}
+
+.button.hold-plan.danger {
+  color: #ffc0cb;
+  border-color: rgba(240, 113, 135, 0.3);
+  background: rgba(240, 113, 135, 0.07);
+}
+
+.button.hold-plan.danger:not(:disabled):hover {
+  border-color: rgba(240, 113, 135, 0.52);
+  background: rgba(240, 113, 135, 0.13);
+}
+
+.button.hold-plan.danger .execute-icon {
+  color: #f07187;
+}
+
+.button.resume-plan {
+  color: var(--green);
+  border-color: rgba(72, 217, 154, 0.3);
+  background: rgba(72, 217, 154, 0.07);
+}
+
+.button.resume-plan:not(:disabled):hover {
+  border-color: rgba(72, 217, 154, 0.5);
+  background: rgba(72, 217, 154, 0.12);
+}
+
+.button.execute-plan {
+  min-height: 32px;
+  padding: 6px 11px;
+  color: #dce4ff;
+  border-color: rgba(110, 140, 255, 0.32);
+  background: rgba(110, 140, 255, 0.11);
+}
+
+.button.execute-plan:not(:disabled):hover {
+  border-color: rgba(72, 217, 154, 0.45);
+  background: rgba(72, 217, 154, 0.1);
+}
+
+.button.execute-plan.auto-executing {
+  color: var(--cyan);
+  border-color: rgba(65, 201, 243, 0.32);
+  background: rgba(65, 201, 243, 0.08);
+}
+
+.execute-icon {
+  color: var(--green);
+  font-size: 9px;
+}
+
+.execute-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.button.refresh::before {
+  content: "↻";
+  font-size: 15px;
+  line-height: 1;
+}
+
+.content-panel {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(12, 18, 32, 0.74);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr));
+  gap: 15px;
+}
+
+.card {
+  position: relative;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(21, 30, 49, 0.96), rgba(14, 21, 36, 0.96));
+  animation: rise 420ms both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+#plans.plans-stable .card {
+  animation: none;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.network-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.network-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(110, 140, 255, 0.18);
+  border-radius: 10px;
+  color: #bdc9f5;
+  background: rgba(110, 140, 255, 0.09);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.net-name {
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.chip,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(6, 10, 18, 0.25);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.chip {
+  padding: 4px 8px;
+}
+
+.badge {
+  padding: 3px 7px;
+}
+
+.chip.gas,
+.badge.ready,
+.badge.completed {
+  color: var(--green);
+  border-color: rgba(72, 217, 154, 0.26);
+  background: rgba(72, 217, 154, 0.06);
+}
+
+.chip.nogas,
+.badge.cancelled,
+.badge.inactive {
+  color: var(--amber);
+  border-color: rgba(245, 181, 94, 0.25);
+  background: rgba(245, 181, 94, 0.06);
+}
+
+.badge.active,
+.badge.enrolled {
+  color: #a8bbff;
+  border-color: rgba(110, 140, 255, 0.3);
+  background: rgba(110, 140, 255, 0.07);
+}
+
+.badge.executing {
+  color: var(--cyan);
+  border-color: rgba(65, 201, 243, 0.32);
+  background: rgba(65, 201, 243, 0.08);
+}
+
+/* An admin hold — the loudest badge on the card, because it is the reason a
+   plan that looks perfectly healthy is not running. */
+.badge.held {
+  color: #ffc0cb;
+  border-color: rgba(240, 113, 135, 0.4);
+  background: rgba(240, 113, 135, 0.12);
+  font-weight: 800;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 39px;
+  padding: 8px 10px;
+  border: 1px solid rgba(141, 159, 199, 0.08);
+  border-radius: 9px;
+  background: rgba(5, 9, 17, 0.3);
+}
+
+.row .label {
+  flex-shrink: 0;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.row .val {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.addr {
+  color: #d3dcf1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.addr.zero {
+  color: var(--dim);
+}
+
+a.addr {
+  color: #8fafff;
+  text-decoration: none;
+}
+
+a.addr:hover {
+  color: var(--cyan);
+}
+
+.copy {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: var(--dim);
+  background: transparent;
+  cursor: pointer;
+}
+
+.copy:hover {
+  color: var(--text);
+  background: rgba(110, 140, 255, 0.1);
+}
+
+.empty,
+.error {
+  padding: 44px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.error {
+  color: var(--amber);
+}
+
+.plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 2px 2px 18px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.summary-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.summary-item b {
+  font-size: 19px;
+  letter-spacing: -0.035em;
+}
+
+.summary-item span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.plans-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  max-width: 420px;
+}
+
+.search-icon,
+.admin-icon {
+  position: absolute;
+  left: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+/* Sits at the far end of the toolbar: needed once per browser, then ignored. */
+.admin-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 260px;
+  margin-left: auto;
+}
+
+#admin-token {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px 8px 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+#admin-token::placeholder {
+  color: var(--dim);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+#admin-token:focus {
+  outline: none;
+  border-color: rgba(245, 181, 94, 0.45);
+  background: var(--surface-raised);
+}
+
+#wallet-search {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+#wallet-search::placeholder {
+  color: var(--dim);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+#wallet-search:focus {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.45);
+  background: var(--surface-raised);
+}
+
+/* The native affordance is unstyleable and would sit beside the custom clear button. */
+#wallet-search::-webkit-search-cancel-button,
+#wallet-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: var(--text);
+  background: rgba(141, 159, 199, 0.14);
+}
+
+/* The display above outranks the UA's [hidden] rule, which would pin the button visible. */
+.search-clear[hidden] {
+  display: none;
+}
+
+.search-count {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search-empty {
+  margin-top: 4px;
+}
+
+.plan-filters {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.plan-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-btn {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filter-btn:hover,
+.filter-btn.active {
+  color: var(--text);
+  border-color: rgba(110, 140, 255, 0.32);
+  background: rgba(110, 140, 255, 0.1);
+}
+
+.member-card {
+  gap: 13px;
+}
+
+.member-card[data-hidden="true"] {
+  display: none;
+}
+
+.member-meta .row {
+  width: 100%;
+}
+
+.plan {
+  --plan-tone: var(--cyan);
+  position: relative;
+  padding: 13px 13px 12px 16px;
+  overflow: hidden;
+  border: 1px solid rgba(141, 159, 199, 0.12);
+  border-radius: 13px;
+  background: rgba(19, 28, 47, 0.72);
+}
+
+.plan::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--plan-tone);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--plan-tone) 60%, transparent);
+}
+
+.plan[data-status="completed"] {
+  --plan-tone: var(--green);
+}
+
+.plan[data-status="cancelled"] {
+  --plan-tone: var(--amber);
+}
+
+.plan-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.plan-top .pid {
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.plan-top .freq {
+  margin-right: auto;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.refresh-plan {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(141, 159, 199, 0.16);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(6, 10, 18, 0.24);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.refresh-plan:hover {
+  color: var(--cyan);
+  border-color: rgba(65, 201, 243, 0.34);
+  background: rgba(65, 201, 243, 0.08);
+}
+
+.refresh-plan:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.refresh-plan > span:not(.execute-spinner) {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.plan-body {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.plan-body .amount {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.plan-timing {
+  margin-top: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 5px 8px;
+  border: 1px solid rgba(65, 201, 243, 0.2);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(65, 201, 243, 0.06);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.plan-countdown {
+  color: var(--cyan);
+}
+
+.plan-countdown.now {
+  color: var(--green);
+}
+
+.plan-body .arrow {
+  color: var(--cyan);
+}
+
+.progress {
+  position: relative;
+  height: 7px;
+  margin: 11px 0 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(102, 119, 156, 0.2);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  box-shadow: 0 0 12px rgba(65, 201, 243, 0.35);
+  transition: width 500ms ease;
+}
+
+.progress.done > span {
+  background: linear-gradient(90deg, #37bd82, var(--green));
+}
+
+.progress.cancelled > span {
+  background: linear-gradient(90deg, #d08d45, var(--amber));
+}
+
+.progress.unknown {
+  opacity: 0.45;
+}
+
+.progress.unknown > span {
+  background: var(--muted);
+}
+
+.progress-label {
+  color: var(--dim);
+  font-size: 9px;
+  text-align: right;
+}
+
+.plan-detail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.plan-detail .d {
+  min-width: 0;
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 8px;
+  color: var(--dim);
+  background: rgba(5, 9, 17, 0.27);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.plan-detail .d b {
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.plan-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 13px;
+  margin-top: 9px;
+  color: var(--dim);
+  font-size: 8px;
+}
+
+.plan-dates b {
+  color: #bac5db;
+  font-weight: 650;
+}
+
+.nr {
+  color: var(--dim);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.log-panel {
+  margin-bottom: 15px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(6, 10, 18, 0.48);
+}
+
+.log-head {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.log-head .step {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-head .elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+.log-head .toggle {
+  min-height: 27px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--cyan);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.dot.done {
+  background: var(--green);
+  animation: none;
+}
+
+.dot.err,
+.dot.stalled {
+  background: var(--amber);
+}
+
+.log-body {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.log-body.collapsed {
+  display: none;
+}
+
+.log-line {
+  display: flex;
+  gap: 9px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.log-line .t {
+  flex-shrink: 0;
+  color: #536079;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-line.warn {
+  color: var(--amber);
+}
+
+.log-line.ok {
+  color: var(--green);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.38;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 700px) {
+  .header-inner,
+  .page-shell {
+    width: min(100% - 22px, 1220px);
+  }
+
+  .header-inner {
+    min-height: 62px;
+    gap: 12px;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .brand img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .main-nav {
+    gap: 2px;
+  }
+
+  .nav-link {
+    padding: 8px;
+  }
+
+  .nav-link span {
+    display: none;
+  }
+
+  .live-pill {
+    font-size: 0;
+  }
+
+  .page-shell {
+    padding-top: 30px;
+  }
+
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .content-panel {
+    padding: 14px;
+  }
+
+  .plan-summary {
+    gap: 13px;
+    overflow-x: auto;
+  }
+
+  .summary-item {
+    flex: 0 0 auto;
+  }
+
+  .plans-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .search-field {
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

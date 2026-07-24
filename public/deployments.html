@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Network Deployments — SteadyStake</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="SteadyStake plan activity">
+        <img src="/brand-assets/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <nav class="main-nav" aria-label="Backend dashboard">
+        <a class="nav-link" href="/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Plan activity</span>
+        </a>
+        <a class="nav-link active" href="/deployments.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9" />
+          </svg>
+          <span>Deployments</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Infrastructure</p>
+        <h1>Network deployments</h1>
+        <p class="page-description">Deployed contract addresses, chain identifiers, GasTank availability, and explorer shortcuts.</p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <section class="content-panel" aria-label="Network deployments">
+      <div id="content"><div class="empty">Loading network deployments…</div></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script>
+    const CONTRACT_ORDER = ["DCAVault", "DCAResolver", "ZeroExAdapter", "GasTank", "USDC"];
+
+    function renderNetworks(networks) {
+      if (!networks.length) {
+        return '<div class="empty">No networks found in deployed-addresses.json.</div>';
+      }
+
+      const cards = networks.map(function (network, index) {
+        const rows = CONTRACT_ORDER.map(function (key) {
+          const value = network.contracts[key];
+          if (value === undefined) return "";
+          return '<div class="row"><span class="label">' + key + "</span>" +
+            addressElement(value, network.explorerUrl) + "</div>";
+        }).join("");
+
+        const gasTank = network.hasGasTank
+          ? '<span class="chip gas">GasTank ready</span>'
+          : '<span class="chip nogas">No GasTank</span>';
+
+        return '<article class="card" style="--i:' + index + '">' +
+          '<div class="card-head">' +
+            '<span class="network-title"><span class="network-icon">' +
+              String(network.name || "N").slice(0, 1) +
+            '</span><span class="net-name">' + network.name + "</span></span>" +
+            gasTank +
+          "</div>" +
+          '<div class="row"><span class="label">Chain ID</span><span class="addr">' +
+            network.chainId +
+          "</span></div>" +
+          rows +
+        "</article>";
+      }).join("");
+
+      return '<div class="grid">' + cards + "</div>";
+    }
+
+    async function loadNetworks() {
+      const status = document.getElementById("status");
+      const content = document.getElementById("content");
+      status.textContent = "Loading…";
+      content.innerHTML = '<div class="empty">Loading network deployments…</div>';
+
+      try {
+        const response = await fetch("/api/config/networks");
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const data = await response.json();
+        const networks = data.networks || [];
+        content.innerHTML = renderNetworks(networks);
+        status.textContent = networks.length + " network" + (networks.length === 1 ? "" : "s") +
+          " · updated " + new Date().toLocaleTimeString();
+      } catch (error) {
+        content.innerHTML = '<div class="error">Failed to load networks: ' +
+          escapeHtml(error.message) + "</div>";
+        status.textContent = "Error";
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", loadNetworks);
+    loadNetworks();
+  </script>
+</body>
+</html>
