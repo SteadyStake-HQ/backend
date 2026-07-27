@@ -13,6 +13,13 @@
     "ZeroExAdapter": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
     "GasTank": "0x0000000000000000000000000000000000000000"
   },
+  "677": {
+    "chainId": 677,
+    "ZeroExAdapter": "0x4d92ccb72bc528e3133216ff43e04ab0c28a5dc5",
+    "DCAVault": "0xc692f9fe5c03eb9a1db935a47067225cb988c89f",
+    "DCAResolver": "0x0459f26fc754d0762b26ed0b9fa5f476455453b2",
+    "GasTank": "0xdb561fe13a6516b31c8fcd5cb8b5a4e3fefe43a9"
+  },
   "968": {
     "chainId": 968,
     "MockUSDC": "0x4d92ccb72bc528e3133216ff43e04ab0c28a5dc5",

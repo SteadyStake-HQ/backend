@@ -36,12 +36,43 @@ const COINGECKO_IDS: Record<number, string> = {
   56: "binancecoin",
   137: "matic-network",
   2222: "kava",
-  // CoinGecko lists BOT Chain (platform "bot-chain", native coin "bot") but has no USD
-  // quote for it yet, so set NATIVE_PRICE_USD_677 / _968 until it does — otherwise gas
-  // cost resolves to 0 and the GasTank is never debited.
+  // BOT Chain mainnet. CoinGecko's "bot" is the fallback leg of the mainnet BOT fetch
+  // (getBotMainnetPriceUsd) — the BOT Chain DEX pool price is tried first. Testnet 968 is
+  // pinned via STATIC_PRICE_USD, not fetched.
   677: "bot",
-  968: "bot",
 };
+
+/**
+ * Statically pinned native USD prices. BOT Chain testnet (968) tBOT is a faucet token with no
+ * real market: a feed either has no quote or hands back mainnet BOT's number, a different token
+ * at a different price. Pinning it keeps gas cost stable and unmistakably a testnet figure.
+ */
+const STATIC_PRICE_USD: Record<number, number> = {
+  968: 130,
+};
+
+/**
+ * BOT Chain mainnet (677) BOT price is fetched from two independent sources so a single outage
+ * does not zero the quote (which would leave the GasTank undebited): the chain's own DEX pool
+ * price for WBOT first, CoinGecko's "bot" ticker as the fallback. WBOT address on the price graph.
+ */
+const BOT_MAINNET_PRICE_TOKEN = "0xD5452816194a3784dBa983426cCe7c122F4abd30";
+
+/** BOT Chain DEX pool price for WBOT, in USD. 0 on any failure so a fallback can take over. */
+async function fetchBotDexPriceUsd(): Promise<number> {
+  try {
+    const res = await fetch(
+      `https://dex-wallet.botchain.ai/api/graph/price?token=${BOT_MAINNET_PRICE_TOKEN}`
+    );
+    if (!res.ok) return 0;
+    const json = (await res.json()) as { success?: boolean; data?: { price?: string } };
+    if (!json.success) return 0;
+    const usd = parseFloat(json.data?.price ?? "");
+    return Number.isFinite(usd) && usd > 0 ? usd : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /** Manual native-token USD price per chain: NATIVE_PRICE_USD_<chainId>. Wins over CoinGecko. */
 function getNativePriceOverride(chainId: number): number | null {
@@ -71,12 +102,8 @@ async function getNextRelayerNonce(
   return nextNonce;
 }
 
-/** Fetch native token price in USD from Coingecko. Cached per chain for the run. */
-const nativePriceCache: Record<number, number> = {};
-async function getNativePriceUsd(chainId: number): Promise<number> {
-  const override = getNativePriceOverride(chainId);
-  if (override != null) return override;
-  if (nativePriceCache[chainId] != null) return nativePriceCache[chainId];
+/** CoinGecko price in USD for a single chain's native token. 0 on failure or when unlisted. */
+async function fetchCoingeckoPriceUsd(chainId: number): Promise<number> {
   const id = COINGECKO_IDS[chainId];
   if (!id) return 0;
   try {
@@ -85,30 +112,57 @@ async function getNativePriceUsd(chainId: number): Promise<number> {
     );
     if (!res.ok) return 0;
     const data = (await res.json()) as Record<string, { usd?: number }>;
-    const price = data[id]?.usd ?? 0;
-    nativePriceCache[chainId] = price;
-    return price;
+    return data[id]?.usd ?? 0;
   } catch {
     return 0;
   }
 }
 
-/** Pre-fill native price cache for multiple chains in one Coingecko request. */
+/** Mainnet BOT price: BOT Chain DEX pool first, CoinGecko as fallback. 0 if both fail. */
+async function getBotMainnetPriceUsd(): Promise<number> {
+  const dex = await fetchBotDexPriceUsd();
+  if (dex > 0) return dex;
+  return fetchCoingeckoPriceUsd(677);
+}
+
+/** Fetch native token price in USD. Cached per chain for the run. */
+const nativePriceCache: Record<number, number> = {};
+async function getNativePriceUsd(chainId: number): Promise<number> {
+  const override = getNativePriceOverride(chainId);
+  if (override != null) return override;
+  const staticUsd = STATIC_PRICE_USD[chainId];
+  if (staticUsd != null) return staticUsd;
+  if (nativePriceCache[chainId] != null) return nativePriceCache[chainId];
+  const price = chainId === 677 ? await getBotMainnetPriceUsd() : await fetchCoingeckoPriceUsd(chainId);
+  if (price > 0) nativePriceCache[chainId] = price;
+  return price;
+}
+
+/** Pre-fill native price cache for multiple chains. CoinGecko chains batch into one request. */
 async function prefetchNativePrices(chainIds: number[]): Promise<void> {
-  const ids = [...new Set(chainIds.map((cid) => COINGECKO_IDS[cid]).filter(Boolean))] as string[];
-  if (ids.length === 0) return;
-  try {
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids.map((id) => encodeURIComponent(id)).join(",")}&vs_currencies=usd`
-    );
-    if (!res.ok) return;
-    const data = (await res.json()) as Record<string, { usd?: number }>;
-    for (const cid of chainIds) {
-      const id = COINGECKO_IDS[cid];
-      if (id && data[id]?.usd != null) nativePriceCache[cid] = data[id].usd!;
+  // Pinned (testnet) chains never hit a feed; BOT mainnet uses its own DEX path, not the batch.
+  const cgChains = chainIds.filter((cid) => cid !== 677 && STATIC_PRICE_USD[cid] == null);
+  const ids = [...new Set(cgChains.map((cid) => COINGECKO_IDS[cid]).filter(Boolean))] as string[];
+  if (ids.length > 0) {
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids.map((id) => encodeURIComponent(id)).join(",")}&vs_currencies=usd`
+      );
+      if (res.ok) {
+        const data = (await res.json()) as Record<string, { usd?: number }>;
+        for (const cid of cgChains) {
+          const id = COINGECKO_IDS[cid];
+          if (id && data[id]?.usd != null) nativePriceCache[cid] = data[id].usd!;
+        }
+      }
+    } catch {
+      // fallback: individual fetches already work via getNativePriceUsd
     }
-  } catch {
-    // fallback: individual fetches already work via getNativePriceUsd
+  }
+  // Warm BOT mainnet via its DEX-first path so the batch above never shadows it with a bare ticker.
+  if (chainIds.includes(677) && nativePriceCache[677] == null) {
+    const price = await getBotMainnetPriceUsd();
+    if (price > 0) nativePriceCache[677] = price;
   }
 }
 
