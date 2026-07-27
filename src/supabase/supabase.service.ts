@@ -15,6 +15,16 @@ export interface RuntimeSessionRecord {
 const RUNTIME_SESSION_KEY = 'runtime_session';
 
 /**
+ * Connect/query budgets. pg defaults connectionTimeoutMillis to 0 — wait forever — which turns an
+ * unreachable pooler into a boot that never finishes, so the HTTP server never binds its port.
+ * Every DB call here has a file or in-memory fallback, so failing fast costs nothing.
+ */
+const CONNECT_TIMEOUT_MS = 8_000;
+const QUERY_TIMEOUT_MS = 15_000;
+/** After a failed connect, hold off retrying so one boot isn't N sequential connect timeouts. */
+const RETRY_COOLDOWN_MS = 30_000;
+
+/**
  * Supabase Postgres persistence for scheduler runtime session, scheduler config,
  * scheduler runtime state, and run/gas/portfolio history.
  *
@@ -26,15 +36,16 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SupabaseService.name);
   private pool: Pool | null = null;
   private bootstrapPromise: Promise<Pool | null> | null = null;
+  private lastConnectFailureAt: number | null = null;
 
-  async onModuleInit(): Promise<void> {
-    if (this.isConfigured()) {
-      try {
-        await this.getPool();
-      } catch (error) {
-        this.logger.warn(`Supabase bootstrap failed: ${(error as Error).message}`);
-      }
-    }
+  onModuleInit(): void {
+    if (!this.isConfigured()) return;
+    // Warm the pool in the background rather than awaiting it. Nest runs every onModuleInit to
+    // completion before app.listen(), so awaiting a DB round trip here puts the database in front
+    // of the HTTP server: if it is slow or unreachable, nothing ever binds the port.
+    void this.getPool().catch((error) => {
+      this.logger.warn(`Supabase bootstrap failed: ${(error as Error).message}`);
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -54,6 +65,14 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
 
   private async getPool(): Promise<Pool | null> {
     if (this.pool) return this.pool;
+    if (
+      this.lastConnectFailureAt != null &&
+      Date.now() - this.lastConnectFailureAt < RETRY_COOLDOWN_MS
+    ) {
+      // Still inside the cooldown: report "no pool" immediately instead of paying the connect
+      // timeout again. Callers treat null the same as unconfigured and fall back.
+      return null;
+    }
     if (!this.bootstrapPromise) {
       this.bootstrapPromise = this.bootstrap();
     }
@@ -64,20 +83,32 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
     const connectionString = process.env.SUPABASE_DB_URL?.trim();
     if (!connectionString) return null;
 
+    let pool: Pool | null = null;
     try {
-      const pool = new Pool({
+      pool = new Pool({
         connectionString,
         ssl: { rejectUnauthorized: false },
         max: 5,
+        connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+        statement_timeout: QUERY_TIMEOUT_MS,
+        query_timeout: QUERY_TIMEOUT_MS,
+      });
+      // An idle pool emits 'error' on a dropped backend connection; unhandled, that takes the
+      // whole process down and Railway just restarts into the same state.
+      pool.on('error', (error) => {
+        this.logger.warn(`Supabase pool error: ${error.message}`);
       });
       await this.ensureSchema(pool);
       this.pool = pool;
+      this.lastConnectFailureAt = null;
       return pool;
     } catch (error) {
       const message = `Supabase connection failed: ${(error as Error).message}`;
       this.logger.warn(message);
+      void pool?.end().catch(() => undefined);
       this.pool = null;
       this.bootstrapPromise = null;
+      this.lastConnectFailureAt = Date.now();
       throw new Error(message);
     }
   }
