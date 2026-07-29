@@ -1,10 +1,10 @@
 {
   "56": {
     "chainId": 56,
-    "DCAVault": "0x8Cf3533A40DaeC9CD842e7b2BD7a13e7DD05728D",
-    "DCAResolver": "0xd301fBCa142191C60B03643036468f033f3Cd505",
-    "ZeroExAdapter": "0xb6609501E6Bc2fcA8C6810f253b3255A446Fe196",
-    "GasTank": "0x0000000000000000000000000000000000000000"
+    "DCAVault": "0xa9ffd2da7942f9ba13ed0d2b4cf9aff23979eb5d",
+    "DCAResolver": "0x5c67819cbf3f332acc41ab2e062c97840c7bc555",
+    "ZeroExAdapter": "0xd50dc0211bf623caa95cbecc58f4d8f821811e93",
+    "GasTank": "0xe487b573b458aee811acbe3196f9e9022fb87a0e"
   },
   "137": {
     "chainId": 137,

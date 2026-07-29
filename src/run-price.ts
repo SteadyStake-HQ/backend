@@ -24,16 +24,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { Pool } from 'pg';
+import { formatUnits, parseUnits } from 'viem';
+import { getStableDecimals, getStableOne } from './config';
 
 /** kv_store key holding the whole per-chain map. One row, rewritten on every edit. */
 const RUN_PRICE_KV_KEY = 'steadystake:run-price:overrides';
 
 /**
- * Ceiling on a manually set price, in USDC 6-decimals ($100). A run costs cents; anything near
- * this is a units mistake (dollars typed where micro-USDC was meant), and the cost of accepting
- * one is a user's tank drained in a single run.
+ * Ceiling on a manually set price ($100), in the chain's stablecoin base units. A run costs cents;
+ * anything near this is a units mistake (dollars typed where base units were meant), and the cost
+ * of accepting one is a user's tank drained in a single run.
+ *
+ * Scaled per chain: $100 is 100_000_000 base units on 6-decimal chains but 1e20 on BSC, so a fixed
+ * ceiling would have rejected every legitimate BSC price as too large.
  */
-const MAX_PRICE_USDC6 = 100_000_000n;
+function maxPriceFor(chainId: number): bigint {
+  return 100n * getStableOne(chainId);
+}
 
 /** How long a loaded map is trusted before the next read refreshes it from storage. */
 const CACHE_TTL_MS = 30_000;
@@ -87,7 +94,7 @@ function sanitize(raw: unknown): RunPriceMap {
     } catch {
       continue;
     }
-    if (usdc6 <= 0n || usdc6 > MAX_PRICE_USDC6) continue;
+    if (usdc6 <= 0n || usdc6 > maxPriceFor(chainId)) continue;
     out[String(chainId)] = {
       usdc6: usdc6.toString(),
       updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : new Date().toISOString(),
@@ -165,7 +172,7 @@ export function getRunPriceUsdc6(chainId: number): bigint | null {
   if (!entry) return null;
   try {
     const usdc6 = BigInt(entry.usdc6);
-    return usdc6 > 0n && usdc6 <= MAX_PRICE_USDC6 ? usdc6 : null;
+    return usdc6 > 0n && usdc6 <= maxPriceFor(chainId) ? usdc6 : null;
   } catch {
     return null;
   }
@@ -190,9 +197,10 @@ export async function setRunPrice(
   if (!Number.isFinite(chainId) || chainId <= 0) {
     throw new RunPriceError(`Invalid chainId: ${chainId}`);
   }
-  if (usdc6 != null && (usdc6 <= 0n || usdc6 > MAX_PRICE_USDC6)) {
+  const maxPrice = maxPriceFor(chainId);
+  if (usdc6 != null && (usdc6 <= 0n || usdc6 > maxPrice)) {
     throw new RunPriceError(
-      `Price must be between 0.000001 and ${Number(MAX_PRICE_USDC6) / 1e6} per run (got ${usdc6}).`,
+      `Price must be between 0 and ${formatUnits(maxPrice, getStableDecimals(chainId))} per run (got ${usdc6}).`,
     );
   }
 
@@ -239,8 +247,14 @@ export async function setRunPrice(
   return getAllRunPrices();
 }
 
-/** Parse a dollars-and-cents string ("0.05") into USDC 6-decimals. Null for blank input. */
-export function parseUsdToUsdc6(value: string | number | null | undefined): bigint | null {
+/**
+ * Parse a dollars-and-cents string ("0.05") into the chain's stablecoin base units.
+ * Null for blank input.
+ */
+export function parseUsdToUsdc6(
+  chainId: number,
+  value: string | number | null | undefined,
+): bigint | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -248,5 +262,5 @@ export function parseUsdToUsdc6(value: string | number | null | undefined): bigi
   if (!Number.isFinite(usd) || usd <= 0) {
     throw new RunPriceError(`"${raw}" is not a positive amount.`);
   }
-  return BigInt(Math.round(usd * 1_000_000));
+  return parseUnits(usd.toString(), getStableDecimals(chainId));
 }

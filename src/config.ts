@@ -54,6 +54,71 @@ export function getStableSymbol(chainId: number): string {
   return resolveStable(chainId)?.symbol ?? "USDC";
 }
 
+/**
+ * Decimals of the chain's settlement stablecoin.
+ *
+ * Every amount the protocol moves — schedule deposits, GasTank balances, per-run prices — is
+ * denominated in this token's base units, so this must match the token contract exactly. It is 6
+ * everywhere except BNB Chain: BSC has no liquid 6-decimal stablecoin (Binance-Peg USDC/USDT,
+ * BUSD, FDUSD, USD1 and DAI are all 18-decimal, and the 6-decimal bridged wrappers — axlUSDC,
+ * Wormhole USDCet — hold only a few hundred thousand dollars in total), so chain 56 settles in
+ * 18-decimal Binance-Peg USDC.
+ *
+ * The `Usdc6` suffix on variables and contract fields elsewhere in the codebase predates this and
+ * is now a misnomer: those values are in stablecoin base units, which is 1e6 on most chains and
+ * 1e18 on BSC. Renaming them would churn the DB column names and the public API, so the names
+ * stayed and this function is the single place that knows the scale.
+ */
+const STABLE_DECIMALS_BY_CHAIN: Record<number, number> = {
+  56: 18, // Binance-Peg USD Coin
+};
+
+export function getStableDecimals(chainId: number): number {
+  // Mock-stack chains (968, 84532) deploy MockUSDC, which is 6-decimal like the real token.
+  return STABLE_DECIMALS_BY_CHAIN[chainId] ?? 6;
+}
+
+/** One whole settlement token in base units, e.g. 1_000_000n on Base, 10n**18n on BSC. */
+export function getStableOne(chainId: number): bigint {
+  return 10n ** BigInt(getStableDecimals(chainId));
+}
+
+/**
+ * Scale for figures compared or summed across chains — gas-tank balances above all, since a run
+ * on one network can be paid out of another network's tank. Fixed at 6 decimals.
+ */
+export const POOLED_DECIMALS = 6;
+
+/** Native settlement-token base units -> the canonical pooled (6-decimal) scale. */
+export function toPooledUsd6(amount: bigint, chainId: number): bigint {
+  const decimals = getStableDecimals(chainId);
+  if (decimals === POOLED_DECIMALS) return amount;
+  return decimals > POOLED_DECIMALS
+    ? amount / 10n ** BigInt(decimals - POOLED_DECIMALS)
+    : amount * 10n ** BigInt(POOLED_DECIMALS - decimals);
+}
+
+/** The canonical pooled (6-decimal) scale -> a chain's native settlement-token base units. */
+export function fromPooledUsd6(amount: bigint, chainId: number): bigint {
+  const decimals = getStableDecimals(chainId);
+  if (decimals === POOLED_DECIMALS) return amount;
+  return decimals > POOLED_DECIMALS
+    ? amount * 10n ** BigInt(decimals - POOLED_DECIMALS)
+    : amount / 10n ** BigInt(POOLED_DECIMALS - decimals);
+}
+
+/**
+ * Restate an amount from one chain's stablecoin base units into another's.
+ *
+ * The relayer needs this because the tank it debits is not always the chain it executed on: a cost
+ * worked out in 18-decimal BSC units would, deducted verbatim against a 6-decimal tank, ask for a
+ * trillion times the intended charge (and revert), while the reverse direction would debit dust.
+ */
+export function convertStableAmount(amount: bigint, fromChainId: number, toChainId: number): bigint {
+  if (getStableDecimals(fromChainId) === getStableDecimals(toChainId)) return amount;
+  return fromPooledUsd6(toPooledUsd6(amount, fromChainId), toChainId);
+}
+
 type DeployedEntry = {
   chainId: number;
   DCAVault?: string;
@@ -198,10 +263,12 @@ export function usesDirectSwapRouter(chainId: number): boolean {
  * to completion could still run the tank dry mid-way and then fail every deduction silently.
  * Used only when the contract has no price set (returns 0).
  */
-export function getGasCostPerExecutionUsdc6Fallback(): bigint | null {
+export function getGasCostPerExecutionUsdc6Fallback(chainId: number): bigint | null {
   const raw = process.env.GAS_COST_PER_EXECUTION_USDC?.trim();
   if (!raw) return null;
   const usd = parseFloat(raw);
   if (!Number.isFinite(usd) || usd <= 0) return null;
-  return BigInt(Math.round(usd * 1_000_000)); // 6 decimals
+  // Scaled by the chain's own stablecoin decimals, not a fixed 1e6 — the GasTank deducts in the
+  // settlement token's base units, which is 1e18 on BSC.
+  return (BigInt(Math.round(usd * 1_000_000)) * getStableOne(chainId)) / 1_000_000n;
 }

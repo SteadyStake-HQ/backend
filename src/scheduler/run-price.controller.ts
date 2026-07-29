@@ -23,6 +23,7 @@ import {
   getChainIdsWithGasTank,
   getGasCostPerExecutionUsdc6Fallback,
   getRpc,
+  getStableDecimals,
   getStableSymbol,
   getVaultUsdcGasTank,
 } from '../config';
@@ -91,8 +92,8 @@ async function readChain(chainId: number): Promise<ChainReading> {
   return value;
 }
 
-function usd(usdc6: bigint | null): number | null {
-  return usdc6 == null ? null : Number(formatUnits(usdc6, 6));
+function usd(chainId: number, usdc6: bigint | null): number | null {
+  return usdc6 == null ? null : Number(formatUnits(usdc6, getStableDecimals(chainId)));
 }
 
 /**
@@ -103,7 +104,7 @@ function usd(usdc6: bigint | null): number | null {
 async function describeChain(chainId: number) {
   const reading = await readChain(chainId);
   const manualUsdc6 = getRunPriceUsdc6(chainId);
-  const envUsdc6 = getGasCostPerExecutionUsdc6Fallback();
+  const envUsdc6 = getGasCostPerExecutionUsdc6Fallback(chainId);
   const onChainUsdc6 =
     reading.onChainUsdc6 != null && reading.onChainUsdc6 > 0n ? reading.onChainUsdc6 : null;
 
@@ -130,19 +131,19 @@ async function describeChain(chainId: number) {
     stableSymbol: getStableSymbol(chainId),
     /** The number the relayer debits and the app quotes. Null only when nothing has set one. */
     effectiveUsdc6: effectiveUsdc6?.toString() ?? null,
-    effectiveUsd: usd(effectiveUsdc6),
+    effectiveUsd: usd(chainId, effectiveUsdc6),
     source,
     manual: stored
       ? {
           usdc6: stored.usdc6,
-          usd: usd(BigInt(stored.usdc6)),
+          usd: usd(chainId, BigInt(stored.usdc6)),
           updatedAt: stored.updatedAt,
           updatedBy: stored.updatedBy,
           note: stored.note,
         }
       : null,
-    onChain: { usdc6: onChainUsdc6?.toString() ?? null, usd: usd(onChainUsdc6) },
-    env: { usdc6: envUsdc6?.toString() ?? null, usd: usd(envUsdc6 ?? null) },
+    onChain: { usdc6: onChainUsdc6?.toString() ?? null, usd: usd(chainId, onChainUsdc6) },
+    env: { usdc6: envUsdc6?.toString() ?? null, usd: usd(chainId, envUsdc6 ?? null) },
     /** What the run costs the relayer at this moment — the three live inputs and their product. */
     live: {
       gasPriceWei: reading.gasPriceWei?.toString() ?? null,
@@ -199,7 +200,7 @@ export class RunPriceController {
       throw new BadRequestException({ error: 'A valid chainId is required.' });
     }
     try {
-      const usdc6 = body?.usd == null || String(body.usd).trim() === '' ? null : parseUsdToUsdc6(body.usd);
+      const usdc6 = body?.usd == null || String(body.usd).trim() === '' ? null : parseUsdToUsdc6(chainId, body.usd);
       await setRunPrice(chainId, usdc6, { updatedBy: body?.updatedBy, note: body?.note });
       // Re-read so the response is the state the next run will actually price against, not the
       // state this request hoped to write.

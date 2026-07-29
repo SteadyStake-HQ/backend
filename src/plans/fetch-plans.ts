@@ -18,7 +18,7 @@
  */
 import "dotenv/config";
 import { createPublicClient, http, formatUnits } from "viem";
-import { getVaultUsdcGasTank, getRpc, CHAIN_NAMES } from "../config";
+import { getVaultUsdcGasTank, getRpc, getStableDecimals, CHAIN_NAMES } from "../config";
 import {
   DCA_VAULT_ABI,
   getChain,
@@ -266,6 +266,8 @@ const memberKey = (chainId: number, user: string) => `${chainId}:${user.toLowerC
 
 /** Compute committed/swapped/remaining + progress + execution counts. */
 function deriveAmounts(input: {
+  /** Decides the display scale: the settlement stablecoin is 18-decimal on BSC, 6 elsewhere. */
+  chainId: number;
   amountPerIntervalUsdc6: bigint | null;
   executedCount: number;
   /** live in-plan balance for active plans; 0 for ended plans */
@@ -273,6 +275,7 @@ function deriveAmounts(input: {
   swappedUsdc6: bigint | null;
   committedUsdc6: bigint | null;
 }) {
+  const decimals = getStableDecimals(input.chainId);
   const perInterval = input.amountPerIntervalUsdc6;
   const remaining = input.remainingUsdc6;
 
@@ -296,11 +299,11 @@ function deriveAmounts(input: {
 
   return {
     committedUsdc6: committed?.toString() ?? null,
-    committed: committed != null ? formatUnits(committed, 6) : null,
+    committed: committed != null ? formatUnits(committed, decimals) : null,
     swappedUsdc6: swapped?.toString() ?? null,
-    swapped: swapped != null ? formatUnits(swapped, 6) : null,
+    swapped: swapped != null ? formatUnits(swapped, decimals) : null,
     remainingUsdc6: remaining.toString(),
-    remaining: formatUnits(remaining, 6),
+    remaining: formatUnits(remaining, decimals),
     totalExecutions,
     executionsRemaining,
     progressPct,
@@ -456,6 +459,7 @@ function buildPlan(
         : null;
 
   const derived = deriveAmounts({
+    chainId,
     amountPerIntervalUsdc6: perInterval,
     executedCount,
     remainingUsdc6: remaining,
@@ -500,7 +504,7 @@ function buildPlan(
     frequency,
     frequencyLabel: frequency == null ? "Not recorded" : FREQUENCY_LABELS[frequency] ?? `Unknown (${frequency})`,
     amountPerIntervalUsdc6: perInterval?.toString() ?? null,
-    amountPerInterval: perInterval != null ? formatUnits(perInterval, 6) : null,
+    amountPerInterval: perInterval != null ? formatUnits(perInterval, getStableDecimals(chainId)) : null,
     lastExecutionTime,
     intervalSeconds,
     dueTimestamp,

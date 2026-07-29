@@ -33,7 +33,7 @@ import {
 } from "viem";
 import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, CHAIN_NAMES } from "./config";
+import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, getStableOne, toPooledUsd6, convertStableAmount, CHAIN_NAMES } from "./config";
 
 const ZERO_EX_BASE = "https://api.0x.org";
 
@@ -178,14 +178,27 @@ async function prefetchNativePrices(chainIds: number[]): Promise<void> {
 }
 
 /**
- * Compute gas cost in USDC (6 decimals) from gas used and gas price.
- * costUsd = (gasUsed * gasPriceWei) / 1e18 * nativePriceUsd; then * 1e6 for USDC, with buffer (bps).
+ * Compute gas cost in settlement-stablecoin base units from gas used and gas price.
+ * costUsd = (gasUsed * gasPriceWei) / 1e18 * nativePriceUsd, scaled to the chain's stablecoin
+ * decimals (1e6 on most chains, 1e18 on BSC) and widened by the buffer (bps).
  */
-function gasCostToUsdc6(gasUsed: bigint, gasPriceWei: bigint, nativePriceUsd: number, bufferBps: number): bigint {
+function gasCostToUsdc6(
+  chainId: number,
+  gasUsed: bigint,
+  gasPriceWei: bigint,
+  nativePriceUsd: number,
+  bufferBps: number,
+): bigint {
   if (nativePriceUsd <= 0) return 0n;
   const weiSpent = gasUsed * gasPriceWei;
-  const usdScaled = (weiSpent * BigInt(Math.round(nativePriceUsd * 1e6)) * BigInt(bufferBps)) / (10n ** 18n) / 10000n;
-  return usdScaled; // already in 6 decimals
+  // All multiplications happen before any division so the 1e6-scaled native price keeps its
+  // precision even when the target scale is smaller than the intermediate.
+  const usdScaled =
+    (weiSpent * BigInt(Math.round(nativePriceUsd * 1e6)) * BigInt(bufferBps) * getStableOne(chainId)) /
+    (10n ** 18n) /
+    1_000_000n /
+    10000n;
+  return usdScaled;
 }
 
 export const DCA_VAULT_ABI = [
@@ -401,25 +414,44 @@ async function getGlobalGasBalance(userAddress: string): Promise<{ globalBalance
       }
     })
   );
+  // `byChain` keeps each balance in its own chain's base units — that is what recordExecution on
+  // that chain expects. `globalBalance` is the cross-chain sum and so has to be normalised to the
+  // pooled scale first; adding an 18-decimal BSC balance raw would inflate it by 10^12.
   const byChain: Record<number, bigint> = {};
   let globalBalance = 0n;
   for (const { cid, bal } of results) {
     byChain[cid] = bal;
-    globalBalance += bal;
+    globalBalance += toPooledUsd6(bal, cid);
   }
   return { globalBalance, byChain };
 }
 
 /** Pick chain to deduct gas cost from: prefer execution chain if enough balance, else chain with largest balance >= cost. */
+/**
+ * Which chain's tank pays for a run on `executionChainId`: that chain when it can cover the cost,
+ * otherwise the richest tank that can.
+ *
+ * Every balance is in its own chain's stablecoin base units and `costUsdc6` is in the execution
+ * chain's, so all of them are lifted to the pooled scale before being compared — raw, an
+ * 18-decimal BSC balance outranks every 6-decimal chain by a factor of 10^12 and would always be
+ * picked as "richest" even when it holds less money.
+ */
 function pickDeductChain(byChain: Record<number, bigint>, executionChainId: number, costUsdc6: bigint): number | null {
-  if (byChain[executionChainId] != null && byChain[executionChainId] >= costUsdc6) return executionChainId;
+  const costPooled = toPooledUsd6(costUsdc6, executionChainId);
+  if (
+    byChain[executionChainId] != null &&
+    toPooledUsd6(byChain[executionChainId], executionChainId) >= costPooled
+  ) {
+    return executionChainId;
+  }
   let best: number | null = null;
   let bestBal = 0n;
   for (const [cid, bal] of Object.entries(byChain)) {
     const chainId = parseInt(cid, 10);
-    if (bal >= costUsdc6 && bal > bestBal) {
+    const balPooled = toPooledUsd6(bal, chainId);
+    if (balPooled >= costPooled && balPooled > bestBal) {
       best = chainId;
-      bestBal = bal;
+      bestBal = balPooled;
     }
   }
   return best;
@@ -646,7 +678,6 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
 
   const account = privateKeyToAccount(pk as `0x${string}`);
   const zeroExKey = process.env.ZERO_EX_API_KEY;
-  const gasCostFallbackUsdc6 = getGasCostPerExecutionUsdc6Fallback();
   const executed: string[] = [];
   const executedTasksDetail: ExecutedTask[] = [];
   const gasBalances: GasBalanceEntry[] = [];
@@ -667,6 +698,10 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     const chainId = parseInt(chainIdStr, 10);
     if (!userAddress || isNaN(chainId)) continue;
     if (!allowedChains.has(chainId)) continue;
+
+    // Resolved per chain: the env value is a USD figure, and scaling it to base units depends on
+    // the chain's stablecoin decimals.
+    const gasCostFallbackUsdc6 = getGasCostPerExecutionUsdc6Fallback(chainId);
 
     log(`  [${member}] Processing…`);
     const cfg = getVaultUsdcGasTank(chainId);
@@ -741,7 +776,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         gasPriceWei = gasPriceCache[chainId];
         nativePriceUsd = await getNativePriceUsd(chainId);
         if (nativePriceUsd > 0) {
-          estimatedCostUsdc6 = gasCostToUsdc6(GAS_LIMIT_EXECUTE_SWAP, gasPriceWei, nativePriceUsd, ESTIMATE_BUFFER_BPS);
+          estimatedCostUsdc6 = gasCostToUsdc6(chainId, GAS_LIMIT_EXECUTE_SWAP, gasPriceWei, nativePriceUsd, ESTIMATE_BUFFER_BPS);
         } else {
           errors.push(`Native price unavailable for chain ${chainId}, skipping`);
           log(`  [${member}] Skip: native price unavailable`);
@@ -956,7 +991,8 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         errors.push(`getSchedule ${member} ${scheduleId}: ${(e as Error).message}`);
         continue;
       }
-      if (globalGas.globalBalance < estimatedCostUsdc6) {
+      // globalBalance is on the pooled scale, so the estimate is lifted onto it to compare.
+      if (globalGas.globalBalance < toPooledUsd6(estimatedCostUsdc6, chainId)) {
         errors.push(`Insufficient gas tank (global) ${member} scheduleId=${scheduleId}`);
         log(`  [${member}] Schedule ${scheduleId}: skip (insufficient gas tank)`);
         continue;
@@ -1042,8 +1078,9 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               account,
               address: gasTankPre,
               abi: GAS_TANK_ABI,
+              // Restated in the preflight chain's own base units, as the real charge below is.
+              args: [user, convertStableAmount(estimatedCostUsdc6, chainId, preflightChainId)],
               functionName: "recordExecution",
-              args: [user, estimatedCostUsdc6],
             });
           } catch (e) {
             const reason = (e as Error).message ?? String(e);
@@ -1094,6 +1131,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           costToRecordUsdc6 = gasCostFallbackUsdc6;
         } else {
           costToRecordUsdc6 = gasCostToUsdc6(
+            chainId,
             receipt.gasUsed,
             receipt.effectiveGasPrice ?? gasPriceWei,
             nativePriceUsd,
@@ -1112,10 +1150,13 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           errors.push(`Missing GasTank config for deduct chain ${deductChainId}`);
           continue;
         }
+        // The tank being debited may be on another chain whose stablecoin has different decimals,
+        // so the charge is restated in that chain's base units before it is encoded.
+        const costOnDeductChain = convertStableAmount(costToRecordUsdc6, chainId, deductChainId);
         const recordData = encodeFunctionData({
           abi: GAS_TANK_ABI,
           functionName: "recordExecution",
-          args: [user, costToRecordUsdc6],
+          args: [user, costOnDeductChain],
         });
 
         // Deduct, then confirm it. This used to be fire-and-forget with a hardcoded gas limit:
@@ -1191,9 +1232,11 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         // Only draw down the in-memory balance when the chain actually took the money. Decrementing
         // on a failed deduction made every later schedule in the sweep reason about a balance the
         // tank never had.
+        // Each side is drawn down in its own scale: byChain in the deduct chain's base units (the
+        // amount actually charged), globalBalance on the pooled scale it is summed in.
         if (deductOk) {
-          globalGas.byChain[deductChainId] -= costToRecordUsdc6;
-          globalGas.globalBalance -= costToRecordUsdc6;
+          globalGas.byChain[deductChainId] -= costOnDeductChain;
+          globalGas.globalBalance -= toPooledUsd6(costOnDeductChain, deductChainId);
         }
 
         // Teach the run-cost quote what a run on this chain really burns (see gas-profile.ts).
