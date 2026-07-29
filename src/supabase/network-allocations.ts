@@ -22,7 +22,11 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Pool } from 'pg';
-import { isNetworkType, type NetworkType } from '../networks/network-registry';
+import {
+  getRegistryNetworkTypes,
+  isNetworkType,
+  type NetworkType,
+} from '../networks/network-registry';
 
 export type NetworkStatus = 'enabled' | 'paused' | 'disabled';
 
@@ -240,6 +244,22 @@ export async function getNonExecutableChainIds(): Promise<Set<number>> {
       .filter((allocation) => allocation.status !== 'enabled')
       .map((allocation) => allocation.chainId),
   );
+}
+
+/**
+ * Every chain's effective mainnet/testnet classification: the registry's own, with an operator's
+ * `typeOverride` applied where one is set.
+ *
+ * Exposed alongside getNonExecutableChainIds because the relayer needs both on every run, and for
+ * the same reason: this is what decides which gas tanks are allowed to pay for a run, and money
+ * must not cross the line between real networks and faucet ones (see run-executor.ts).
+ */
+export async function getEffectiveNetworkTypes(): Promise<Map<number, NetworkType>> {
+  const types = getRegistryNetworkTypes();
+  for (const allocation of (await getNetworkAllocations()).values()) {
+    if (allocation.typeOverride) types.set(allocation.chainId, allocation.typeOverride);
+  }
+  return types;
 }
 
 /** Drop a chain's allocation so it reverts to the registry default. Returns whether a row existed. */

@@ -132,6 +132,16 @@ export function getRegistryNetworkType(chainId: number): NetworkType | null {
   return BY_CHAIN_ID.get(chainId)?.type ?? null;
 }
 
+/**
+ * Every registered chain's classification as the registry declares it, before any operator
+ * override. This is the whole table at once, for callers that classify a set of chains against one
+ * another rather than asking about a single one — the relayer deciding which gas tanks may pay for
+ * a run, above all.
+ */
+export function getRegistryNetworkTypes(): Map<number, NetworkType> {
+  return new Map(NETWORK_REGISTRY.map((entry) => [entry.chainId, entry.type]));
+}
+
 export function isNetworkType(value: unknown): value is NetworkType {
   return typeof value === 'string' && (NETWORK_TYPES as readonly string[]).includes(value);
 }

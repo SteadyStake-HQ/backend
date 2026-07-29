@@ -6,7 +6,11 @@
 import "dotenv/config";
 import { isSupabaseConfigured } from "./supabase/automation-users";
 import { getDcaPlanMembers, recordPlanExecuted } from "./supabase/dca-plans-store";
-import { getNonExecutableChainIds } from "./supabase/network-allocations";
+import {
+  getEffectiveNetworkTypes,
+  getNonExecutableChainIds,
+} from "./supabase/network-allocations";
+import { getRegistryNetworkTypes, type NetworkType } from "./networks/network-registry";
 import {
   getPlanAdminControlMap,
   planAdminControlKey,
@@ -361,9 +365,39 @@ export function netAmountAfterFee(amount: bigint, feeBps: number): bigint {
   return amount - fee;
 }
 
-/** Gas tank balance aggregated across all networks (CEX-style: one balance for any chain). Fetches all chains in parallel. */
-async function getGlobalGasBalance(userAddress: string): Promise<{ globalBalance: bigint; byChain: Record<number, bigint> }> {
-  const chainIds = getChainIdsWithGasTank();
+/**
+ * The gas tanks allowed to pay for a run on `executionChainId`: every deployed tank on a network of
+ * the same type, mainnet or testnet.
+ *
+ * The pool used to be every deployed tank, full stop, and that let faucet money buy mainnet runs.
+ * The tanks on Sepolia and Base Sepolia hold MockUSDC; `pickDeductChain` prefers the largest balance
+ * that covers the cost; and a faucet mints as much of that as anyone cares to ask for. So a user
+ * holding 9 mock USDC on Sepolia and 1 real USDC on BOT Chain had every BNB Chain run charged to
+ * Sepolia — the relayer paid real BNB for the swap and reimbursed itself in play money, while the
+ * mainnet tank the user had just topped up sat untouched.
+ *
+ * A chain the registry does not classify can only pay for itself. An unclassified network is not
+ * something to guess is real, and its own tank is the one case that needs no guess.
+ */
+export function eligibleDeductChainIds(
+  executionChainId: number,
+  networkTypes: Map<number, NetworkType>,
+): number[] {
+  const executionType = networkTypes.get(executionChainId);
+  if (!executionType) return [executionChainId];
+  return getChainIdsWithGasTank().filter(
+    (cid) => cid === executionChainId || networkTypes.get(cid) === executionType,
+  );
+}
+
+/**
+ * Gas tank balance aggregated across `chainIds` (CEX-style: one balance for any of them). Fetches
+ * them in parallel. The caller decides which chains belong in the pool — see eligibleDeductChainIds.
+ */
+async function getGlobalGasBalance(
+  userAddress: string,
+  chainIds: number[],
+): Promise<{ globalBalance: bigint; byChain: Record<number, bigint> }> {
   const results = await Promise.all(
     chainIds.map(async (cid): Promise<{ cid: number; bal: bigint }> => {
       const cfg = getVaultUsdcGasTank(cid);
@@ -402,12 +436,16 @@ async function getGlobalGasBalance(userAddress: string): Promise<{ globalBalance
  * Which chain's tank pays for a run on `executionChainId`: that chain when it can cover the cost,
  * otherwise the richest tank that can.
  *
+ * `byChain` holds only the tanks eligible to pay for this run — eligibleDeductChainIds has already
+ * excluded the networks of the other kind. "Richest wins" is therefore a choice between tanks whose
+ * contents are worth the same per unit, which is the only comparison that makes sense.
+ *
  * Every balance is in its own chain's stablecoin base units and `costUsdc6` is in the execution
  * chain's, so all of them are lifted to the pooled scale before being compared — raw, an
  * 18-decimal BSC balance outranks every 6-decimal chain by a factor of 10^12 and would always be
  * picked as "richest" even when it holds less money.
  */
-function pickDeductChain(byChain: Record<number, bigint>, executionChainId: number, costUsdc6: bigint): number | null {
+export function pickDeductChain(byChain: Record<number, bigint>, executionChainId: number, costUsdc6: bigint): number | null {
   const costPooled = toPooledUsd6(costUsdc6, executionChainId);
   if (
     byChain[executionChainId] != null &&
@@ -620,6 +658,24 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     return { ok: false, executed: 0, executedTasks: [], errors: [message] };
   }
 
+  // Which networks are real, once for the whole sweep — this decides whose gas tank may pay for
+  // whose run, and two plans in the same run must not be judged against different answers.
+  //
+  // A failed read falls back to the registry's own classification rather than aborting, unlike the
+  // allocation read above. The two are not the same kind of statement: the allocation store is the
+  // only record that a network was taken out of service, while the type override is an edit on top
+  // of a classification the code already ships. Losing the override widens nothing — mainnet stays
+  // mainnet and a faucet chain stays a faucet chain.
+  let networkTypes: Map<number, NetworkType>;
+  try {
+    networkTypes = await getEffectiveNetworkTypes();
+  } catch (e) {
+    networkTypes = getRegistryNetworkTypes();
+    log(
+      `Network types could not be read (${(e as Error).message}); using the registry's own mainnet/testnet classification.`,
+    );
+  }
+
   if (allowedChains.size === 0) {
     const message = "No network is currently in service for execution.";
     log(message);
@@ -745,10 +801,11 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
       // ignore; will fall back to env or gas-price derived
     }
 
-    // Global gas tank balance (CEX-style: top-up on any network, use on any chain)
+    // Global gas tank balance (CEX-style: top-up on any network of this kind, use on any of them).
+    const deductChainIds = eligibleDeductChainIds(chainId, networkTypes);
     let globalGas: { globalBalance: bigint; byChain: Record<number, bigint> };
     try {
-      globalGas = await getGlobalGasBalance(userAddress);
+      globalGas = await getGlobalGasBalance(userAddress, deductChainIds);
     } catch (e) {
       errors.push(`Global gas balance ${member}: ${(e as Error).message}`);
       log(`  [${member}] Skip: global gas balance failed`);
@@ -1058,7 +1115,11 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         {
           const preflightChainId = pickDeductChain(globalGas.byChain, chainId, estimatedCostUsdc6);
           if (preflightChainId == null) {
-            errors.push(`Insufficient gas tank (preflight) ${member} scheduleId=${item.scheduleId}`);
+            // Naming the pool matters: "insufficient" on its own reads as an empty tank, when the
+            // money may simply be sitting on the other side of the mainnet/testnet line.
+            errors.push(
+              `Insufficient gas tank (preflight) ${member} scheduleId=${item.scheduleId} — no ${networkTypes.get(chainId) ?? "eligible"} tank of ${deductChainIds.join(", ")} covers ${estimatedCostUsdc6}`
+            );
             log(`  [${member}] Schedule ${item.scheduleId}: skip (insufficient gas tank, preflight)`);
             continue;
           }
@@ -1162,7 +1223,9 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
 
         const deductChainId = pickDeductChain(globalGas.byChain, chainId, costToRecordUsdc6);
         if (deductChainId == null) {
-          errors.push(`No chain with enough gas balance to deduct ${costToRecordUsdc6} ${member} scheduleId=${item.scheduleId}`);
+          errors.push(
+            `No ${networkTypes.get(chainId) ?? "eligible"} chain of ${deductChainIds.join(", ")} has enough gas balance to deduct ${costToRecordUsdc6} ${member} scheduleId=${item.scheduleId}`
+          );
           continue;
         }
         const cfgDeduct = getVaultUsdcGasTank(deductChainId);
@@ -1212,7 +1275,11 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               address: gasTankDeduct,
               abi: GAS_TANK_ABI,
               functionName: "recordExecution",
-              args: [user, costToRecordUsdc6],
+              // The deduct chain's own base units, as the transaction below is encoded with. This
+              // used to pass the execution chain's, so every BSC-to-6-decimal deduction simulated a
+              // charge 10^12 times too large, reverted with InsufficientBalance, and reported a
+              // failure the send that followed did not have — noise that would have hidden a real one.
+              args: [user, costOnDeductChain],
             });
           } catch (e) {
             const reason = (e as Error).message ?? String(e);
@@ -1238,7 +1305,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               deductOk = true;
               recordGasUsed = recordReceipt.gasUsed;
               recordGasPriceWei = recordReceipt.effectiveGasPrice ?? null;
-              log(`  [${member}] Gas deducted ${costToRecordUsdc6} on chain ${deductChainId} tx=${recordHash}`);
+              log(`  [${member}] Gas deducted ${costOnDeductChain} on chain ${deductChainId} tx=${recordHash}`);
             } else {
               errors.push(
                 `recordExecution reverted on chain ${deductChainId} ${member} scheduleId=${item.scheduleId} tx=${recordHash}`
