@@ -1207,6 +1207,179 @@
   font-size: 11px;
 }
 
+/* ---- Cross-chain settlement ------------------------------------------------------------------
+   A pooled gas tank lets a plan run on one chain and be paid for by a balance on another, which
+   makes one execution a transaction on each: native token burned on the left chain, stablecoin
+   collected on the right. Two bars on one scale, because the question is whether the fee covered
+   both legs, and length beside length answers it without arithmetic.
+
+   The cost bar is split rather than coloured as two categories: both segments are the same measure
+   (gas), so they take the same slot-2 hue and separate by lightness. A third hue would claim they
+   are a third kind of thing, and would also be a hue the palette was never checked against. */
+
+.route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.route-row {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.route-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.route-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.route-arrow {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  flex: none;
+}
+
+.route-count {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+/* The margin is the row's verdict, so it sits at the end of the header where the eye lands last. */
+.route-margin {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-margin.pos {
+  color: var(--viz-pos);
+}
+
+.route-margin.neg {
+  color: var(--viz-neg);
+}
+
+.route-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.route-bar {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 9px;
+}
+
+.route-bar-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.route-track {
+  display: flex;
+  height: 13px;
+  border-radius: 0 4px 4px 0;
+  background: rgba(57, 135, 229, 0.13);
+  overflow: hidden;
+}
+
+.route-track > i {
+  display: block;
+  height: 100%;
+  transition: width 320ms ease;
+}
+
+/* Gas burned where the swap ran. */
+.route-track > i.seg-exec {
+  background: var(--series-2);
+}
+
+/* Gas burned by the deduction on the other chain — same measure, stepped lighter, and separated by
+   a hairline so two adjacent segments never read as one. */
+.route-track > i.seg-settle {
+  background: color-mix(in oklab, var(--series-2) 55%, var(--viz-surface));
+  box-shadow: inset 1px 0 0 var(--viz-surface);
+}
+
+.route-track > i.seg-charged {
+  background: var(--series-1);
+  border-radius: 0 4px 4px 0;
+}
+
+.route-bar-value {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.route-note {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* ---- Ledger: two-chain cells -----------------------------------------------------------------
+   Both of these sit under a figure rather than beside it. The total stays the primary number at
+   full size; the split below is what lets it be reconciled against a block explorer, which is the
+   check that found the number wrong in the first place. */
+
+.ledger .leg-split {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger .leg-plus {
+  opacity: 0.6;
+}
+
+/* The leg that was not on this row's chain — dimmer, because the row is about the other one. */
+.ledger .leg-part.away {
+  color: var(--dim, var(--muted));
+  opacity: 0.85;
+}
+
+.ledger .settled-on {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: help;
+}
+
 @media (max-width: 720px) {
   .hero-panel {
     gap: 18px;
@@ -1216,5 +1389,10 @@
   .viz-legend {
     margin-left: 0;
     width: 100%;
+  }
+
+  .route-bar {
+    grid-template-columns: 66px minmax(0, 1fr) 56px;
+    gap: 7px;
   }
 }

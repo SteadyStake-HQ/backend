@@ -193,6 +193,36 @@ export interface TreasuryWalletNetwork {
   error: string | null;
 }
 
+/**
+ * One leg of what an execution burned: gas paid on one chain, in that chain's own native token.
+ *
+ * A run is two transactions and they are not always on the same chain — the swap runs where the
+ * plan lives, the GasTank deduction runs wherever the user's balance happens to be. Reporting them
+ * as one number was the bug this shape exists to prevent: a BSC run whose tank was debited on BOT
+ * Chain showed "$0.0213 spent" against a BSC transaction that cost $0.0112, because $0.0101 of BOT
+ * gas had been folded in with no way to see it.
+ */
+export interface TreasurySpendLeg {
+  /** What this leg paid for. */
+  kind: 'swap' | 'record';
+  chainId: number;
+  chainName: string;
+  nativeSymbol: string;
+  explorerUrl: string | null;
+  /** Native token burned, in whole tokens of *this leg's* chain. */
+  native: number | null;
+  usd: number | null;
+  gasUsed: string | null;
+  /** True when `native` was reconstructed from gas used rather than recorded by the run. */
+  estimated: boolean;
+  /**
+   * True when `usd` uses the token's price *now* rather than the price the run recorded. The native
+   * amount is still exact; only its dollar value moved. Reported separately from `estimated`
+   * because the two are different claims and only one of them is about the gas.
+   */
+  repriced: boolean;
+}
+
 /** One auto-execution, priced on both sides. */
 export interface TreasuryFlow {
   at: string;
@@ -227,14 +257,34 @@ export interface TreasuryFlow {
   chargedUsd: number | null;
   /** False when the swap ran but the deduction did not: that run was executed for free. */
   charged: boolean;
+  /**
+   * Chain whose GasTank was actually debited — which is where the relayer's stablecoin fee landed,
+   * and not always the chain the swap ran on. Null when the deduction did not land.
+   */
   chargeChainId: number | null;
+  chargeChainName: string | null;
+  /** True when the fee was collected on a different chain from the one that burned the gas. */
+  settledCrossChain: boolean;
 
-  /** Native token the relayer burned for this run, and the same in USD. */
+  /**
+   * Every leg of gas this execution burned, each on its own chain in its own token. The swap leg is
+   * always present; the record leg only when the deduction landed.
+   */
+  spend: TreasurySpendLeg[];
+
+  /**
+   * Native burned *on the execution chain*, in that chain's token. A cross-chain deduction is
+   * deliberately excluded — a sum of BNB and BOT is a number in no currency. Use `spend` for the
+   * full picture and `spentUsd` for the total.
+   */
   spentNative: number | null;
+  /** Every leg's USD added together: the true all-in cost of this execution. */
   spentUsd: number | null;
   nativeSymbol: string;
-  /** True when the spend was reconstructed from gas used rather than recorded by the run itself. */
+  /** True when any leg's native amount was reconstructed from gas used rather than recorded. */
   spendEstimated: boolean;
+  /** True when any leg's USD had to use today's token price instead of the run's own. */
+  spendRepriced: boolean;
 
   /** chargedUsd − spentUsd. Null when either side is unknown. */
   marginUsd: number | null;
@@ -256,16 +306,56 @@ export interface TreasuryFlowsPayload {
      */
     unpricedExecutions: number;
   }>;
+  /**
+   * Per network, from the point of view of the wallet on it — which is the only view that answers
+   * "does this chain pay for itself".
+   *
+   * Both sides are booked to the chain the money actually moved on, not to the chain the plan ran
+   * on. A BSC execution settled on BOT Chain puts its BSC gas on BSC and its stablecoin fee on BOT;
+   * booking the fee to BSC (as this used to) showed a profitable BSC wallet whose balance never
+   * moved, and a BOT wallet that appeared to earn nothing while collecting all the revenue.
+   */
   byNetwork: Array<{
     chainId: number;
     name: string;
     nativeSymbol: string;
+    /** Executions whose swap ran here. */
     executions: number;
+    /** Fees collected into the relayer's wallet *on this chain*, whoever's run earned them. */
     chargedUsd: number;
+    /** Deductions that landed on this chain, including those for runs executed elsewhere. */
+    settlements: number;
+    /** Gas burned on this chain, in USD — swap legs that ran here plus record legs that settled here. */
     spentUsd: number;
-    marginUsd: number;
+    /** The same, in this chain's own native token. Coherent now that only this chain's legs are in it. */
     spentNative: number;
+    /** chargedUsd − spentUsd: what the wallet on this chain earned net, over the window. */
+    marginUsd: number;
+    /** Executions that ran here but were paid for by a tank on another chain. */
+    settledAway: number;
     freeRuns: number;
+  }>;
+  /**
+   * Executions whose gas and whose income landed on different chains, grouped by the pair. Empty
+   * when every run settled where it ran — which is the case the page should not spend space on.
+   */
+  byRoute: Array<{
+    execChainId: number;
+    execChainName: string;
+    settleChainId: number;
+    settleChainName: string;
+    executions: number;
+    /** Stablecoin collected on the settle chain. */
+    chargedUsd: number;
+    /** Gas burned on the execution chain, USD, and in its own token. */
+    execGasUsd: number;
+    execGasNative: number;
+    execNativeSymbol: string;
+    /** Gas burned on the settle chain running the deduction, USD, and in its own token. */
+    settleGasUsd: number;
+    settleGasNative: number;
+    settleNativeSymbol: string;
+    marginUsd: number;
   }>;
   byToken: Array<{
     address: string;
@@ -292,10 +382,18 @@ export interface TreasuryFlowsPayload {
     volumeUsd: number;
     /** Executions whose spend had to be estimated rather than read from the record. */
     estimatedSpends: number;
+    /**
+     * Executions whose gas is exact but whose dollar value uses today's token price, because the
+     * run recorded no price of its own. Counted apart from `estimatedSpends`: the gas is a
+     * measurement in both cases, and only the conversion moved.
+     */
+    repricedSpends: number;
     /** Executions whose spend could not be worked out at all, even approximately. */
     unpricedExecutions: number;
   };
   window: { from: string | null; to: string | null; runs: number };
+  /** Runs on record that executed something — the ceiling the window sizes are measured against. */
+  totalExecutingRuns: number;
   /**
    * What each selectable window actually contains, so the history picker can say so instead of
    * offering three indistinguishable run counts. Derived from one read of the largest window, so
@@ -311,8 +409,18 @@ export interface TreasuryFlowsPayload {
   }>;
 }
 
-/** The windows the dashboard offers. The largest is also the cap the history API enforces. */
-const WINDOW_SIZES = [25, 50, 100] as const;
+/**
+ * The windows the dashboard offers, counted in runs that *executed* something. The largest is also
+ * the cap this API enforces.
+ *
+ * Deliberately not counted in runs. The scheduler sweeps every few seconds and records the sweep
+ * whether or not a plan was due, so around 99 in 100 rows execute nothing: "the last 100 runs" was
+ * about nine minutes of clock time and usually held no execution at all. An execution was saved
+ * correctly and still left the page within minutes of happening — the record was never lost, the
+ * window had simply moved past it. Counting executing runs makes the largest window reach the
+ * whole history instead of the last few minutes of idling.
+ */
+const WINDOW_SIZES = [50, 250, 1000] as const;
 
 @Injectable()
 export class TreasuryService {
@@ -776,17 +884,24 @@ export class TreasuryService {
   }
 
   private async spendPerRunByChain(): Promise<Map<number, number>> {
-    const runs = await this.history.getRuns(100);
+    // Executing runs only. Asking for the last 100 rows meant 100 idle sweeps with no task in them,
+    // so `recorded` was always empty and every chain's runway silently fell back to a projection.
+    const runs = await this.history.getRunsWithExecutions(100);
     const totals = new Map<number, { usd: number; count: number }>();
 
     for (const run of runs) {
       for (const task of run.executedTasks ?? []) {
-        const spend = spentUsdOf(task);
-        if (spend == null || spend <= 0) continue;
-        const bucket = totals.get(task.chainId) ?? { usd: 0, count: 0 };
-        bucket.usd += spend;
-        bucket.count += 1;
-        totals.set(task.chainId, bucket);
+        // Both chains a run can touch, so the deduction's gas counts towards the runway of the
+        // wallet that actually paid it.
+        const touched = new Set([task.chainId, task.gasDeductChainId ?? task.chainId]);
+        for (const chainId of touched) {
+          const spend = spentUsdOfLegsOn(task, chainId);
+          if (spend == null || spend <= 0) continue;
+          const bucket = totals.get(chainId) ?? { usd: 0, count: 0 };
+          bucket.usd += spend;
+          bucket.count += 1;
+          totals.set(chainId, bucket);
+        }
       }
     }
 
@@ -807,12 +922,34 @@ export class TreasuryService {
     // The largest window is read whatever was asked for, and the requested one is a slice of it.
     // That is one query either way, and it is what lets the history picker describe every option
     // rather than presenting three run counts that mean nothing until one is chosen.
-    const allRuns = await this.history.getRuns(WINDOW_SIZES[WINDOW_SIZES.length - 1]);
+    //
+    // Executing runs only — see WINDOW_SIZES. Idle sweeps contribute nothing to any figure on this
+    // page and, being ~99% of the table, are the entire reason a real execution used to scroll out
+    // of view minutes after it was recorded.
+    const [allRuns, totalExecutingRuns] = await Promise.all([
+      this.history.getRunsWithExecutions(WINDOW_SIZES[WINDOW_SIZES.length - 1]),
+      this.history.countRunsWithExecutions().catch(() => 0),
+    ]);
     const runs = allRuns.slice(0, size);
 
     // Prices for the chains that appear, before anything is priced: a per-flow price lookup would
     // be dozens of identical requests, and the batched call is what keeps the feeds from 429ing.
-    const chainIds = [...new Set(runs.flatMap((run) => (run.executedTasks ?? []).map((t) => t.chainId)))];
+    //
+    // Deduct chains are in the set as well as execution chains. They are usually the same, but when
+    // they are not, the deduction's own chain is the only thing that can price its gas — and without
+    // it that leg used to be dropped silently, understating the run's cost by however much the
+    // deduction burned.
+    const chainIds = [
+      ...new Set(
+        runs.flatMap((run) =>
+          (run.executedTasks ?? []).flatMap((t) =>
+            t.gasDeductChainId != null && t.gasDeductChainId !== t.chainId
+              ? [t.chainId, t.gasDeductChainId]
+              : [t.chainId],
+          ),
+        ),
+      ),
+    ];
     await prefetchNativePrices(chainIds).catch(() => undefined);
     const nativeUsdByChain = new Map(
       await Promise.all(
@@ -856,6 +993,7 @@ export class TreasuryService {
       flows,
       daily: rollUpDaily(flows),
       byNetwork: rollUpNetworks(flows),
+      byRoute: rollUpRoutes(flows),
       byToken: rollUpTokens(flows),
       totals: {
         runs: runs.length,
@@ -866,6 +1004,7 @@ export class TreasuryService {
         marginUsd: total(flows, (f) => f.marginUsd),
         volumeUsd: total(flows, (f) => f.amountIn),
         estimatedSpends: flows.filter((f) => f.spendEstimated && f.spentUsd != null).length,
+        repricedSpends: flows.filter((f) => !f.spendEstimated && f.spendRepriced && f.spentUsd != null).length,
         unpricedExecutions: flows.filter((f) => f.spentUsd == null).length,
       },
       window: {
@@ -873,17 +1012,17 @@ export class TreasuryService {
         to: flows.length ? flows[0].at : null,
         runs: runs.length,
       },
+      totalExecutingRuns,
       windowOptions: WINDOW_SIZES.map((windowSize) => {
+        // Every run in `allRuns` executed something, so the slice and its span are the same set —
+        // no second filter is needed to keep the dates off runs that found nothing due.
         const slice = allRuns.slice(0, windowSize);
-        const withTimes = slice.filter((run) => (run.executedTasks ?? []).length > 0);
         return {
           runs: windowSize,
           availableRuns: slice.length,
           executions: slice.reduce((sum, run) => sum + (run.executedTasks ?? []).length, 0),
-          // The span of the runs that *executed* something, not of every run: a window whose recent
-          // runs all found nothing due would otherwise report a range with no activity in it.
-          from: withTimes.length ? withTimes[withTimes.length - 1].at : null,
-          to: withTimes.length ? withTimes[0].at : null,
+          from: slice.length ? slice[slice.length - 1].at : null,
+          to: slice.length ? slice[0].at : null,
         };
       }),
     };
@@ -916,11 +1055,20 @@ export class TreasuryService {
     // the error that would hide the failure.
     const chargedUsd = task.gasDeducted === false ? 0 : asStable(task.costUsdc6);
 
-    const { spentNative, spentUsd, estimated } = spendOf(
-      task,
-      nativeUsdByChain.get(chainId) ?? null,
-      gasPriceByChain.get(chainId) ?? null,
-    );
+    const spend = spendLegs(task, nativeUsdByChain, gasPriceByChain);
+    const swapLeg = spend.find((leg) => leg.kind === 'swap') ?? null;
+
+    // Only the execution chain's own token, so this stays an amount of one currency. The record
+    // leg joins it only when it ran on the same chain and is therefore the same token.
+    const sameChainLegs = spend.filter((leg) => leg.chainId === chainId && leg.native != null);
+    const spentNative = sameChainLegs.length ? sameChainLegs.reduce((sum, leg) => sum + (leg.native ?? 0), 0) : null;
+
+    // Null only when nothing could be priced at all. A leg that priced contributes even if the
+    // other did not — an execution with a known half-cost is not an execution that cost nothing.
+    const pricedLegs = spend.filter((leg) => leg.usd != null);
+    const spentUsd = pricedLegs.length ? pricedLegs.reduce((sum, leg) => sum + (leg.usd ?? 0), 0) : null;
+
+    const chargeChainId = task.gasDeductChainId ?? null;
 
     return {
       at,
@@ -948,85 +1096,158 @@ export class TreasuryService {
       },
       chargedUsd,
       charged: task.gasDeducted !== false,
-      chargeChainId: task.gasDeductChainId ?? null,
+      chargeChainId,
+      chargeChainName: chargeChainId != null ? (CHAIN_NAMES[chargeChainId] ?? `Chain ${chargeChainId}`) : null,
+      settledCrossChain: chargeChainId != null && chargeChainId !== chainId,
+      spend,
       spentNative,
       spentUsd,
       nativeSymbol: entry?.nativeSymbol ?? 'ETH',
-      spendEstimated: estimated,
+      spendEstimated: spend.some((leg) => leg.estimated),
+      spendRepriced: spend.some((leg) => leg.repriced),
       marginUsd: chargedUsd != null && spentUsd != null ? chargedUsd - spentUsd : null,
-      gasUsed: task.gasUsed ?? null,
+      gasUsed: swapLeg?.gasUsed ?? task.gasUsed ?? null,
     };
   }
 }
 
-/**
- * Native token and USD the relayer burned on one execution.
- *
- * Runs recorded since the treasury page was added carry their own `nativeSpentWei` and the native
- * price at the time, which is exact. Older records hold only `gasUsed`, so their spend is
- * reconstructed against *today's* gas price and token price — flagged `estimated`, because the gas
- * price that actually applied is gone and a reconstruction is not a measurement.
- *
- * The deduction leg is added only when it ran on the execution chain. When the tank debited was on
- * another chain the two legs are different native tokens, and its USD value is added while its
- * native amount is not — a sum of BOT and POL is a number in no currency.
- */
-function spendOf(
-  task: ExecutedTask,
-  nativeUsdNow: number | null,
-  gasPriceNowWei: bigint | null,
-): { spentNative: number | null; spentUsd: number | null; estimated: boolean } {
-  const wei = (raw: string | undefined) => {
-    if (raw == null) return null;
-    try {
-      return Number(formatUnits(BigInt(raw), 18));
-    } catch {
-      return null;
-    }
-  };
-
-  const recordedNative = wei(task.nativeSpentWei);
-  const nativeUsd = task.nativeUsd ?? nativeUsdNow;
-
-  if (recordedNative != null) {
-    const sameChain = task.gasDeductChainId == null || task.gasDeductChainId === task.chainId;
-    const recordNative = wei(task.recordNativeSpentWei);
-    const spentNative = recordedNative + (sameChain ? (recordNative ?? 0) : 0);
-
-    let spentUsd = nativeUsd != null ? spentNative * nativeUsd : null;
-    if (!sameChain && recordNative != null && task.recordNativeUsd != null && spentUsd != null) {
-      spentUsd += recordNative * task.recordNativeUsd;
-    }
-    return { spentNative, spentUsd, estimated: false };
+/** Wei to whole native tokens. Null rather than NaN when the value is not a parseable integer. */
+function fromWei(raw: string | undefined | null): number | null {
+  if (raw == null) return null;
+  try {
+    return Number(formatUnits(BigInt(raw), 18));
+  } catch {
+    return null;
   }
-
-  // No recorded spend: reconstruct from gas used, at the run's own gas price when it has one and
-  // today's otherwise. Null only when even that is impossible — an unpriced execution is reported
-  // as unpriced, never folded in as a zero.
-  const gasUsed = task.gasUsed != null ? Number(task.gasUsed) : null;
-  const gasPriceWei =
-    task.gasPriceWei != null
-      ? Number(task.gasPriceWei)
-      : gasPriceNowWei != null
-        ? Number(gasPriceNowWei)
-        : null;
-  if (gasUsed == null || gasPriceWei == null || nativeUsd == null) {
-    return { spentNative: null, spentUsd: null, estimated: true };
-  }
-  const spentNative = (gasUsed * gasPriceWei) / 1e18;
-  return { spentNative, spentUsd: spentNative * nativeUsd, estimated: true };
 }
 
 /**
- * USD spend of one task, for the runway average.
+ * Every leg of gas one execution burned, each attributed to the chain that actually burned it.
+ *
+ * A run is two transactions. The swap runs on the plan's chain; `recordExecution` runs on whichever
+ * chain holds the user's gas tank balance, which is frequently a *different* chain. Those two legs
+ * are then different native tokens at different prices, and the only correct way to report them is
+ * separately — which is what this returns, instead of one number that silently spans two chains.
+ *
+ * Each leg is priced from the run's own record where it has one. Runs predating that carry only
+ * `gasUsed`, so their amount is reconstructed at today's gas price and flagged `estimated`; a leg
+ * whose token price was missing at execution time is priced at today's and flagged `repriced`. The
+ * two flags are kept apart because they are different claims: one is about the gas, one about the
+ * dollars.
+ */
+function spendLegs(
+  task: ExecutedTask,
+  nativeUsdByChain: Map<number, number | null>,
+  gasPriceByChain: Map<number, bigint | null>,
+): TreasurySpendLeg[] {
+  const describe = (chainId: number, kind: 'swap' | 'record'): Omit<TreasurySpendLeg, 'native' | 'usd' | 'gasUsed' | 'estimated' | 'repriced'> => {
+    const entry = getRegistryEntry(chainId);
+    return {
+      kind,
+      chainId,
+      chainName: CHAIN_NAMES[chainId] ?? `Chain ${chainId}`,
+      nativeSymbol: entry?.nativeSymbol ?? 'ETH',
+      explorerUrl: entry?.explorerUrl ?? null,
+    };
+  };
+
+  /** One leg, from whichever of its three possible records survived. */
+  const leg = (
+    chainId: number,
+    kind: 'swap' | 'record',
+    spentWei: string | undefined,
+    gasUsedRaw: string | undefined,
+    gasPriceRaw: string | undefined,
+    recordedPriceUsd: number | undefined,
+  ): TreasurySpendLeg | null => {
+    const gasUsed = gasUsedRaw != null ? Number(gasUsedRaw) : null;
+
+    let native = fromWei(spentWei);
+    let estimated = false;
+    if (native == null) {
+      // Reconstructed: the leg's own gas price when it recorded one, today's otherwise.
+      const gasPriceWei =
+        gasPriceRaw != null
+          ? Number(gasPriceRaw)
+          : gasPriceByChain.get(chainId) != null
+            ? Number(gasPriceByChain.get(chainId))
+            : null;
+      if (gasUsed == null || gasPriceWei == null) return null;
+      native = (gasUsed * gasPriceWei) / 1e18;
+      estimated = true;
+    }
+
+    // The price the run recorded is the right one; today's is the fallback, and saying so is the
+    // difference between an exact figure and one that moved with the market since.
+    const priceNow = nativeUsdByChain.get(chainId) ?? null;
+    const priceUsd = recordedPriceUsd ?? priceNow;
+    const repriced = recordedPriceUsd == null && priceNow != null;
+
+    return {
+      ...describe(chainId, kind),
+      native,
+      usd: priceUsd != null ? native * priceUsd : null,
+      gasUsed: gasUsedRaw ?? null,
+      estimated,
+      repriced,
+    };
+  };
+
+  const legs: TreasurySpendLeg[] = [];
+
+  const swap = leg(task.chainId, 'swap', task.nativeSpentWei, task.gasUsed, task.gasPriceWei, task.nativeUsd);
+  if (swap) legs.push(swap);
+
+  // The deduction leg exists only when the deduction landed — a reverted `recordExecution` burned
+  // no gas that the run kept a record of, and inventing one would overstate a run that was free.
+  const recordChainId = task.gasDeductChainId ?? task.chainId;
+  if (task.recordNativeSpentWei != null || task.recordGasUsed != null) {
+    const record = leg(
+      recordChainId,
+      'record',
+      task.recordNativeSpentWei,
+      task.recordGasUsed,
+      task.recordGasPriceWei,
+      // `recordNativeUsd` is only written when the deduct chain differed; on a same-chain deduction
+      // the execution chain's own recorded price is the price of this leg too.
+      recordChainId === task.chainId ? task.nativeUsd : task.recordNativeUsd,
+    );
+    if (record) legs.push(record);
+  }
+
+  return legs;
+}
+
+/**
+ * USD a task burned *on `chainId`*, for that chain's runway average.
  *
  * Only the exactly-recorded spend counts here, unlike the charts: the runway this feeds is labelled
  * `recorded`, and a chain whose history is all reconstructions has a live `projected` figure waiting
  * for it that is better than a reconstruction from stale gas prices.
+ *
+ * Attributed by leg, so a run executed on BSC and settled on BOT Chain contributes its BSC gas to
+ * BSC's runway and its BOT gas to BOT's. Charging the whole cross-chain cost to the execution chain
+ * shortened its runway by a spend its wallet never made, and left the chain that did make it
+ * reporting a runway longer than the balance supports.
  */
-function spentUsdOf(task: ExecutedTask): number | null {
-  const { spentUsd, estimated } = spendOf(task, null, null);
-  return estimated ? null : spentUsd;
+function spentUsdOfLegsOn(task: ExecutedTask, chainId: number): number | null {
+  const priced = (spentWei: string | undefined, priceUsd: number | undefined) => {
+    const native = fromWei(spentWei);
+    return native != null && priceUsd != null && priceUsd > 0 ? native * priceUsd : null;
+  };
+
+  let total: number | null = null;
+  const add = (value: number | null) => {
+    if (value != null) total = (total ?? 0) + value;
+  };
+
+  if (task.chainId === chainId) add(priced(task.nativeSpentWei, task.nativeUsd));
+
+  const recordChainId = task.gasDeductChainId ?? task.chainId;
+  if (recordChainId === chainId) {
+    add(priced(task.recordNativeSpentWei, recordChainId === task.chainId ? task.nativeUsd : task.recordNativeUsd));
+  }
+  return total;
 }
 
 /** Base units to whole tokens. Null rather than NaN when the value is not a parseable integer. */
@@ -1078,29 +1299,112 @@ function rollUpDaily(flows: TreasuryFlow[]): TreasuryFlowsPayload['daily'] {
   return out;
 }
 
+/**
+ * Per network, booked to where the money moved rather than to where the plan ran.
+ *
+ * Gas follows the leg that burned it; the fee follows the tank that was debited. A chain therefore
+ * appears here if it executed anything *or* if it settled anything, and its margin is the honest
+ * answer to "did the wallet on this chain earn more than it spent" — which is the question the
+ * relayer cards further down the page are about, and which the old execution-chain attribution
+ * could not answer.
+ */
 function rollUpNetworks(flows: TreasuryFlow[]): TreasuryFlowsPayload['byNetwork'] {
   const byChain = new Map<number, TreasuryFlowsPayload['byNetwork'][number]>();
+  const bucketFor = (chainId: number, name: string, nativeSymbol: string) => {
+    let bucket = byChain.get(chainId);
+    if (!bucket) {
+      bucket = {
+        chainId,
+        name,
+        nativeSymbol,
+        executions: 0,
+        chargedUsd: 0,
+        settlements: 0,
+        spentUsd: 0,
+        spentNative: 0,
+        marginUsd: 0,
+        settledAway: 0,
+        freeRuns: 0,
+      };
+      byChain.set(chainId, bucket);
+    }
+    return bucket;
+  };
+
   for (const flow of flows) {
-    const bucket = byChain.get(flow.chainId) ?? {
-      chainId: flow.chainId,
-      name: flow.chainName,
-      nativeSymbol: flow.nativeSymbol,
+    const executed = bucketFor(flow.chainId, flow.chainName, flow.nativeSymbol);
+    executed.executions += 1;
+    if (!flow.charged) executed.freeRuns += 1;
+    if (flow.settledCrossChain) executed.settledAway += 1;
+
+    // Gas, leg by leg. `spentNative` is only ever added to its own chain's bucket, so it stays an
+    // amount of that chain's token rather than a sum across two.
+    for (const legSpend of flow.spend) {
+      const bucket = bucketFor(legSpend.chainId, legSpend.chainName, legSpend.nativeSymbol);
+      bucket.spentUsd += legSpend.usd ?? 0;
+      bucket.spentNative += legSpend.native ?? 0;
+    }
+
+    // The fee, to whichever wallet received it.
+    if (flow.charged && flow.chargedUsd) {
+      const settleChainId = flow.chargeChainId ?? flow.chainId;
+      const settle = bucketFor(
+        settleChainId,
+        flow.chargeChainName ?? CHAIN_NAMES[settleChainId] ?? `Chain ${settleChainId}`,
+        getRegistryEntry(settleChainId)?.nativeSymbol ?? 'ETH',
+      );
+      settle.chargedUsd += flow.chargedUsd;
+      settle.settlements += 1;
+    }
+  }
+
+  for (const bucket of byChain.values()) bucket.marginUsd = bucket.chargedUsd - bucket.spentUsd;
+
+  // Executions first, then settlement-only chains — which are real rows, not noise: a chain that
+  // collects every fee and runs nothing is exactly the situation this rollup exists to surface.
+  return [...byChain.values()].sort(
+    (a, b) => b.executions - a.executions || b.settlements - a.settlements,
+  );
+}
+
+/** Cross-chain pairs only: where the gas was burned against where the fee was collected. */
+function rollUpRoutes(flows: TreasuryFlow[]): TreasuryFlowsPayload['byRoute'] {
+  const byPair = new Map<string, TreasuryFlowsPayload['byRoute'][number]>();
+
+  for (const flow of flows) {
+    if (!flow.settledCrossChain || flow.chargeChainId == null) continue;
+    const key = `${flow.chainId}:${flow.chargeChainId}`;
+    const swap = flow.spend.find((leg) => leg.kind === 'swap');
+    const record = flow.spend.find((leg) => leg.kind === 'record');
+
+    const bucket = byPair.get(key) ?? {
+      execChainId: flow.chainId,
+      execChainName: flow.chainName,
+      settleChainId: flow.chargeChainId,
+      settleChainName: flow.chargeChainName ?? CHAIN_NAMES[flow.chargeChainId] ?? `Chain ${flow.chargeChainId}`,
       executions: 0,
       chargedUsd: 0,
-      spentUsd: 0,
+      execGasUsd: 0,
+      execGasNative: 0,
+      execNativeSymbol: swap?.nativeSymbol ?? flow.nativeSymbol,
+      settleGasUsd: 0,
+      settleGasNative: 0,
+      settleNativeSymbol: record?.nativeSymbol ?? '',
       marginUsd: 0,
-      spentNative: 0,
-      freeRuns: 0,
     };
+
     bucket.executions += 1;
     bucket.chargedUsd += flow.chargedUsd ?? 0;
-    bucket.spentUsd += flow.spentUsd ?? 0;
-    bucket.spentNative += flow.spentNative ?? 0;
-    if (!flow.charged) bucket.freeRuns += 1;
-    bucket.marginUsd = bucket.chargedUsd - bucket.spentUsd;
-    byChain.set(flow.chainId, bucket);
+    bucket.execGasUsd += swap?.usd ?? 0;
+    bucket.execGasNative += swap?.native ?? 0;
+    bucket.settleGasUsd += record?.usd ?? 0;
+    bucket.settleGasNative += record?.native ?? 0;
+    if (record?.nativeSymbol) bucket.settleNativeSymbol = record.nativeSymbol;
+    bucket.marginUsd = bucket.chargedUsd - bucket.execGasUsd - bucket.settleGasUsd;
+    byPair.set(key, bucket);
   }
-  return [...byChain.values()].sort((a, b) => b.executions - a.executions);
+
+  return [...byPair.values()].sort((a, b) => b.executions - a.executions);
 }
 
 function rollUpTokens(flows: TreasuryFlow[]): TreasuryFlowsPayload['byToken'] {

@@ -100,7 +100,7 @@
             <button class="picker-button" id="window-button" type="button"
               aria-haspopup="listbox" aria-expanded="false" aria-controls="window-menu">
               <span class="picker-current">
-                <b id="window-current">Last 50 runs</b>
+                <b id="window-current">Last 50 executing runs</b>
                 <small id="window-current-sub">Loading…</small>
               </span>
               <svg class="picker-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -194,7 +194,11 @@
         <div class="viz-head">
           <div>
             <h3 class="viz-title" id="networks-title">Executions by network</h3>
-            <p class="viz-sub">Where the work happened over the window, and what each network earned.</p>
+            <p class="viz-sub">
+              Where the work happened over the window. The margin beside each bar is that
+              network's own wallet: fees it collected minus gas it burned — which is not the same as
+              the runs it executed, because a pooled tank can pay for a run from another chain.
+            </p>
           </div>
         </div>
         <div class="viz-plot" id="networks-plot"></div>
@@ -213,6 +217,23 @@
         <div class="viz-plot" id="tokens-plot"></div>
       </section>
     </div>
+
+    <!-- Only rendered when runs actually settled off their execution chain. When every run pays for
+         itself where it ran there is nothing here to explain, and an empty panel saying so would be
+         a permanent fixture describing the absence of a problem. -->
+    <section class="viz-card" aria-labelledby="routes-title" id="routes-card" hidden>
+      <div class="viz-head">
+        <div>
+          <h3 class="viz-title" id="routes-title">Cross-chain settlement</h3>
+          <p class="viz-sub">
+            Gas tanks are pooled, so a plan can run on one chain and be paid for by a balance on
+            another. Where that happened, the relayer burned native token on the left-hand chain and
+            was reimbursed in stablecoin on the right — two wallets, two tokens, one execution.
+          </p>
+        </div>
+      </div>
+      <div class="viz-plot" id="routes-plot"></div>
+    </section>
 
     <section aria-label="Relayer wallet per network" id="wallets">
       <div class="empty">Loading wallet balances…</div>
@@ -296,6 +317,8 @@
       margin: document.getElementById("margin-plot"),
       networks: document.getElementById("networks-plot"),
       tokens: document.getElementById("tokens-plot"),
+      routesCard: document.getElementById("routes-card"),
+      routes: document.getElementById("routes-plot"),
       wallets: document.getElementById("wallets"),
       ledger: document.getElementById("ledger-body"),
       ledgerMore: document.getElementById("ledger-more"),
@@ -385,7 +408,8 @@
         const fromApi = state.flows && state.flows.windowOptions;
         if (fromApi && fromApi.length) return fromApi;
         // Before the first response, offer the sizes with no detail rather than an empty menu.
-        return [25, 50, 100].map(function (runs) {
+        // Must match WINDOW_SIZES in treasury.service.ts, or the first render selects nothing.
+        return [50, 250, 1000].map(function (runs) {
           return { runs: runs, availableRuns: null, executions: null, from: null, to: null };
         });
       },
@@ -394,10 +418,11 @@
       describe: function (option) {
         if (option.executions == null) return "";
         const parts = [count(option.executions) + (option.executions === 1 ? " execution" : " executions")];
-        // Only worth saying when the window is not yet full — "50 runs" that only has 12 behind it
-        // is the difference between a quiet week and a fresh deployment.
+        // Only worth saying when the window is not yet full — "250 runs" that only has 12 behind it
+        // is the difference between a quiet week and a fresh deployment. When every window says the
+        // same number, that number is the entire history and there is nothing older to reach.
         if (option.availableRuns != null && option.availableRuns < option.runs) {
-          parts.push("only " + count(option.availableRuns) + " runs so far");
+          parts.push("only " + count(option.availableRuns) + " on record");
         }
         const span = spanLabel(option.from, option.to);
         if (span) parts.push(span);
@@ -419,17 +444,19 @@
                 ' stroke-width="3" aria-hidden="true">' +
                 '<path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />' +
               "</svg>" +
-              "<span><b>Last " + count(option.runs) + " runs</b>" +
+              "<span><b>Last " + count(option.runs) + " executing runs</b>" +
                 (detail ? "<span>" + escapeHtml(detail) + "</span>" : "") +
               "</span>" +
             "</button>" +
           "</li>";
         }).join("") +
         '<li class="picker-foot" role="presentation">A run is one sweep of every live network. ' +
-          'Only runs that executed something appear in the charts.</li>';
+          'The scheduler sweeps every few seconds and nearly always finds nothing due, so these ' +
+          'windows count only the runs that executed a plan — an idle sweep can never push an ' +
+          'execution out of view.</li>';
 
         const current = options.find(function (option) { return option.runs === state.runs; });
-        el.pickerCurrent.textContent = "Last " + count(state.runs) + " runs";
+        el.pickerCurrent.textContent = "Last " + count(state.runs) + " executing runs";
         el.pickerCurrentSub.textContent = current ? (picker.describe(current) || "no executions") : "";
       },
 
@@ -868,14 +895,86 @@
           "<span>" + escapeHtml(network.name) + "</span>";
         const value = count(network.executions) +
           "<small>" + money(network.marginUsd) + " margin</small>";
-        const tip = network.name + " · " + count(network.executions) + " executions · charged " +
-          money(network.chargedUsd) + " · gas " + money(network.spentUsd) +
+        // Both sides are this wallet's own, so the tooltip names them that way: fees this chain
+        // collected (for whoever's run) against gas this chain burned.
+        const tip = network.name + " · " + count(network.executions) + " executions here · earned " +
+          money(network.chargedUsd) + " on " + count(network.settlements) + " settlements · burned " +
+          money(network.spentUsd) +
+          (network.settledAway ? " · " + count(network.settledAway) + " paid for by another chain" : "") +
           (network.freeRuns ? " · " + count(network.freeRuns) + " uncharged" : "");
         return barRow(label, network.executions / peak, value, tip);
       });
       el.networks.innerHTML = '<div class="hbar-list">' + rows.join("") + "</div>" +
         '<div class="viz-tooltip" role="tooltip"></div>';
       wireBarHover(el.networks);
+    }
+
+    /**
+     * One row per execution chain → settlement chain pair, each showing both gas legs and the fee
+     * against each other.
+     *
+     * A stacked bar rather than a table: the whole point is that the cost has two parts in two
+     * tokens and the income arrives somewhere else entirely, and length beside length is what makes
+     * an unprofitable route obvious at a glance. The marker is the fee — cost bar past the marker
+     * means the route lost money.
+     */
+    function renderRoutes(byRoute) {
+      if (!byRoute.length) {
+        el.routesCard.hidden = true;
+        return;
+      }
+      el.routesCard.hidden = false;
+
+      // Both bars share one scale so their lengths are comparable across every row.
+      const peak = Math.max.apply(null, byRoute.map(function (r) {
+        return Math.max(r.chargedUsd, r.execGasUsd + r.settleGasUsd);
+      })) || 1;
+
+      el.routes.innerHTML = '<div class="route-list">' + byRoute.map(function (route) {
+        const cost = route.execGasUsd + route.settleGasUsd;
+        const negative = route.marginUsd < 0;
+        const pct = function (value) { return Math.max(0, Math.min(100, (value / peak) * 100)); };
+
+        return '<div class="route-row">' +
+          '<div class="route-head">' +
+            '<span class="route-pair">' +
+              "<b>" + escapeHtml(route.execChainName) + "</b>" +
+              '<svg class="route-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+                '<path d="M4 12h15m-5-5 5 5-5 5" stroke-linecap="round" stroke-linejoin="round" /></svg>' +
+              "<b>" + escapeHtml(route.settleChainName) + "</b>" +
+            "</span>" +
+            '<span class="route-count">' + count(route.executions) + " executions</span>" +
+            '<span class="route-margin' + (negative ? " neg" : " pos") + '">' + money(route.marginUsd) + "</span>" +
+          "</div>" +
+
+          '<div class="route-bars">' +
+            '<div class="route-bar">' +
+              '<span class="route-bar-label">Gas burned</span>' +
+              '<div class="route-track">' +
+                '<i class="seg-exec" style="width:' + pct(route.execGasUsd) + '%" ' +
+                  'title="' + escapeHtml(route.execChainName + " gas: " + tokenAmount(route.execGasNative) + " " + route.execNativeSymbol) + '"></i>' +
+                '<i class="seg-settle" style="width:' + pct(route.settleGasUsd) + '%" ' +
+                  'title="' + escapeHtml(route.settleChainName + " gas for the deduction: " + tokenAmount(route.settleGasNative) + " " + route.settleNativeSymbol) + '"></i>' +
+              "</div>" +
+              '<span class="route-bar-value">' + money(cost) + "</span>" +
+            "</div>" +
+            '<div class="route-bar">' +
+              '<span class="route-bar-label">Fee collected</span>' +
+              '<div class="route-track">' +
+                '<i class="seg-charged" style="width:' + pct(route.chargedUsd) + '%"></i>' +
+              "</div>" +
+              '<span class="route-bar-value">' + money(route.chargedUsd) + "</span>" +
+            "</div>" +
+          "</div>" +
+
+          '<p class="route-note">' +
+            "Swap gas " + money(route.execGasUsd) + " in " + escapeHtml(route.execNativeSymbol) +
+            " on " + escapeHtml(route.execChainName) + " · deduction gas " + money(route.settleGasUsd) +
+            " in " + escapeHtml(route.settleNativeSymbol) + " on " + escapeHtml(route.settleChainName) +
+            " · fee banked on " + escapeHtml(route.settleChainName) + "." +
+          "</p>" +
+        "</div>";
+      }).join("") + "</div>";
     }
 
     function renderTokenBars(byToken) {
@@ -981,6 +1080,18 @@
         "gas " + money(totals.spentUsd),
       ];
       let note = parts.join(" · ") + ".";
+      // Said before the caveats about precision, because it changes what the margin *is* rather
+      // than how exact it is: gas and income landed on different wallets, so a positive margin here
+      // does not mean any single chain paid for itself.
+      if (totals.crossChainSettlements > 0) {
+        note += " " + count(totals.crossChainSettlements) + " of those were paid for by a gas tank " +
+          "on another chain — the relayer burned native token on one network and was reimbursed in " +
+          "stablecoin on another, so this margin spans two wallets. See cross-chain settlement below.";
+      }
+      if (totals.repricedSpends > 0) {
+        note += " " + count(totals.repricedSpends) + " burned an exact amount of gas that had no " +
+          "token price recorded against it, and are converted at today's price.";
+      }
       if (totals.estimatedSpends > 0) {
         note += " " + count(totals.estimatedSpends) + " of those spends were reconstructed from gas " +
           "used at today's prices — runs recorded before the executor started saving its own gas " +
@@ -1415,6 +1526,51 @@
        Ledger — the table view every chart here is answerable from
        ========================================================================================== */
 
+    /**
+     * The "Gas spent" cell: the total, and underneath it the chains that actually burned it.
+     *
+     * A run is two transactions and they are not always on the same chain. Printing only the total
+     * on a row labelled "BSC" is what made a $0.0112 BSC transaction read as $0.0213 spent — the
+     * missing cent was a `recordExecution` on BOT Chain, in BOT, at BOT's price. The split is shown
+     * whenever the legs span two chains, so the number can always be reconciled against an explorer.
+     */
+    function spentCell(flow) {
+      if (flow.spentUsd == null) return '<span class="muted">—</span>';
+
+      const legs = flow.spend || [];
+      const crossChain = legs.some(function (leg) { return leg.chainId !== flow.chainId; });
+      // One marker at most. `≈` already means "worked out at today's prices", so a row carrying it
+      // does not also need the repriced dot — two symbols on nearly every row is noise, and noise
+      // is how a marker that matters stops being read.
+      const marks = flow.spendEstimated
+        ? '<span class="muted" title="Gas reconstructed from gas used at today\'s gas price — this run recorded no spend of its own."> ≈</span>'
+        : flow.spendRepriced
+          ? '<span class="muted" title="Gas is exact; its dollar value uses today\'s token price, because the run did not record the price at the time."> ·</span>'
+          : "";
+
+      if (!crossChain || legs.length < 2) return money(flow.spentUsd) + marks;
+
+      const split = legs.map(function (leg) {
+        return '<span class="leg-part' + (leg.chainId === flow.chainId ? "" : " away") + '">' +
+          escapeHtml(leg.chainName) + " " + money(leg.usd) + "</span>";
+      }).join('<span class="leg-plus">+</span>');
+
+      return money(flow.spentUsd) + marks + '<small class="leg-split">' + split + "</small>";
+    }
+
+    /** The "Charged" cell, saying plainly when the fee landed on a wallet other than this chain's. */
+    function chargedCell(flow) {
+      if (!flow.charged) {
+        return '<span class="muted" title="The GasTank deduction did not land — this run was executed for free.">uncharged</span>';
+      }
+      if (!flow.settledCrossChain) return money(flow.chargedUsd);
+      return money(flow.chargedUsd) +
+        '<small class="settled-on" title="The user\'s gas tank balance was on ' +
+          escapeHtml(flow.chargeChainName || "another chain") +
+          ', so the fee was collected into the relayer wallet there — not on ' + escapeHtml(flow.chainName) + '.">' +
+          "→ " + escapeHtml(flow.chargeChainName || "elsewhere") + "</small>";
+    }
+
     function renderLedger(flows) {
       const rows = flows.filter(function (flow) { return inFilter({ chainId: flow.chainId }); });
       if (!rows.length) {
@@ -1441,12 +1597,8 @@
           '<td class="num">' + (flow.amountOut != null
             ? escapeHtml(tokenAmount(flow.amountOut)) + ' <span class="muted">' + escapeHtml(flow.token.symbol || "") + "</span>"
             : '<span class="muted">not recorded</span>') + "</td>" +
-          '<td class="num">' + (flow.charged
-            ? money(flow.chargedUsd)
-            : '<span class="muted" title="The GasTank deduction did not land — this run was executed for free.">uncharged</span>') + "</td>" +
-          '<td class="num">' + (flow.spentUsd != null
-            ? money(flow.spentUsd) + (flow.spendEstimated ? '<span class="muted" title="Reconstructed from gas used at today\'s price."> ≈</span>' : "")
-            : '<span class="muted">—</span>') + "</td>" +
+          '<td class="num">' + chargedCell(flow) + "</td>" +
+          '<td class="num">' + spentCell(flow) + "</td>" +
           '<td class="num' + marginClass + '">' + (flow.marginUsd != null ? money(flow.marginUsd) : "—") + "</td>" +
           "<td>" + txCell + "</td>" +
         "</tr>";
@@ -1526,6 +1678,41 @@
       const byNetwork = (state.flows.byNetwork || []).filter(inFilter);
       const byToken = (state.flows.byToken || []).filter(inFilter);
 
+      // Routes are rolled up here rather than filtered from the payload's own: a route is a pair,
+      // and a pair is only in this slice when the chain the operator is looking at executed it.
+      const byRoute = [];
+      const routeIndex = new Map();
+      for (const flow of flows) {
+        if (!flow.settledCrossChain || flow.chargeChainId == null) continue;
+        const key = flow.chainId + ":" + flow.chargeChainId;
+        const swap = (flow.spend || []).find(function (leg) { return leg.kind === "swap"; });
+        const record = (flow.spend || []).find(function (leg) { return leg.kind === "record"; });
+        let route = routeIndex.get(key);
+        if (!route) {
+          route = {
+            execChainId: flow.chainId,
+            execChainName: flow.chainName,
+            settleChainId: flow.chargeChainId,
+            settleChainName: flow.chargeChainName || "Chain " + flow.chargeChainId,
+            executions: 0, chargedUsd: 0,
+            execGasUsd: 0, execGasNative: 0, execNativeSymbol: (swap && swap.nativeSymbol) || flow.nativeSymbol,
+            settleGasUsd: 0, settleGasNative: 0, settleNativeSymbol: (record && record.nativeSymbol) || "",
+            marginUsd: 0,
+          };
+          routeIndex.set(key, route);
+          byRoute.push(route);
+        }
+        route.executions += 1;
+        route.chargedUsd += flow.chargedUsd || 0;
+        route.execGasUsd += (swap && swap.usd) || 0;
+        route.execGasNative += (swap && swap.native) || 0;
+        route.settleGasUsd += (record && record.usd) || 0;
+        route.settleGasNative += (record && record.native) || 0;
+        if (record && record.nativeSymbol) route.settleNativeSymbol = record.nativeSymbol;
+        route.marginUsd = route.chargedUsd - route.execGasUsd - route.settleGasUsd;
+      }
+      byRoute.sort(function (a, b) { return b.executions - a.executions; });
+
       const totals = {
         runs: state.flows.totals.runs,
         executions: flows.length,
@@ -1533,11 +1720,17 @@
         chargedUsd: flows.reduce(function (s, f) { return s + (f.chargedUsd || 0); }, 0),
         spentUsd: flows.reduce(function (s, f) { return s + (f.spentUsd || 0); }, 0),
         estimatedSpends: flows.filter(function (f) { return f.spendEstimated && f.spentUsd != null; }).length,
+        repricedSpends: flows.filter(function (f) {
+          return !f.spendEstimated && f.spendRepriced && f.spentUsd != null;
+        }).length,
+        crossChainSettlements: flows.filter(function (f) { return f.settledCrossChain; }).length,
         unpricedExecutions: flows.filter(function (f) { return f.spentUsd == null; }).length,
       };
       totals.marginUsd = totals.chargedUsd - totals.spentUsd;
 
-      return { flows: flows, daily: daily, byNetwork: byNetwork, byToken: byToken, totals: totals };
+      return {
+        flows: flows, daily: daily, byNetwork: byNetwork, byRoute: byRoute, byToken: byToken, totals: totals,
+      };
     }
 
     function renderChips() {
@@ -1572,6 +1765,7 @@
       renderMargin(view.daily);
       renderNetworkBars(view.byNetwork);
       renderTokenBars(view.byToken);
+      renderRoutes(view.byRoute);
       renderWallets();
       renderLedger(view.flows);
 

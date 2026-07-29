@@ -11,13 +11,26 @@ import { HistoryService } from './history.service';
 export class HistoryController {
   constructor(private readonly history: HistoryService) {}
 
+  /**
+   * GET /api/history/runs?limit=50&executedOnly=1
+   *
+   * `executedOnly` is the one worth asking for when the question is "what has this relayer done":
+   * the scheduler records a row per sweep and ~99% of them execute nothing, so an unfiltered page
+   * of the newest rows is a few minutes of idle ticks and typically contains no execution at all.
+   */
   @Get('runs')
-  async getRuns(@Query('limit') limit?: string) {
-    const limitNum = Math.min(
-      parseInt(limit ?? '50', 10) || 50,
-      100,
-    );
-    const runs = await this.history.getRuns(limitNum);
+  async getRuns(
+    @Query('limit') limit?: string,
+    @Query('executedOnly') executedOnly?: string,
+  ) {
+    const onlyExecuted = executedOnly === '1' || executedOnly === 'true';
+    // Executing runs are rare and each one matters, so that view is allowed a deeper page than the
+    // raw tick log, where 100 rows is already more than anyone reads.
+    const cap = onlyExecuted ? 1000 : 100;
+    const limitNum = Math.min(parseInt(limit ?? '50', 10) || 50, cap);
+    const runs = onlyExecuted
+      ? await this.history.getRunsWithExecutions(limitNum)
+      : await this.history.getRuns(limitNum);
     return { runs };
   }
 

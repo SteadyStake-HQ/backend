@@ -147,6 +147,14 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
         data jsonb NOT NULL
       );
       CREATE INDEX IF NOT EXISTS run_history_at_idx ON run_history (at DESC);
+      -- Runs that actually executed a plan, which is what every reader of this table wants. They
+      -- are roughly 1% of the rows — the scheduler writes a row every few seconds whether or not
+      -- anything was due — so without a partial index "the last N executions" means walking tens of
+      -- thousands of idle sweeps. The predicate is repeated verbatim in getRunRecordsWithExecutions
+      -- so the planner matches it; changing one without the other silently loses the index.
+      CREATE INDEX IF NOT EXISTS run_history_executed_at_idx ON run_history (at DESC)
+        WHERE jsonb_typeof(data->'executedTasks') = 'array'
+          AND jsonb_array_length(data->'executedTasks') > 0;
 
       CREATE TABLE IF NOT EXISTS gas_history (
         id bigserial PRIMARY KEY,
@@ -331,6 +339,87 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
     if (!pool) throw new Error('Supabase is not configured or connection failed.');
     const { rows } = await pool.query('SELECT data FROM run_history ORDER BY at DESC LIMIT $1', [limit]);
     return rows.map((r) => r.data);
+  }
+
+  /**
+   * The newest `limit` runs that executed at least one plan.
+   *
+   * The scheduler records every sweep, and nearly all of them find nothing due — around 99 idle
+   * rows for each row that matters. So "the last 100 rows" is roughly the last ten minutes of
+   * clock time and almost never contains an execution at all: an execution record is real and
+   * saved, and still falls out of that window minutes after it happened. Anything asking for
+   * execution history has to filter here rather than take a slice off the top.
+   *
+   * The WHERE clause is the predicate of run_history_executed_at_idx, verbatim.
+   */
+  async getRunRecordsWithExecutions(limit: number): Promise<unknown[]> {
+    const pool = await this.getPool();
+    if (!pool) throw new Error('Supabase is not configured or connection failed.');
+    const { rows } = await pool.query(
+      `SELECT data FROM run_history
+       WHERE jsonb_typeof(data->'executedTasks') = 'array'
+         AND jsonb_array_length(data->'executedTasks') > 0
+       ORDER BY at DESC LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => r.data);
+  }
+
+  /** How many runs in the table executed something. Cheap: index-only over the partial index. */
+  async countRunRecordsWithExecutions(): Promise<number> {
+    const pool = await this.getPool();
+    if (!pool) throw new Error('Supabase is not configured or connection failed.');
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM run_history
+       WHERE jsonb_typeof(data->'executedTasks') = 'array'
+         AND jsonb_array_length(data->'executedTasks') > 0`,
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  /**
+   * Drop idle sweeps older than `olderThanDays`, and nothing else.
+   *
+   * The table grows by ~17k rows and ~17MB a day, essentially all of it rows that recorded that
+   * nothing was due. Left alone it exhausts the database, and the first casualty is the INSERT of
+   * the next real execution — the history would stop saving for real, not just stop being visible.
+   *
+   * A row survives if it executed anything or if it recorded an error, so no execution record and
+   * no failure is ever removed by this, at any age. Gas and portfolio series live in their own
+   * tables and are untouched.
+   */
+  async pruneIdleRunHistory(olderThanDays: number): Promise<number> {
+    const pool = await this.getPool();
+    if (!pool) throw new Error('Supabase is not configured or connection failed.');
+    const { rowCount } = await pool.query(
+      `DELETE FROM run_history
+       WHERE at < now() - ($1 || ' days')::interval
+         AND coalesce(jsonb_array_length(
+               CASE WHEN jsonb_typeof(data->'executedTasks') = 'array'
+                    THEN data->'executedTasks' ELSE '[]'::jsonb END), 0) = 0
+         AND coalesce(jsonb_array_length(
+               CASE WHEN jsonb_typeof(data->'errors') = 'array'
+                    THEN data->'errors' ELSE '[]'::jsonb END), 0) = 0`,
+      [String(olderThanDays)],
+    );
+    return rowCount ?? 0;
+  }
+
+  /**
+   * Keep only the newest `keep` scheduler-timing rows. One is written per run and the API never
+   * reads more than 100, so the rest is pure growth — 48MB of it at the time this was added.
+   */
+  async pruneExecutionTimingHistory(keep: number): Promise<number> {
+    const pool = await this.getPool();
+    if (!pool) throw new Error('Supabase is not configured or connection failed.');
+    const { rowCount } = await pool.query(
+      `DELETE FROM execution_timing_history
+       WHERE id IN (
+         SELECT id FROM execution_timing_history ORDER BY at DESC OFFSET $1
+       )`,
+      [keep],
+    );
+    return rowCount ?? 0;
   }
 
   async getRunRecord(runId: string): Promise<unknown | null> {
