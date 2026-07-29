@@ -28,10 +28,12 @@ import {
 } from "../run-executor";
 import {
   getDcaPlans,
+  getKnownWalletAddresses,
   isSupabaseConfigured,
   type DcaPlanRow,
   type DcaPlanStatus,
 } from "../supabase/dca-plans-store";
+import { discoverMembers } from "./discover-members";
 import {
   getPlanExecutionMode,
   type PlanExecutionMode,
@@ -570,10 +572,32 @@ export async function fetchAllPlans(
 
   const members = await resolveMembers(allowedChains, log);
   // Anyone with a stored plan is a member even if the registry row is missing.
-  const allMembers = [...new Set([...members, ...dbByMember.keys()])]
-    .filter((mk) => allowedChains.has(parseInt(mk.split(":")[0], 10)))
-    .sort();
-  log(`Members: ${allMembers.length}`);
+  const recordedMembers = new Set(
+    [...members, ...dbByMember.keys()].filter((mk) => allowedChains.has(parseInt(mk.split(":")[0], 10))),
+  );
+
+  // The recorded list only covers chains a plan was written through on, so a plan whose record
+  // never landed is invisible here — and it stays invisible, because an unrecorded member is one
+  // nobody knows to ask about. Ask every chain about every wallet the database has ever seen, which
+  // is what makes this page show plans on all deployed networks rather than only the recorded ones.
+  let discoveredMembers: string[] = [];
+  if (!options?.dbOnly) {
+    try {
+      const wallets = await getKnownWalletAddresses();
+      const discovery = await discoverMembers(allowedChains, recordedMembers, wallets, log, errors);
+      discoveredMembers = discovery.members;
+    } catch (e) {
+      // Discovery is an enrichment: without it the page is exactly as complete as it was before.
+      errors.push(`Member discovery failed: ${(e as Error).message}`);
+      log(`Member discovery failed: ${(e as Error).message}`);
+    }
+  }
+
+  const allMembers = [...new Set([...recordedMembers, ...discoveredMembers])].sort();
+  log(
+    `Members: ${allMembers.length}` +
+      (discoveredMembers.length > 0 ? ` (${discoveredMembers.length} found on-chain, not recorded)` : ""),
+  );
 
   const results: MemberPlans[] = [];
   let planCount = 0;

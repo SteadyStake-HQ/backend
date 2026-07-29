@@ -162,6 +162,50 @@ export async function getDcaPlanMembers(chainIds?: number[]): Promise<string[]> 
   return rows.map((r) => `${Number(r.chain_id)}:${(r.user_addr as string).toLowerCase()}`);
 }
 
+/**
+ * Every wallet address the DB has ever seen, on any chain.
+ *
+ * Membership is stored per `chainId:user`, which makes a wallet invisible on a chain it was never
+ * recorded against — the exact hole an unrecorded plan falls through. Discovery (see
+ * plans/discover-members.ts) needs the addresses alone so it can ask each chain about each wallet.
+ */
+export async function getKnownWalletAddresses(): Promise<string[]> {
+  const p = getPool();
+  if (!p) throw new Error('SUPABASE_DB_URL is not configured.');
+  const { rows } = await p.query(`
+    SELECT DISTINCT lower(user_addr) AS user_addr FROM (
+      SELECT user_addr FROM dca_plans
+      UNION
+      SELECT user_addr FROM automation_users
+    ) m
+    ORDER BY 1`);
+  return rows.map((r) => r.user_addr as string);
+}
+
+/**
+ * Register `chainId:user` pairs in the member list, idempotently.
+ *
+ * Used by discovery to remember a wallet found holding schedules on a chain it was not registered
+ * against, so the finding survives the process and the executor sees the member too. It only ever
+ * adds a *member*; whether any of that member's plans auto-execute is still decided on-chain by
+ * `getEnrolledScheduleIds`.
+ */
+export async function registerAutomationUsers(
+  members: Array<{ chainId: number; userAddr: string }>,
+): Promise<void> {
+  if (members.length === 0) return;
+  const p = getPool();
+  if (!p) throw new Error('SUPABASE_DB_URL is not configured.');
+  for (const { chainId, userAddr } of members) {
+    const user = userAddr.toLowerCase();
+    await p.query(
+      `INSERT INTO automation_users (member, chain_id, user_addr) VALUES ($1, $2, $3)
+       ON CONFLICT (member) DO NOTHING`,
+      [`${chainId}:${user}`, chainId, user],
+    );
+  }
+}
+
 /** Upsert absolute plan state (callers compute full values, so this overwrites). */
 export async function upsertDcaPlans(rows: DcaPlanRow[]): Promise<void> {
   if (rows.length === 0) return;

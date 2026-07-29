@@ -294,21 +294,33 @@
   font-weight: 650;
 }
 
+/* The unit sits beside the number rather than over it: the ticker on the auto-plan row is as wide
+   as four characters, and a right-aligned value would run underneath any fixed padding reserved
+   for it. The whole group is one fixed width so the Save buttons of both rows line up, and the
+   number field takes whatever the unit leaves — a longer symbol shortens the field, never collides
+   with it. */
+
 .fee-input {
-  position: relative;
   display: flex;
   align-items: center;
+  gap: 5px;
   flex: 0 0 auto;
+  width: 116px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(5, 9, 17, 0.5);
 }
 
 .fee-input input {
-  width: 86px;
-  min-height: 30px;
-  padding: 5px 26px 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 0;
+  border: 0;
   color: var(--text);
-  background: rgba(5, 9, 17, 0.5);
+  background: none;
   font: inherit;
   font-size: 11px;
   font-weight: 750;
@@ -325,17 +337,22 @@
 
 .fee-input input:focus {
   outline: none;
+}
+
+.fee-input:focus-within {
   border-color: rgba(110, 140, 255, 0.5);
+}
+
+.fee-input:has(input:disabled) {
+  opacity: 0.45;
 }
 
 .fee-input input:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .fee-unit {
-  position: absolute;
-  right: 9px;
+  flex: 0 0 auto;
   color: var(--dim);
   font-size: 10px;
   font-weight: 700;
