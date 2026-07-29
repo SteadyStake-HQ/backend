@@ -45,11 +45,13 @@
   },
   "84532": {
     "chainId": 84532,
+    "MockUSDC": "0x508D52Ed54989700b94c381b54b53f68ED18Ce52",
     "DCAVault": "0x6457b147a647426edd4bcdbd5de534cb15e05f2a",
     "GasTank": "0xcb861dfc046ad9653c0cdf058b611f8aba70ba1d"
   },
   "11155111": {
     "chainId": 11155111,
+    "MockUSDC": "0x5a55d42682B78a01b69C0EA06731d9cBB2C46A9F",
     "DCAVault": "0xd6be588d237bf20eef58c7e09ad3d28d6eddfae2",
     "GasTank": "0xd3a2cdab334f12288c11031ec6de365091395925"
   }

@@ -38,7 +38,25 @@ import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getCh
 
 const ZERO_EX_BASE = "https://api.0x.org";
 
+/**
+ * Floor for an executeSwap gas limit, and the figure the pre-swap *price* estimate is worked out
+ * against. The real limit each transaction is sent with comes from `estimateExecuteSwapGas` below.
+ *
+ * This was the limit itself, fixed, and that is what broke swaps on BNB Chain: a 0x route through
+ * PancakeSwap Infinity CL needs ~540k, so every run stopped a few opcodes into the aggregator. The
+ * adapter reaches 0x through a low-level `.call`, so the sub-call ran out of its 63/64 share of the
+ * remaining gas and returned false instead of bubbling up — the vault reported "0x swap failed",
+ * which reads like a routing or liquidity fault and hid the real cause.
+ */
 const GAS_LIMIT_EXECUTE_SWAP = 400_000n;
+/**
+ * Ceiling on an estimated executeSwap limit. A run that genuinely needs more than this is not a
+ * route worth paying for, and an absurd estimate from a misbehaving node must not be able to hand
+ * the relayer's whole native balance to one transaction.
+ */
+const GAS_LIMIT_EXECUTE_SWAP_MAX = 3_000_000n;
+/** Headroom over eth_estimateGas: routes move between the estimate and the block that mines it. */
+const GAS_LIMIT_BUFFER_BPS = 13000; // 1.3x
 const ESTIMATE_BUFFER_BPS = 15000; // 1.5x for balance check
 const RECORD_BUFFER_BPS = 11000; // 1.1x when recording actual cost
 const relayerNonceByChain = new Map<number, number>();
@@ -56,6 +74,37 @@ async function getNextRelayerNonce(
   const nextNonce = cachedNonce != null && cachedNonce > pendingNonce ? cachedNonce : pendingNonce;
   relayerNonceByChain.set(chainId, nextNonce + 1);
   return nextNonce;
+}
+
+/**
+ * Gas limit for one executeSwap, from the node rather than from a constant.
+ *
+ * How much gas a run needs is a property of the route the aggregator picked this minute, not of the
+ * chain: a direct mock-router swap costs ~120k, a two-hop 0x route on BNB Chain costs ~540k, and no
+ * single number covers both without either reverting the second or over-reserving on the first.
+ *
+ * Returns null when the estimate itself reverts. That is not a gas problem — the transaction would
+ * revert on-chain for the same reason — so the caller skips the schedule and reports `reason`
+ * instead of paying for a failure. It is also the only place the real revert string is visible:
+ * once mined, the vault's low-level call has already flattened it into "0x swap failed".
+ */
+async function estimateExecuteSwapGas(
+  publicClient: ReturnType<typeof createPublicClient>,
+  account: ReturnType<typeof privateKeyToAccount>,
+  vault: `0x${string}`,
+  data: `0x${string}`
+): Promise<{ gas: bigint } | { gas: null; reason: string }> {
+  let estimate: bigint;
+  try {
+    estimate = await publicClient.estimateGas({ account, to: vault, data });
+  } catch (e) {
+    const err = e as { shortMessage?: string; details?: string; message?: string };
+    return { gas: null, reason: err.details ?? err.shortMessage ?? err.message ?? String(e) };
+  }
+  const buffered = (estimate * BigInt(GAS_LIMIT_BUFFER_BPS)) / 10000n;
+  if (buffered < GAS_LIMIT_EXECUTE_SWAP) return { gas: GAS_LIMIT_EXECUTE_SWAP };
+  if (buffered > GAS_LIMIT_EXECUTE_SWAP_MAX) return { gas: GAS_LIMIT_EXECUTE_SWAP_MAX };
+  return { gas: buffered };
 }
 
 /** keccak256("Transfer(address,address,uint256)") — topic0 of every ERC-20 transfer. */
@@ -1051,6 +1100,22 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           }
         }
 
+        // Size the transaction to the route the quote actually picked, and let a failing estimate
+        // stand in for the swap's own preflight — a revert here is the revert the chain would give.
+        const swapGas = await estimateExecuteSwapGas(
+          publicClient,
+          account,
+          vault,
+          item.executeSwapData,
+        );
+        if (swapGas.gas === null) {
+          errors.push(
+            `Skipping swap: executeSwap would revert on chain ${chainId} ${member} scheduleId=${item.scheduleId}: ${swapGas.reason}`
+          );
+          log(`  [${member}] Schedule ${item.scheduleId}: skip — executeSwap would revert (${swapGas.reason})`);
+          continue;
+        }
+
         let hash: `0x${string}`;
         let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
         try {
@@ -1058,7 +1123,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           hash = await walletClient.sendTransaction({
             to: vault,
             data: item.executeSwapData,
-            gas: GAS_LIMIT_EXECUTE_SWAP,
+            gas: swapGas.gas,
             nonce,
           });
           log(`  [${member}] Submitted scheduleId=${item.scheduleId} tx=${hash}`);

@@ -16,8 +16,10 @@ import {
  */
 const USDC_BY_CHAIN: Record<number, string> = {
   8453: "0x833589fCD6eDb6E08f4C7C32D4f71b54bdA02913",
-  84532: "0xAbd1a2748Bc70bD439F0438C22D1E92C0Eae3dA8",
-  11155111: "0x89A01f63A5F4b42d30483ee17c5f537A4B94b15E",
+  // Both Sepolias run the mock stack and have been redeployed since; the live MockUSDC is recorded
+  // in deployed-addresses.json and outranks these, which are kept only as a last resort.
+  84532: "0x508D52Ed54989700b94c381b54b53f68ED18Ce52",
+  11155111: "0x5a55d42682B78a01b69C0EA06731d9cBB2C46A9F",
   56: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
   137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // Circle native USDC
   // Kava: native Tether USDt. The old Multichain USDC (0xfA9343C3...A40f) is stranded — that
