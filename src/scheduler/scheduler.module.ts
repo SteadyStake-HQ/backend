@@ -9,6 +9,8 @@ import { NetworkMetricsController } from './network-metrics.controller';
 import { NetworkMetricsService } from './network-metrics.service';
 import { RuntimeSessionController } from './runtime-session.controller';
 import { PlanTimingController } from './plan-timing.controller';
+import { GasProfileController } from './gas-profile.controller';
+import { RunPriceController } from './run-price.controller';
 
 @Module({
   imports: [HistoryModule],
@@ -21,6 +23,8 @@ import { PlanTimingController } from './plan-timing.controller';
     NetworkMetricsController,
     RuntimeSessionController,
     PlanTimingController,
+    GasProfileController,
+    RunPriceController,
   ],
   exports: [SchedulerService],
 })

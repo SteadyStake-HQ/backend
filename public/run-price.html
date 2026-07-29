@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run Price — SteadyStake</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="SteadyStake plan activity">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <nav class="main-nav" aria-label="Backend dashboard">
+        <a class="nav-link" href="/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Plan activity</span>
+        </a>
+        <a class="nav-link" href="/deployments.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9" />
+          </svg>
+          <span>Deployments</span>
+        </a>
+        <a class="nav-link" href="/networks.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v4M12 17v4M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7 4.9 19.1M19.1 4.9l-1.4 1.4" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="3.4" />
+          </svg>
+          <span>Networks</span>
+        </a>
+        <a class="nav-link active" href="/run-price.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Run price</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Pricing</p>
+        <h1>Per-run price by network</h1>
+        <p class="page-description">
+          What one scheduled run charges a user's gas tank, set per network. The live cost beside it is
+          what the run actually costs the relayer right now — gas price × measured gas × token price.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <section class="content-panel" aria-label="Per-run price">
+      <!-- Changing this changes what every user is charged, so it is behind ADMIN_API_TOKEN, the
+           same operator secret the plan-activity page uses to hold a plan. Kept per browser. -->
+      <div class="price-toolbar">
+        <div class="admin-field">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token (to change prices)" aria-label="Admin API token" />
+        </div>
+      </div>
+
+      <div class="result-line" id="result-line" role="status" hidden></div>
+      <div id="content"><div class="empty">Loading per-run prices…</div></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script>
+    /* The token is a shared operator secret, not a per-user credential — same storage key as the
+       plan-activity page so entering it on either unlocks both. */
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const adminTokenInput = document.getElementById("admin-token");
+    const resultLine = document.getElementById("result-line");
+
+    try {
+      adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
+    } catch (e) {
+      /* private browsing — the operator just re-enters it */
+    }
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const value = adminTokenInput.value.trim();
+        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch (e) {
+        /* nothing to do — the value still works for this page load */
+      }
+    });
+
+    function say(message, tone) {
+      resultLine.textContent = message;
+      resultLine.className = "result-line" + (tone ? " " + tone : "");
+      resultLine.hidden = !message;
+    }
+
+    /** Money, always to the cent-and-below precision a run price needs. */
+    function money(usd) {
+      if (usd == null) return null;
+      return "$" + Number(usd).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      });
+    }
+
+    function amount(n, digits) {
+      if (n == null) return "—";
+      return Number(n).toLocaleString("en-US", { maximumSignificantDigits: digits || 4 });
+    }
+
+    const SOURCE_LABEL = {
+      manual: "Set here",
+      onchain: "From contract",
+      env: "From env var",
+      live: "Live gas cost",
+    };
+
+    const SOURCE_HINT = {
+      manual: "An operator set this price on this page. It is what the relayer debits and what the app quotes.",
+      onchain: "No price set here, so the GasTank's own gasCostPerExecutionUsdc6 stands.",
+      env: "No price set here and the contract's is 0, so GAS_COST_PER_EXECUTION_USDC applies.",
+      live: "Nothing has set a flat rate, so each run is charged what it measured — the amount moves with gas.",
+    };
+
+    /**
+     * How far the flat rate sits from what a run costs right now. Only worth saying once it is
+     * wide enough to act on; every rounding difference otherwise reads as a warning.
+     */
+    function driftFor(chain) {
+      const charged = chain.effectiveUsd;
+      const live = chain.live.usd;
+      if (charged == null || live == null || charged <= 0) return null;
+      const drift = (live - charged) / charged;
+      if (Math.abs(drift) < 0.25) return null;
+      const pct = Math.round(Math.abs(drift) * 100);
+      return drift > 0
+        ? { tone: "warn", text: "Underpriced by ~" + pct + "% — a run costs the relayer " + money(live) + " and charges " + money(charged) + "." }
+        : { tone: "ok", text: "Overpriced by ~" + pct + "% — a run costs the relayer " + money(live) + " against the " + money(charged) + " charged." };
+    }
+
+    function renderChain(chain, index) {
+      const stable = escapeHtml(chain.stableSymbol || "USDC");
+      const charged = chain.effectiveUsd == null ? "not set" : money(chain.effectiveUsd);
+      const drift = driftFor(chain);
+      const live = chain.live;
+
+      const gasUnitsNote = live.gasUnitsSource === "measured"
+        ? "measured from " + live.gasUnitsSamples + " run" + (live.gasUnitsSamples === 1 ? "" : "s")
+        : "estimated — no runs measured yet";
+
+      const manualMeta = chain.manual
+        ? '<p class="price-meta">Set ' + escapeHtml(new Date(chain.manual.updatedAt).toLocaleString()) +
+            (chain.manual.updatedBy ? " by " + escapeHtml(chain.manual.updatedBy) : "") +
+            (chain.manual.note ? ' · <span class="price-note">' + escapeHtml(chain.manual.note) + "</span>" : "") +
+          "</p>"
+        : "";
+
+      return '<article class="card price-card" style="--i:' + index + '" data-chain-id="' + chain.chainId + '">' +
+        '<div class="card-head">' +
+          '<span class="network-title"><span class="network-icon">' +
+            escapeHtml(String(chain.name || "N").slice(0, 1)) +
+          '</span><span class="net-name">' + escapeHtml(chain.name) + "</span></span>" +
+          '<span class="chip src-' + chain.source + '" title="' + escapeHtml(SOURCE_HINT[chain.source] || "") + '">' +
+            escapeHtml(SOURCE_LABEL[chain.source] || chain.source) +
+          "</span>" +
+        "</div>" +
+
+        '<div class="price-hero">' +
+          '<span class="price-label">Charged to the tank, per run</span>' +
+          '<span class="price-value">' + escapeHtml(charged) + ' <small>' + stable + "</small></span>" +
+        "</div>" +
+
+        '<div class="row"><span class="label">Live cost now</span><span class="val"><span class="addr">' +
+          (live.usd == null ? "unavailable" : escapeHtml(money(live.usd))) +
+        "</span></span></div>" +
+        '<div class="row"><span class="label">Gas price</span><span class="val"><span class="addr">' +
+          (live.gasPriceGwei == null ? "—" : escapeHtml(amount(live.gasPriceGwei, 4) + " gwei")) +
+        "</span></span></div>" +
+        '<div class="row"><span class="label">Gas per run</span><span class="val"><span class="addr">' +
+          Number(live.gasUnitsPerRun).toLocaleString("en-US") + " <span class=\"price-dim\">(" + escapeHtml(gasUnitsNote) + ")</span>" +
+        "</span></span></div>" +
+        '<div class="row"><span class="label">Native price</span><span class="val"><span class="addr">' +
+          (live.nativeUsd == null ? "no feed" : escapeHtml(money(live.nativeUsd))) +
+        "</span></span></div>" +
+        '<div class="row"><span class="label">On-chain rate</span><span class="val"><span class="addr' +
+          (chain.onChain.usd == null ? " zero" : "") + '">' +
+          (chain.onChain.usd == null ? "not set" : escapeHtml(money(chain.onChain.usd))) +
+        "</span></span></div>" +
+
+        (drift ? '<p class="price-drift ' + drift.tone + '">' + escapeHtml(drift.text) + "</p>" : "") +
+
+        '<div class="price-editor">' +
+          '<label class="price-input">' +
+            '<span class="price-currency">$</span>' +
+            '<input type="number" min="0" step="0.001" inputmode="decimal" placeholder="' +
+              (live.usd == null ? "0.05" : escapeHtml(Number(live.usd).toFixed(3))) +
+            '" value="' + (chain.manual ? escapeHtml(String(chain.manual.usd)) : "") +
+            '" data-role="price" aria-label="Price per run on ' + escapeHtml(chain.name) + '" />' +
+          "</label>" +
+          '<input type="text" class="price-note-input" data-role="note" maxlength="120" placeholder="Note (optional)" value="' +
+            (chain.manual && chain.manual.note ? escapeHtml(chain.manual.note) : "") + '" aria-label="Note" />' +
+          '<div class="price-actions">' +
+            '<button class="button" type="button" data-action="save">Save</button>' +
+            (live.usd == null ? "" : '<button class="button ghost" type="button" data-action="match-live" data-live="' +
+              Number(live.usd).toFixed(6) + '">Match live</button>') +
+            (chain.manual ? '<button class="button ghost danger" type="button" data-action="clear">Clear</button>' : "") +
+          "</div>" +
+        "</div>" +
+        manualMeta +
+      "</article>";
+    }
+
+    function renderChains(chains) {
+      if (!chains.length) {
+        return '<div class="empty">No network has a GasTank deployed, so there is nothing to price.</div>';
+      }
+      return '<div class="grid">' + chains.map(renderChain).join("") + "</div>";
+    }
+
+    async function load() {
+      const status = document.getElementById("status");
+      const content = document.getElementById("content");
+      status.textContent = "Loading…";
+
+      try {
+        const response = await fetch("/api/run-price");
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const data = await response.json();
+        const chains = data.chains || [];
+        content.innerHTML = renderChains(chains);
+        status.textContent = chains.length + " network" + (chains.length === 1 ? "" : "s") +
+          " · updated " + new Date().toLocaleTimeString();
+      } catch (error) {
+        content.innerHTML = '<div class="error">Failed to load prices: ' + escapeHtml(error.message) + "</div>";
+        status.textContent = "Error";
+      }
+    }
+
+    /** POST the change, then reload — the server's answer is the state runs will price against. */
+    async function submit(chainId, usd, note, button) {
+      const token = adminTokenInput.value.trim();
+      if (!token) {
+        say("Enter the admin token above before changing a price.", "error");
+        adminTokenInput.focus();
+        return;
+      }
+
+      const label = button.textContent;
+      button.disabled = true;
+      button.textContent = "Saving…";
+      say("");
+
+      try {
+        const response = await fetch("/api/run-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-token": token },
+          body: JSON.stringify({ chainId: chainId, usd: usd, note: note }),
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          throw new Error(data.error || data.message || "HTTP " + response.status);
+        }
+        const name = (data.chain && data.chain.name) || "Chain " + chainId;
+        say(usd == null
+          ? name + " is back on its on-chain rate."
+          : name + " now charges " + money(data.chain.effectiveUsd) + " per run.", "success");
+        await load();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = label;
+        say("Could not save: " + error.message, "error");
+      }
+    }
+
+    document.getElementById("content").addEventListener("click", function (event) {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      const card = button.closest(".price-card");
+      if (!card) return;
+
+      const chainId = Number(card.dataset.chainId);
+      const priceInput = card.querySelector('[data-role="price"]');
+      const noteInput = card.querySelector('[data-role="note"]');
+      const action = button.dataset.action;
+
+      if (action === "match-live") {
+        priceInput.value = button.dataset.live;
+        priceInput.focus();
+        return;
+      }
+      if (action === "clear") {
+        submit(chainId, null, null, button);
+        return;
+      }
+      if (action === "save") {
+        const value = priceInput.value.trim();
+        if (!value || Number(value) <= 0) {
+          say("Enter a price above zero, or use Clear to fall back to the contract.", "error");
+          priceInput.focus();
+          return;
+        }
+        submit(chainId, value, noteInput.value.trim() || null, button);
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>

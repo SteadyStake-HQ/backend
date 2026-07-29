@@ -16,6 +16,11 @@ import {
   planAdminControlKey,
   type PlanAdminControl,
 } from '../supabase/plan-admin-controls';
+import {
+  getMemberPlanExecutionGateMap,
+  planExecutionGateKey,
+  type PlanExecutionGate,
+} from '../supabase/plan-execution-gates';
 
 const FREQUENCY_INTERVAL_SECONDS: Record<number, number> = {
   0: 60,
@@ -63,11 +68,16 @@ export class PlanTimingController {
     // Admin holds for this one wallet. Read outside the main try so a database hiccup shows the
     // plans without hold notices rather than making the whole dashboard countdown unavailable.
     let adminControls = new Map<string, PlanAdminControl>();
+    let executionGates = new Map<string, PlanExecutionGate>();
     if (isSupabaseConfigured()) {
       try {
-        adminControls = await getMemberPlanAdminControlMap(chainId, user);
+        [adminControls, executionGates] = await Promise.all([
+          getMemberPlanAdminControlMap(chainId, user),
+          getMemberPlanExecutionGateMap(chainId, user),
+        ]);
       } catch {
-        // Leave empty: the executor enforces holds regardless of what this view can show.
+        // Leave empty: the executor enforces holds and resume gates regardless of what this view
+        // can show.
       }
     }
 
@@ -128,9 +138,24 @@ export class PlanTimingController {
           const intervalSeconds =
             FREQUENCY_INTERVAL_SECONDS[Number(schedule.frequency)] ?? 86_400;
           const dueTimestamp = Number(schedule.lastExecutionTime) + intervalSeconds;
-          const ready = readySet.has(scheduleId.toString());
+          const contractReady = readySet.has(scheduleId.toString());
           const isEnrolledForAutoExecution = enrolledSet.has(scheduleId.toString());
           const hold = adminControls.get(planAdminControlKey(chainId, user, scheduleId));
+          const gate = executionGates.get(planExecutionGateKey(chainId, user, scheduleId));
+
+          // A resumed plan is finishing the wait it had left when it was paused. The gate is kept
+          // in wall-clock time, so it is expressed here in the chain's clock — the one every
+          // countdown on the dashboard already runs against.
+          const gateRemainingSeconds = gate
+            ? Math.max(0, Math.round((gate.notBefore.getTime() - Date.now()) / 1000))
+            : 0;
+          const effectiveDueTimestamp =
+            gateRemainingSeconds > 0
+              ? Math.max(dueTimestamp, chainTime + gateRemainingSeconds)
+              : dueTimestamp;
+          // What the relayer will actually do, as opposed to what the contract would permit: a
+          // held or freshly resumed plan is not going to run, so it does not read as ready.
+          const ready = contractReady && !hold && gateRemainingSeconds === 0;
 
           return {
             scheduleId: scheduleId.toString(),
@@ -143,6 +168,10 @@ export class PlanTimingController {
             active: Boolean(schedule.active),
             intervalSeconds,
             dueTimestamp,
+            /** The moment the plan can next actually run, holds and resume gates included. */
+            effectiveDueTimestamp,
+            /** The contract's own view, unqualified — the plan owner can still execute by hand. */
+            contractReady,
             ready,
             isEnrolledForAutoExecution,
             executionMode: getPlanExecutionMode(chainId, user, scheduleId),
@@ -154,8 +183,18 @@ export class PlanTimingController {
                   status: hold.status,
                   reason: hold.reason,
                   updatedAt: hold.updatedAt.toISOString(),
+                  // The countdown as it stood when the plan was paused. The card shows this
+                  // frozen instead of a clock running down to a buy that will not happen.
+                  cooldownRemainingSeconds: hold.cooldownRemainingSeconds,
                 }
               : null,
+            executionGate:
+              gateRemainingSeconds > 0
+                ? {
+                    notBefore: gate!.notBefore.toISOString(),
+                    remainingSeconds: gateRemainingSeconds,
+                  }
+                : null,
           };
         }),
       );

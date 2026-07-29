@@ -8,10 +8,10 @@
   },
   "137": {
     "chainId": 137,
-    "DCAVault": "0xC692F9fE5c03eB9a1db935a47067225CB988c89F",
-    "DCAResolver": "0x0459F26fC754d0762b26ED0b9fa5F476455453B2",
-    "ZeroExAdapter": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
-    "GasTank": "0x0000000000000000000000000000000000000000"
+    "DCAVault": "0xdb561fe13a6516b31c8fcd5cb8b5a4e3fefe43a9",
+    "DCAResolver": "0x441cad85ee6c88a0f1d93628b6faf7d1c3a3bdf0",
+    "ZeroExAdapter": "0x0459f26fc754d0762b26ed0b9fa5f476455453b2",
+    "GasTank": "0xda4c87986f4bb210c4affef815e8c1b5addad297"
   },
   "677": {
     "chainId": 677,
@@ -31,10 +31,10 @@
   },
   "2222": {
     "chainId": 2222,
-    "DCAVault": "0x749745696DD456761cB0c2FdB9E3e190E1f5382d",
-    "DCAResolver": "0x16486aeAFe203595FE27854353f1F40e1e31537A",
-    "ZeroExAdapter": "0x575C97aF6fFe3fB5F70776158cBc961C70df51ed",
-    "GasTank": "0x0000000000000000000000000000000000000000"
+    "DCAVault": "0x19feb663233b76d84283ed84f5a2ed638c3d6d65",
+    "DCAResolver": "0x13028ce629a452764e976f811fddc51a512dbab4",
+    "ZeroExAdapter": "0x0c2bf5bcf2ebe0c56fd05f391008ee3f9bd090d2",
+    "GasTank": "0xe97febdbc8a18babe1bcd36316b70319986b25c0"
   },
   "8453": {
     "chainId": 8453,

@@ -30,6 +30,13 @@ export interface PlanAdminControl {
   reason: string | null;
   /** Free-form operator identifier, for the audit trail. */
   updatedBy: string | null;
+  /**
+   * Seconds of contract cooldown the plan still owed when the hold was placed — the countdown,
+   * frozen. It is what the dashboards display instead of a ticking clock while the plan is held,
+   * and what the resume path turns into a gate so lifting a hold does not fire the plan at once.
+   * null when the chain could not be read at the time, or the plan was already due.
+   */
+  cooldownRemainingSeconds: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,12 +70,16 @@ export const PLAN_ADMIN_CONTROLS_DDL = `
     status text NOT NULL,
     reason text,
     updated_by text,
+    cooldown_remaining_seconds integer,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (chain_id, user_addr, schedule_id)
   );
   CREATE INDEX IF NOT EXISTS dca_plan_admin_controls_member_idx
     ON dca_plan_admin_controls (chain_id, user_addr);
+  -- Added after the table shipped; deployments that already have it need the column too.
+  ALTER TABLE dca_plan_admin_controls
+    ADD COLUMN IF NOT EXISTS cooldown_remaining_seconds integer;
 `;
 
 /** `${chainId}:${user}:${scheduleId}` — the key every lookup map in this codebase uses. */
@@ -88,6 +99,8 @@ function rowFrom(r: Record<string, unknown>): PlanAdminControl {
     status: r.status as PlanAdminStatus,
     reason: (r.reason as string | null) ?? null,
     updatedBy: (r.updated_by as string | null) ?? null,
+    cooldownRemainingSeconds:
+      r.cooldown_remaining_seconds == null ? null : Number(r.cooldown_remaining_seconds),
     createdAt: new Date(r.created_at as string),
     updatedAt: new Date(r.updated_at as string),
   };
@@ -167,11 +180,17 @@ export interface SetPlanAdminControlInput {
   status: PlanAdminStatus;
   reason?: string | null;
   updatedBy?: string | null;
+  /** Cooldown remainder to freeze with the hold; see PlanAdminControl.cooldownRemainingSeconds. */
+  cooldownRemainingSeconds?: number | null;
 }
 
 /**
  * Place or update a hold. `created_at` is preserved across updates so the audit trail keeps the
  * moment automation first stopped, even if the reason is edited or pause is escalated to cancel.
+ *
+ * The frozen cooldown is preserved the same way, and for the same reason: it was measured when the
+ * countdown stopped, and the chain's own cooldown has been running down ever since, so re-capturing
+ * it while the plan is already held would quietly shorten the wait the user is owed on resume.
  */
 export async function setPlanAdminControl(
   input: SetPlanAdminControlInput,
@@ -179,12 +198,17 @@ export async function setPlanAdminControl(
   const p = requirePool();
   const { rows } = await p.query(
     `INSERT INTO dca_plan_admin_controls
-       (chain_id, user_addr, schedule_id, status, reason, updated_by, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+       (chain_id, user_addr, schedule_id, status, reason, updated_by,
+        cooldown_remaining_seconds, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
      ON CONFLICT (chain_id, user_addr, schedule_id) DO UPDATE SET
        status = EXCLUDED.status,
        reason = EXCLUDED.reason,
        updated_by = EXCLUDED.updated_by,
+       cooldown_remaining_seconds = COALESCE(
+         dca_plan_admin_controls.cooldown_remaining_seconds,
+         EXCLUDED.cooldown_remaining_seconds
+       ),
        updated_at = now()
      RETURNING *`,
     [
@@ -194,6 +218,9 @@ export async function setPlanAdminControl(
       input.status,
       input.reason?.trim() ? input.reason.trim() : null,
       input.updatedBy?.trim() ? input.updatedBy.trim() : null,
+      input.cooldownRemainingSeconds == null
+        ? null
+        : Math.max(0, Math.floor(input.cooldownRemainingSeconds)),
     ],
   );
   return rowFrom(rows[0]);

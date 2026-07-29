@@ -22,6 +22,12 @@ import {
   type PlanAdminControl,
   type PlanAdminStatus,
 } from '../supabase/plan-admin-controls';
+import {
+  clearPlanExecutionGate,
+  getPlanExecutionGate,
+  setPlanExecutionGate,
+} from '../supabase/plan-execution-gates';
+import { readPlanCooldown } from './plan-cooldown';
 
 /** Longer than this is a paste, not a reason; the frontend renders it inside a plan card. */
 const MAX_REASON_LENGTH = 500;
@@ -81,11 +87,69 @@ export class PlanAdminController {
     const updatedBy = optionalText(body?.updatedBy, MAX_UPDATED_BY_LENGTH, 'updatedBy');
 
     try {
-      const control = await setPlanAdminControl({ ...target, status, reason, updatedBy });
+      // Freeze the countdown: whatever wait the plan still owed at this instant is stored with the
+      // hold, shown in place of a ticking clock, and handed back when the hold is lifted.
+      //
+      // A plan that was resumed and is still serving a gate is measured from that gate rather than
+      // from the chain: its contract cooldown has already elapsed, so the chain would report zero
+      // and a pause would silently cancel the wait the previous pause had preserved.
+      const cooldownRemainingSeconds = await this.freezeCooldown(target);
+
+      const control = await setPlanAdminControl({
+        ...target,
+        status,
+        reason,
+        updatedBy,
+        cooldownRemainingSeconds,
+      });
       return { ok: true, control: serialize(control) };
     } catch (e) {
       throw new InternalServerErrorException({ ok: false, error: (e as Error).message });
     }
+  }
+
+  /**
+   * Capture the wait a plan still owes and take it out of the gate table, so the hold is the only
+   * thing holding it. Returns null when the wait could not be measured, which leaves the plan
+   * behaving as it did before holds froze anything: resumable, and due as soon as the chain says.
+   */
+  private async freezeCooldown(target: {
+    chainId: number;
+    userAddress: string;
+    scheduleId: string;
+  }): Promise<number | null> {
+    let remaining: number | null = null;
+
+    try {
+      const gate = await getPlanExecutionGate(
+        target.chainId,
+        target.userAddress,
+        target.scheduleId,
+      );
+      if (gate) {
+        remaining = Math.max(0, Math.round((gate.notBefore.getTime() - Date.now()) / 1000));
+      }
+    } catch {
+      // No gate reading: fall through to the chain, which is the normal source anyway.
+    }
+
+    if (remaining == null) {
+      const cooldown = await readPlanCooldown(
+        target.chainId,
+        target.userAddress,
+        target.scheduleId,
+      );
+      remaining = cooldown ? cooldown.remainingSeconds : null;
+    }
+
+    // The hold now owns the wait; a leftover gate would double-count it on resume.
+    try {
+      await clearPlanExecutionGate(target.chainId, target.userAddress, target.scheduleId);
+    } catch {
+      // Best effort. The resume path rewrites the gate from the hold regardless.
+    }
+
+    return remaining;
   }
 
   /**
@@ -98,17 +162,50 @@ export class PlanAdminController {
     requireStore();
     const target = parseTarget(body);
     try {
+      // Read the hold before lifting it: it carries the countdown as it stood when the plan was
+      // paused, and that is what the plan resumes with.
+      const held = await getPlanAdminControl(
+        target.chainId,
+        target.userAddress,
+        target.scheduleId,
+      );
       const cleared = await clearPlanAdminControl(
         target.chainId,
         target.userAddress,
         target.scheduleId,
       );
+
+      // Restart the clock from where it stopped rather than from zero. Without this the plan
+      // executes on the very next tick: its contract cooldown carried on elapsing throughout the
+      // pause, so by the time anyone resumes it the chain considers it long overdue.
+      //
+      // Only a resume that actually lifted a hold writes the gate. A second click — or a second
+      // operator on the same plan — finds no hold and must leave the running gate alone, or it
+      // would clear the very wait the first resume just granted.
+      const remainingSeconds = cleared ? held?.cooldownRemainingSeconds ?? 0 : 0;
+      let gate = null as Awaited<ReturnType<typeof setPlanExecutionGate>> | null;
+      if (cleared) {
+        gate =
+          remainingSeconds > 0
+            ? await setPlanExecutionGate({ ...target, remainingSeconds })
+            : null;
+        if (!gate) {
+          await clearPlanExecutionGate(target.chainId, target.userAddress, target.scheduleId);
+        }
+      }
+
       return {
         ok: true,
         cleared,
         // Not an error: the caller wanted the plan running and it is. Saying which of the two
         // happened lets the dashboard tell "resumed" from "someone else already resumed it".
-        message: cleared ? 'Plan resumed.' : 'Plan was not on hold.',
+        message: cleared
+          ? gate
+            ? `Plan resumed — its next buy is ${formatDuration(remainingSeconds)} away, the wait it had left when it was paused.`
+            : 'Plan resumed.'
+          : 'Plan was not on hold.',
+        resumesInSeconds: gate ? remainingSeconds : 0,
+        resumesAt: gate ? gate.notBefore.toISOString() : null,
         control: null,
       };
     } catch (e) {
@@ -192,6 +289,22 @@ function isPlanAdminStatus(value: string): value is PlanAdminStatus {
   return (PLAN_ADMIN_STATUSES as readonly string[]).includes(value);
 }
 
+/** "27s" / "4m 10s" / "2h 5m" — for the one-line result the operator sees after resuming. */
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  if (total < 60) return `${total}s`;
+  if (total < 3600) {
+    const s = total % 60;
+    return s === 0 ? `${Math.floor(total / 60)}m` : `${Math.floor(total / 60)}m ${s}s`;
+  }
+  if (total < 86400) {
+    const m = Math.floor((total % 3600) / 60);
+    return m === 0 ? `${Math.floor(total / 3600)}h` : `${Math.floor(total / 3600)}h ${m}m`;
+  }
+  const h = Math.floor((total % 86400) / 3600);
+  return h === 0 ? `${Math.floor(total / 86400)}d` : `${Math.floor(total / 86400)}d ${h}h`;
+}
+
 function serialize(control: PlanAdminControl) {
   return {
     chainId: control.chainId,
@@ -200,6 +313,7 @@ function serialize(control: PlanAdminControl) {
     status: control.status,
     reason: control.reason,
     updatedBy: control.updatedBy,
+    cooldownRemainingSeconds: control.cooldownRemainingSeconds,
     createdAt: control.createdAt.toISOString(),
     updatedAt: control.updatedAt.toISOString(),
   };

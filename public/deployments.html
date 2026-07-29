@@ -32,6 +32,19 @@
           </svg>
           <span>Deployments</span>
         </a>
+        <a class="nav-link" href="/networks.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v4M12 17v4M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7 4.9 19.1M19.1 4.9l-1.4 1.4" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="3.4" />
+          </svg>
+          <span>Networks</span>
+        </a>
+        <a class="nav-link" href="/run-price.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Run price</span>
+        </a>
       </nav>
       <span class="live-pill">Operations live</span>
     </div>
@@ -68,7 +81,9 @@
         const rows = CONTRACT_ORDER.map(function (key) {
           const value = network.contracts[key];
           if (value === undefined) return "";
-          return '<div class="row"><span class="label">' + key + "</span>" +
+          // "USDC" is the slot name in the API payload, not the token: BOT Chain settles in USDT.
+          const label = key === "USDC" ? (network.stableSymbol || "USDC") : key;
+          return '<div class="row"><span class="label">' + label + "</span>" +
             addressElement(value, network.explorerUrl) + "</div>";
         }).join("");
 

@@ -140,11 +140,6 @@ export class SchedulerService implements OnModuleInit {
           typeof session.intervalMs === 'number' && session.intervalMs > 0
             ? session.intervalMs
             : currentConfig.intervalMs,
-        ...(Array.isArray(session.chainIds) && session.chainIds.length > 0
-          ? { chainIds: session.chainIds }
-          : currentConfig.chainIds
-            ? { chainIds: currentConfig.chainIds }
-            : {}),
         ...(session.isTimeAt === true ? { staticTimeEnabled: true } : {}),
         ...(session.isTimeAt === true && !Number.isNaN(nextRun.getTime())
           ? { staticStartAt: nextRun.toISOString() }
@@ -159,7 +154,6 @@ export class SchedulerService implements OnModuleInit {
 
   async setConfig(config: {
     intervalMs?: number;
-    chainIds?: number[];
     staticTimeEnabled?: boolean;
     staticStartAt?: string;
   }) {
@@ -239,7 +233,7 @@ export class SchedulerService implements OnModuleInit {
     const cfg = this.config.getConfig();
     const nextScheduledAt = new Date(at.getTime() + cfg.intervalMs);
     try {
-      const result = await runExecutor(onProgress, { chainIds: cfg.chainIds });
+      const result = await runExecutor(onProgress);
       this.lastRunAt = at;
       this.lastResult = result;
       this.nextRunAt = nextScheduledAt;
@@ -458,13 +452,11 @@ export class SchedulerService implements OnModuleInit {
   private async recordSchedulerSettingsHistory(
     config: {
       intervalMs: number;
-      chainIds?: number[];
       staticTimeEnabled?: boolean;
       staticStartAt?: string;
     },
     request: {
       intervalMs?: number;
-      chainIds?: number[];
       staticTimeEnabled?: boolean;
       staticStartAt?: string;
     },
@@ -529,10 +521,6 @@ export class SchedulerService implements OnModuleInit {
         typeof session.intervalMs === 'number' && session.intervalMs > 0
           ? session.intervalMs
           : currentConfig.intervalMs,
-      chainIds:
-        Array.isArray(session.chainIds) && session.chainIds.length > 0
-          ? session.chainIds
-          : currentConfig.chainIds,
       staticTimeEnabled: session.isTimeAt === true,
       staticStartAt:
         session.isTimeAt === true && !Number.isNaN(nextRunFromSession.getTime())
@@ -551,7 +539,6 @@ export class SchedulerService implements OnModuleInit {
   private async syncRuntimeSession(
     config: {
       intervalMs: number;
-      chainIds?: number[];
       staticTimeEnabled?: boolean;
       staticStartAt?: string;
     } = this.config.getConfig(),
@@ -576,7 +563,6 @@ export class SchedulerService implements OnModuleInit {
         next_run: nextRun,
         isTimeAt: config.staticTimeEnabled === true,
         intervalMs: config.intervalMs,
-        ...(Array.isArray(config.chainIds) ? { chainIds: config.chainIds } : {}),
         updatedAt: new Date(),
       });
     } catch (error) {

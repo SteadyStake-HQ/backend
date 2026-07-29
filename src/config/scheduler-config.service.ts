@@ -8,10 +8,15 @@ const DEFAULT_INTERVAL_MS = 5 * 1000; // execution poll; plan cadence remains on
 const MAX_AUTOMATION_POLL_INTERVAL_MS = 5 * 1000;
 const SCHEDULER_CONFIG_KV_KEY = "steadystake:scheduler:config";
 
+/**
+ * When the scheduler runs. Not *where* — which networks the relayer executes on is network
+ * allocation's answer alone (backend/src/networks), read fresh on every run. This config used to
+ * carry a chainIds list too; it was write-once state no dashboard could edit, so it went stale and
+ * quietly excluded chains deployed after it was last saved. Any chainIds left in a stored config
+ * or runtime session row is ignored from here on.
+ */
 export interface SchedulerConfig {
   intervalMs: number;
-  /** Optional: chain IDs to run. Empty or absent = use env AUTOMATION_CHAIN_IDS or all chains with GasTank. */
-  chainIds?: number[];
   staticTimeEnabled?: boolean;
   staticStartAt?: string;
 }
@@ -71,9 +76,6 @@ export class SchedulerConfigService {
       typeof parsed.intervalMs === "number" && parsed.intervalMs > 0
         ? Math.min(parsed.intervalMs, MAX_AUTOMATION_POLL_INTERVAL_MS)
         : DEFAULT_INTERVAL_MS;
-    const chainIds = Array.isArray(parsed.chainIds)
-      ? parsed.chainIds.filter((id) => typeof id === "number" && id > 0)
-      : undefined;
     const staticStartAt = this.normalizeStaticStartAt(
       (parsed as Partial<SchedulerConfig> & { staticTime?: string })
         .staticStartAt ??
@@ -84,7 +86,6 @@ export class SchedulerConfigService {
       parsed.staticTimeEnabled === true && typeof staticStartAt === "string";
     return {
       intervalMs,
-      ...(chainIds?.length ? { chainIds } : {}),
       ...(staticStartAt ? { staticStartAt } : {}),
       ...(staticTimeEnabled ? { staticTimeEnabled } : {}),
     };
@@ -133,12 +134,6 @@ export class SchedulerConfigService {
       typeof config.intervalMs === "number" && config.intervalMs > 0
         ? Math.min(config.intervalMs, MAX_AUTOMATION_POLL_INTERVAL_MS)
         : current.intervalMs;
-    const chainIds =
-      config.chainIds === undefined
-        ? current.chainIds
-        : Array.isArray(config.chainIds)
-          ? config.chainIds.filter((id) => typeof id === "number" && id > 0)
-          : undefined;
     const requestedStaticTimeEnabled =
       config.staticTimeEnabled === undefined
         ? current.staticTimeEnabled === true
@@ -153,7 +148,6 @@ export class SchedulerConfigService {
       requestedStaticTimeEnabled && typeof staticStartAt === "string";
     const next: SchedulerConfig = {
       intervalMs,
-      ...(chainIds?.length ? { chainIds } : {}),
       ...(staticStartAt ? { staticStartAt } : {}),
       ...(staticTimeEnabled ? { staticTimeEnabled } : {}),
     };

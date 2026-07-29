@@ -14,7 +14,7 @@
  * Facts that were never recorded stay null rather than being guessed at, and the dashboard renders
  * them as "Not recorded".
  *
- * Run standalone: node dist/plans/fetch-plans.js  (optionally FILTER by AUTOMATION_CHAIN_IDS)
+ * Run standalone: node dist/plans/fetch-plans.js  (reads every deployed chain; pass chainIds to narrow)
  */
 import "dotenv/config";
 import { createPublicClient, http, formatUnits } from "viem";
@@ -42,6 +42,11 @@ import {
   type PlanAdminControl,
   type PlanAdminStatus,
 } from "../supabase/plan-admin-controls";
+import {
+  getPlanExecutionGateMap,
+  planExecutionGateKey,
+  type PlanExecutionGate,
+} from "../supabase/plan-execution-gates";
 
 /** DCAFrequency enum in DCAVault.sol: 0=ONEMIN, 1=DAILY, 2=WEEKLY, 3=BIWEEKLY, 4=MONTHLY. */
 const FREQUENCY_LABELS: Record<number, string> = {
@@ -62,17 +67,98 @@ const FREQUENCY_INTERVAL_SECONDS: Record<number, number> = {
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+const ERC20_SYMBOL_ABI = [
+  { type: "function", name: "symbol", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
+] as const;
+
+interface TokenSymbolEntry {
+  /** The token's symbol, or null when it could not be read. */
+  symbol: string | null;
+  /** When a null may be read again. Infinity once a symbol is known — symbols do not change. */
+  retryAt: number;
+}
+
+/**
+ * `chainId:token` → symbol, cached for the life of the process.
+ *
+ * The dashboard polls this read every few seconds and many plans buy the same token, so without a
+ * cache every poll would add an eth_call per plan. A failed read is cached too, but only briefly:
+ * a token that has no `symbol()` is permanent, an unreachable RPC is not, and the two are not worth
+ * telling apart when a retry costs one call every ten minutes.
+ */
+const tokenSymbolCache = new Map<string, TokenSymbolEntry>();
+/** Reads in flight, so members holding the same token share one call rather than racing. */
+const tokenSymbolReads = new Map<string, Promise<string | null>>();
+const TOKEN_SYMBOL_RETRY_MS = 10 * 60 * 1000;
+
+const tokenKey = (chainId: number, token: string) => `${chainId}:${token.toLowerCase()}`;
+
+async function readTokenSymbol(chainId: number, token: string): Promise<string | null> {
+  const rpcUrl = getRpc(chainId);
+  const chain = getChain(chainId);
+  if (!rpcUrl || !chain) return null;
+  const client = createPublicClient({ chain, transport: http(rpcUrl) });
+  try {
+    const symbol = (await client.readContract({
+      address: token as `0x${string}`,
+      abi: ERC20_SYMBOL_ABI,
+      functionName: "symbol",
+    })) as string;
+    const trimmed = String(symbol).trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    // A token that doesn't answer `symbol()` (a bytes32-symbol token, or a chain that is down) is
+    // not an error worth surfacing — the dashboard falls back to showing the address.
+    return null;
+  }
+}
+
+/** Symbol of an ERC-20, from cache when known. Never throws; null means "show the address". */
+async function getTokenSymbol(chainId: number, token: string): Promise<string | null> {
+  const key = tokenKey(chainId, token);
+  const cached = tokenSymbolCache.get(key);
+  if (cached && Date.now() < cached.retryAt) return cached.symbol;
+
+  const inFlight = tokenSymbolReads.get(key);
+  if (inFlight) return inFlight;
+
+  const read = readTokenSymbol(chainId, token)
+    .then((symbol) => {
+      tokenSymbolCache.set(key, {
+        symbol,
+        retryAt: symbol == null ? Date.now() + TOKEN_SYMBOL_RETRY_MS : Infinity,
+      });
+      return symbol;
+    })
+    .finally(() => {
+      tokenSymbolReads.delete(key);
+    });
+  tokenSymbolReads.set(key, read);
+  return read;
+}
+
 /** An admin hold as it appears on a plan; null when nothing is holding the plan. */
 export interface PlanAdminControlView {
   status: PlanAdminStatus;
   reason: string | null;
   updatedBy: string | null;
   updatedAt: string;
+  /** The plan's countdown as it stood when the hold was placed, frozen. null when unknown. */
+  cooldownRemainingSeconds: number | null;
+}
+
+/** The wait a resumed plan is still serving; null once it is free to run. */
+export interface PlanExecutionGateView {
+  /** ISO instant the relayer may execute from. */
+  notBefore: string;
+  remainingSeconds: number;
 }
 
 export interface PlanDetail {
   scheduleId: string;
   targetToken: string | null;
+  /** ERC-20 symbol of the target token, read from the chain. null when it is not readable. */
+  targetTokenSymbol: string | null;
   frequency: number | null;
   frequencyLabel: string;
   /** amountPerInterval in USDC (6 decimals), raw. null when never recorded and not live on-chain. */
@@ -85,14 +171,21 @@ export interface PlanDetail {
   intervalSeconds: number | null;
   /** unix timestamp when the contract next permits execution */
   dueTimestamp: number | null;
+  /** unix timestamp the plan can next actually run at — `dueTimestamp` plus any resume gate */
+  effectiveDueTimestamp: number | null;
   totalAmountUsdc6: string;
   executedCount: number;
   active: boolean;
+  /** the contract's own view: its cooldown has elapsed, whatever the relayer intends to do */
+  contractReady: boolean;
+  /** the relayer's view: due, not held, and not still finishing a paused countdown */
   ready: boolean;
   enrolled: boolean;
   executionMode: PlanExecutionMode | null;
   /** Admin hold stopping auto-execution of this plan; null when the plan is not held. */
   adminControl: PlanAdminControlView | null;
+  /** Wait left over from a pause, being served since the plan was resumed; null when free. */
+  executionGate: PlanExecutionGateView | null;
 
   // ---- Merged / derived detail ----
   /** 'active' | 'completed' | 'cancelled' */
@@ -145,7 +238,7 @@ export interface FetchAllPlansResult {
 }
 
 export interface FetchAllPlansOptions {
-  /** When set, only read these chain IDs. Otherwise AUTOMATION_CHAIN_IDS env or all chains with GasTank. */
+  /** When set, only read these chain IDs. Otherwise every chain with a GasTank. */
   chainIds?: number[];
   /** Skip the live contract enrich and serve purely from stored state. */
   dbOnly?: boolean;
@@ -316,6 +409,7 @@ function buildPlan(
     liveKnown: boolean;
     chainTime: number | null;
     adminControl: PlanAdminControl | undefined;
+    executionGate: PlanExecutionGate | undefined;
   },
 ): PlanDetail {
   const isLiveActive = live != null && Boolean(live.active);
@@ -376,16 +470,33 @@ function buildPlan(
     status === "active" && intervalSeconds != null && lastExecutionTime > 0
       ? lastExecutionTime + intervalSeconds
       : null;
-  const ready =
+  const contractReady =
     status === "active" &&
     (flags.ready ||
       (dueTimestamp != null &&
         flags.chainTime != null &&
         dueTimestamp <= flags.chainTime));
 
+  // A plan resumed with time still on its clock is finishing that wait. The gate is wall-clock, so
+  // it is folded into the chain's clock here — the one the countdowns on both dashboards run
+  // against — and it can only ever push the due time later, never bring it forward.
+  const gateRemainingSeconds =
+    status === "active" && flags.executionGate
+      ? Math.max(0, Math.round((flags.executionGate.notBefore.getTime() - Date.now()) / 1000))
+      : 0;
+  const effectiveDueTimestamp =
+    gateRemainingSeconds > 0 && flags.chainTime != null
+      ? Math.max(dueTimestamp ?? 0, flags.chainTime + gateRemainingSeconds)
+      : dueTimestamp;
+  // What the relayer will do, as against what the contract would allow: a held plan or one still
+  // serving a paused countdown is not ready, however long its on-chain cooldown has been elapsed.
+  const ready = contractReady && flags.adminControl == null && gateRemainingSeconds === 0;
+
   return {
     scheduleId,
     targetToken: targetToken === ZERO_ADDRESS ? null : targetToken,
+    // Filled in by the live enrich in fetchAllPlans; it is a chain read like the rest of it.
+    targetTokenSymbol: null,
     frequency,
     frequencyLabel: frequency == null ? "Not recorded" : FREQUENCY_LABELS[frequency] ?? `Unknown (${frequency})`,
     amountPerIntervalUsdc6: perInterval?.toString() ?? null,
@@ -393,22 +504,33 @@ function buildPlan(
     lastExecutionTime,
     intervalSeconds,
     dueTimestamp,
+    effectiveDueTimestamp,
     totalAmountUsdc6: remaining.toString(),
     executedCount,
     active: isLiveActive,
+    // `contractReady` stays a statement about the contract cooldown alone; holds and resume gates
+    // are separate facts, so callers can show "cooldown elapsed, but automation is paused" rather
+    // than conflating the two.
+    contractReady,
     ready,
     enrolled: flags.enrolled,
     executionMode: getPlanExecutionMode(chainId, userAddress, scheduleId),
-    // `ready` above stays a statement about the contract cooldown; a hold is a separate fact, so
-    // callers can show "cooldown elapsed, but automation is paused" rather than conflating the two.
     adminControl: flags.adminControl
       ? {
           status: flags.adminControl.status,
           reason: flags.adminControl.reason,
           updatedBy: flags.adminControl.updatedBy,
           updatedAt: flags.adminControl.updatedAt.toISOString(),
+          cooldownRemainingSeconds: flags.adminControl.cooldownRemainingSeconds,
         }
       : null,
+    executionGate:
+      gateRemainingSeconds > 0 && flags.executionGate
+        ? {
+            notBefore: flags.executionGate.notBefore.toISOString(),
+            remainingSeconds: gateRemainingSeconds,
+          }
+        : null,
     status,
     ...derived,
     createdAt: row?.createdAt ? row.createdAt.toISOString() : null,
@@ -495,6 +617,19 @@ export async function fetchAllPlans(
     log(`Admin plan holds could not be read: ${(e as Error).message}`);
   }
 
+  // Resume gates, read the same way and with the same tolerance: a failure here costs the "still
+  // finishing its paused countdown" note on a card, not the plan list.
+  let executionGates = new Map<string, PlanExecutionGate>();
+  try {
+    executionGates = await getPlanExecutionGateMap([...allowedChains]);
+    if (executionGates.size > 0) {
+      log(`Resumed plans still finishing a paused countdown: ${executionGates.size}`);
+    }
+  } catch (e) {
+    errors.push(`Plan resume gates could not be read: ${(e as Error).message}`);
+    log(`Plan resume gates could not be read: ${(e as Error).message}`);
+  }
+
   const members = await resolveMembers(allowedChains, log);
   // Anyone with a stored plan is a member even if the registry row is missing.
   const allMembers = [...new Set([...members, ...dbByMember.keys()])]
@@ -525,9 +660,21 @@ export async function fetchAllPlans(
           liveKnown: liveState != null,
           chainTime: liveState?.chainTime ?? null,
           adminControl: adminControls.get(planAdminControlKey(chainId, userAddress, id)),
+          executionGate: executionGates.get(planExecutionGateKey(chainId, userAddress, id)),
         }),
       );
       plans.sort((a, b) => Number(BigInt(a.scheduleId) - BigInt(b.scheduleId)));
+
+      // Label the buy side with the token's own symbol. Cached per token, so this is at most one
+      // extra eth_call per distinct target token per process, and none once the cache is warm.
+      if (!options?.dbOnly) {
+        await Promise.all(
+          plans.map(async (plan) => {
+            if (!plan.targetToken) return;
+            plan.targetTokenSymbol = await getTokenSymbol(chainId, plan.targetToken);
+          }),
+        );
+      }
 
       return {
         chainId,

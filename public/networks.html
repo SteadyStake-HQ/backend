@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Network Allocation — SteadyStake</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <style>
+    /* Page-local only. Everything structural is dashboard.css. */
+    .net-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .net-actions .button {
+      flex: 0 0 auto;
+      min-height: 32px;
+      padding: 6px 11px;
+      font-size: 11px;
+    }
+
+    .badge.status-enabled {
+      color: var(--green);
+      border-color: rgba(72, 217, 154, 0.26);
+      background: rgba(72, 217, 154, 0.06);
+    }
+
+    .badge.status-paused {
+      color: var(--amber);
+      border-color: rgba(245, 181, 94, 0.25);
+      background: rgba(245, 181, 94, 0.06);
+    }
+
+    .badge.status-disabled {
+      color: var(--red);
+      border-color: rgba(240, 113, 135, 0.28);
+      background: rgba(240, 113, 135, 0.08);
+    }
+
+    .net-note {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .net-meta {
+      margin: 6px 0 0;
+      color: var(--dim);
+      font-size: 11px;
+    }
+
+    .type-group {
+      margin: 26px 0 10px;
+    }
+
+    .type-group h2 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+
+    .type-group p {
+      margin: 0;
+      color: var(--dim);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="SteadyStake plan activity">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <nav class="main-nav" aria-label="Backend dashboard">
+        <a class="nav-link" href="/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Plan activity</span>
+        </a>
+        <a class="nav-link" href="/deployments.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9" />
+          </svg>
+          <span>Deployments</span>
+        </a>
+        <a class="nav-link active" href="/networks.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v4M12 17v4M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7 4.9 19.1M19.1 4.9l-1.4 1.4" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="3.4" />
+          </svg>
+          <span>Networks</span>
+        </a>
+        <a class="nav-link" href="/run-price.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Run price</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Infrastructure</p>
+        <h1>Network allocation</h1>
+        <p class="page-description">
+          Which networks the app offers and the relayer serves, and whether each is listed as a
+          mainnet or a testnet. Everything here is off-chain bookkeeping — no vault, plan, deposit,
+          or gas tank balance is touched, and a network comes back exactly as it was.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Changing what the app offers other people is an operator action, so it sits behind the same
+         ADMIN_API_TOKEN as the plan holds on the activity page. -->
+    <div class="admin-field" style="max-width: 320px; margin: 0 0 18px;">
+      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2" />
+        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+      </svg>
+      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Admin token (to change allocation)" aria-label="Admin API token" />
+    </div>
+
+    <section class="content-panel" aria-label="Network allocation">
+      <div id="content"><div class="empty">Loading networks…</div></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script>
+    /* Same key as the activity page, so an operator who has entered the token there does not have
+       to enter it again here. It is a shared operator secret, not a per-user credential. */
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const adminTokenInput = document.getElementById("admin-token");
+    const statusEl = document.getElementById("status");
+    const contentEl = document.getElementById("content");
+
+    try {
+      adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
+    } catch {
+      // Private-mode browsers can refuse localStorage; the field still works for this session.
+    }
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const value = adminTokenInput.value.trim();
+        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {
+        // As above — not remembering it is not a reason to fail the action.
+      }
+    });
+
+    const STATUS_LABEL = { enabled: "Live", paused: "Paused", disabled: "Removed" };
+
+    function badge(network) {
+      const label = STATUS_LABEL[network.status] || network.status;
+      return '<span class="badge status-' + escapeHtml(network.status) + '">' + escapeHtml(label) + "</span>";
+    }
+
+    /**
+     * Buttons offered for one network. Deliberately not a full matrix: only the transitions that
+     * make sense from where the network is now, so "resume" never appears on a live network and
+     * "pause" never appears on a removed one.
+     */
+    function actions(network) {
+      const data = ' data-chain-id="' + network.chainId + '"';
+      const buttons = [];
+
+      if (network.status !== "enabled") {
+        buttons.push('<button class="button resume-plan" data-action="add"' + data + ">" +
+          (network.status === "paused" ? "Resume" : "Add back") + "</button>");
+      }
+      if (network.status === "enabled") {
+        buttons.push('<button class="button hold-plan" data-action="pause"' + data + ">Pause</button>");
+      }
+      if (network.status !== "disabled") {
+        buttons.push('<button class="button hold-plan danger" data-action="remove"' + data + ">Remove</button>");
+      }
+
+      const otherType = network.type === "mainnet" ? "testnet" : "mainnet";
+      buttons.push('<button class="button ghost" data-action="type" data-type="' + otherType + '"' + data + ">" +
+        "List as " + otherType + "</button>");
+      if (network.typeOverridden) {
+        buttons.push('<button class="button ghost" data-action="reset"' + data + ">Clear overrides</button>");
+      }
+
+      return '<div class="net-actions">' + buttons.join("") + "</div>";
+    }
+
+    function renderNetwork(network, index) {
+      const deployed = network.deployed
+        ? '<span class="chip gas">GasTank ready</span>'
+        : '<span class="chip nogas">Not deployed</span>';
+
+      const note = network.note
+        ? '<p class="net-note">' + escapeHtml(network.note) + "</p>"
+        : "";
+
+      const meta = network.updatedAt
+        ? '<p class="net-meta">Changed ' + escapeHtml(new Date(network.updatedAt).toLocaleString()) +
+          (network.updatedBy ? " by " + escapeHtml(network.updatedBy) : "") + "</p>"
+        : '<p class="net-meta">At its registry default.</p>';
+
+      return '<article class="card" style="--i:' + index + '">' +
+        '<div class="card-head">' +
+          '<span class="network-title"><span class="network-icon">' +
+            escapeHtml(String(network.name || "N").slice(0, 1)) +
+          '</span><span class="net-name">' + escapeHtml(network.name) + "</span></span>" +
+          badge(network) +
+        "</div>" +
+        '<div class="row"><span class="label">Chain ID</span><span class="addr">' + network.chainId + "</span></div>" +
+        '<div class="row"><span class="label">Listed as</span><span class="addr">' +
+          escapeHtml(network.type) + (network.typeOverridden ? " (override)" : "") + "</span></div>" +
+        '<div class="row"><span class="label">Settles in</span><span class="addr">' +
+          escapeHtml(network.stableSymbol) + "</span></div>" +
+        '<div class="row"><span class="label">Deployment</span>' + deployed + "</div>" +
+        note +
+        meta +
+        actions(network) +
+      "</article>";
+    }
+
+    function renderGroup(title, description, networks, startIndex) {
+      if (!networks.length) return "";
+      return '<div class="type-group"><h2>' + escapeHtml(title) + "</h2><p>" +
+        escapeHtml(description) + "</p></div>" +
+        '<div class="grid">' +
+        networks.map(function (network, i) { return renderNetwork(network, startIndex + i); }).join("") +
+        "</div>";
+    }
+
+    function render(networks) {
+      if (!networks.length) {
+        return '<div class="empty">No networks in the registry.</div>';
+      }
+      const mainnets = networks.filter(function (n) { return n.type === "mainnet"; });
+      const testnets = networks.filter(function (n) { return n.type === "testnet"; });
+      return (
+        renderGroup(
+          "Mainnet",
+          "Shown when the frontend runs with NETWORK_TYPE=mainnet.",
+          mainnets,
+          0,
+        ) +
+        renderGroup(
+          "Testnet",
+          "Shown when the frontend runs with NETWORK_TYPE=testnet.",
+          testnets,
+          mainnets.length,
+        )
+      );
+    }
+
+    async function load() {
+      statusEl.textContent = "Loading…";
+      const token = adminTokenInput.value.trim();
+
+      try {
+        // The admin listing includes removed networks, which is what an operator needs to see to
+        // add one back. Without a token, fall back to the public view: read-only, live networks only.
+        const response = token
+          ? await fetch("/api/admin/networks", { headers: { "x-admin-token": token } })
+          : await fetch("/api/networks?include=all");
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+        const networks = data.networks || [];
+        contentEl.innerHTML = render(networks);
+        const live = networks.filter(function (n) { return n.status === "enabled"; }).length;
+        statusEl.textContent = live + " of " + networks.length + " live · updated " +
+          new Date().toLocaleTimeString();
+      } catch (error) {
+        contentEl.innerHTML = '<div class="error">Failed to load networks: ' +
+          escapeHtml(error.message) + "</div>";
+        statusEl.textContent = "Error";
+      }
+    }
+
+    const CONFIRM = {
+      pause: function (name) {
+        return "Pause " + name + "?\n\nNo new plans will be accepted and the relayer will stop " +
+          "executing there. Existing plans stay visible so users can still cancel, withdraw, and " +
+          "reclaim their gas tank balance.";
+      },
+      remove: function (name) {
+        return "Remove " + name + "?\n\nIt disappears from the app and the relayer skips it. " +
+          "Nothing on-chain changes, but users will not be able to reach their plans on this " +
+          "network until it is added back — prefer Pause if it still has live plans.";
+      },
+      add: function (name) {
+        return "Put " + name + " back in service?\n\nIt will be offered to users and the relayer " +
+          "will resume executing there.";
+      },
+      reset: function (name) {
+        return "Clear every override on " + name + "?\n\nIt returns to its registry default: live, " +
+          "with the registry's own mainnet/testnet classification.";
+      },
+    };
+
+    const ENDPOINT = {
+      add: "/api/admin/networks/add",
+      pause: "/api/admin/networks/pause",
+      remove: "/api/admin/networks/remove",
+      type: "/api/admin/networks/type",
+      reset: "/api/admin/networks/reset",
+    };
+
+    async function act(button) {
+      const action = button.dataset.action;
+      const chainId = Number(button.dataset.chainId);
+      const card = button.closest(".card");
+      const name = card ? card.querySelector(".net-name").textContent : "chain " + chainId;
+
+      const token = adminTokenInput.value.trim();
+      if (!token) {
+        statusEl.textContent = "Enter the admin token first";
+        adminTokenInput.focus();
+        return;
+      }
+
+      const body = { chainId: chainId };
+
+      if (action === "type") {
+        body.type = button.dataset.type;
+        if (!window.confirm(
+          "List " + name + " as a " + body.type + "?\n\nThis only decides which NETWORK_TYPE list " +
+          "it appears in — it does not change what the chain is.",
+        )) return;
+      } else {
+        if (!window.confirm(CONFIRM[action](name))) return;
+        if (action === "pause" || action === "remove") {
+          // Shown to users on the network they are on, so it is prompted for rather than left blank.
+          const note = window.prompt("Note shown to users (optional):", "");
+          if (note === null) return;
+          body.note = note;
+        }
+      }
+
+      const previous = button.textContent;
+      button.disabled = true;
+      button.textContent = "Saving…";
+      statusEl.textContent = "Saving…";
+
+      try {
+        const response = await fetch(ENDPOINT[action], {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-token": token },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+        await load();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = previous;
+        statusEl.textContent = "Failed: " + error.message;
+      }
+    }
+
+    contentEl.addEventListener("click", function (event) {
+      const button = event.target.closest("button[data-action]");
+      if (button && !button.disabled) act(button);
+    });
+
+    document.getElementById("refresh").addEventListener("click", load);
+    adminTokenInput.addEventListener("change", load);
+    load();
+  </script>
+</body>
+</html>

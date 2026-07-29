@@ -22,9 +22,11 @@ function addressElement(address, explorerUrl) {
     '<button class="copy" data-copy="' + address + '" title="Copy address" aria-label="Copy address">⧉</button></span>';
 }
 
+// Quotes are escaped too: most callers put the result in an attribute, and some of that text is
+// chosen by whoever deployed the token (a plan's target-token symbol), not by an operator.
 function escapeHtml(value) {
-  return String(value).replace(/[&<>]/g, function (character) {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character];
+  return String(value).replace(/[&<>"']/g, function (character) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
   });
 }
 

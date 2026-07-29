@@ -2,20 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createPublicClient, http } from 'viem';
-import { getRpc, getVaultUsdcGasTank } from '../config';
+import { CHAIN_NAMES, getRpc, getVaultUsdcGasTank } from '../config';
 import { SupabaseService } from '../supabase/supabase.service';
 import { getDcaPlanMembers } from '../supabase/dca-plans-store';
-
-const CHAIN_NAMES: Record<number, string> = {
-  8453: 'Base',
-  84532: 'Base Sepolia',
-  11155111: 'Ethereum Sepolia',
-  56: 'BSC',
-  137: 'Polygon',
-  2222: 'Kava',
-  677: 'BOT Chain',
-  968: 'BOT Chain Testnet',
-};
 
 const DCA_VAULT_METRICS_ABI = [
   { type: 'function', name: 'totalFeesCollected', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },

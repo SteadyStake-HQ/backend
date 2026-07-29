@@ -4,6 +4,11 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import {
+  getRegistryRpc,
+  REGISTRY_CHAIN_NAMES,
+  REGISTRY_EXPLORERS,
+} from "./networks/network-registry";
 
 /**
  * Vault settlement stablecoin per chain (always 6 decimals). Named USDC for historical
@@ -14,8 +19,10 @@ const USDC_BY_CHAIN: Record<number, string> = {
   84532: "0xAbd1a2748Bc70bD439F0438C22D1E92C0Eae3dA8",
   11155111: "0x89A01f63A5F4b42d30483ee17c5f537A4B94b15E",
   56: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-  137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-  2222: "0xfA9343C3897324496A05fC75abeD6bAC29f8A40f",
+  137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // Circle native USDC
+  // Kava: native Tether USDt. The old Multichain USDC (0xfA9343C3...A40f) is stranded — that
+  // bridge shut down in 2023 — so the vault deployed 2026-07-28 settles in USDt instead.
+  2222: "0x919C1c267BC06a7039e03fcc2eF738525769109c",
   677: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C", // BOT Chain: bridged USDT
   968: "0x75edC9335175Fc0552D51D48439F229c10420fe3", // BOT Chain testnet: bridged USDT
 };
@@ -24,6 +31,7 @@ const USDC_BY_CHAIN: Record<number, string> = {
 const STABLE_SYMBOL_BY_CHAIN: Record<number, string> = {
   677: "USDT",
   968: "USDT",
+  2222: "USDT",
 };
 
 /**
@@ -57,27 +65,14 @@ type DeployedEntry = {
 };
 type Deployed = Record<string, DeployedEntry>;
 
-export const CHAIN_NAMES: Record<number, string> = {
-  8453: 'Base',
-  84532: 'Base Sepolia',
-  11155111: 'Ethereum Sepolia',
-  56: 'BSC',
-  137: 'Polygon',
-  2222: 'Kava',
-  677: 'BOT Chain',
-  968: 'BOT Chain Testnet',
-};
+/**
+ * Chain names and explorers come from the network registry, which is also what classifies each chain
+ * as a mainnet or a testnet. Keeping a second copy here is how the two drifted before: a chain could
+ * be named in one table and missing from another.
+ */
+export const CHAIN_NAMES: Record<number, string> = REGISTRY_CHAIN_NAMES;
 
-const EXPLORERS: Record<number, string> = {
-  8453: 'https://basescan.org',
-  84532: 'https://sepolia.basescan.org',
-  11155111: 'https://sepolia.etherscan.io',
-  56: 'https://bscscan.com',
-  137: 'https://polygonscan.com',
-  2222: 'https://kavascan.com',
-  677: 'https://scan.botchain.ai',
-  968: 'https://scan.bohr.life',
-};
+const EXPLORERS: Record<number, string> = REGISTRY_EXPLORERS;
 
 let deployed: Deployed = {};
 try {
@@ -108,22 +103,6 @@ export function getChainIdsWithGasTank(): number[] {
     .filter((n) => !isNaN(n));
 }
 
-/**
- * Chain IDs explicitly declared by the deployment via AUTOMATION_CHAIN_IDS, or null when unset.
- * This is the deployment's own statement of which chains the relayer serves, so it outranks the
- * chain list persisted in the scheduler config — that list is stored UI state, and a chain deployed
- * after it was last written would otherwise be excluded from every scan forever.
- */
-export function getEnvChainIds(): number[] | null {
-  const raw = process.env.AUTOMATION_CHAIN_IDS?.trim();
-  if (!raw) return null;
-  const ids = raw
-    .split(",")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n) && n > 0);
-  return ids.length > 0 ? ids : null;
-}
-
 export function getVaultUsdcGasTank(chainId: number): { vault: string; usdc: string; gasTank: string } | null {
   const entry = deployed[String(chainId)];
   const usdc = resolveStable(chainId)?.address;
@@ -131,6 +110,16 @@ export function getVaultUsdcGasTank(chainId: number): { vault: string; usdc: str
   const gasTank = entry.GasTank ?? ZERO;
   if (!gasTank || gasTank === ZERO) return null; // skip chains without GasTank
   return { vault: entry.DCAVault, usdc, gasTank };
+}
+
+/**
+ * The vault's swap adapter (DCAVault.swapRouter). 0x Swap API v2 builds calldata for one specific
+ * `taker`, and the contract that actually calls AllowanceHolder is this adapter — not the vault and
+ * not the relayer — so quotes must be requested with this address.
+ */
+export function getSwapAdapter(chainId: number): string | null {
+  const adapter = deployed[String(chainId)]?.ZeroExAdapter;
+  return adapter && adapter !== ZERO ? adapter : null;
 }
 
 export type NetworkContracts = {
@@ -167,7 +156,9 @@ export function getAllNetworks(): NetworkContracts[] {
           DCAResolver: entry.DCAResolver,
           ZeroExAdapter: entry.ZeroExAdapter,
           GasTank: entry.GasTank,
-          USDC: USDC_BY_CHAIN[chainId],
+          // The address the vault really settles in, so it always agrees with stableSymbol —
+          // the table alone would name bridged USDT on a chain deployed with MockUSDC.
+          USDC: resolveStable(chainId)?.address,
         },
       } as NetworkContracts;
     })
@@ -175,21 +166,14 @@ export function getAllNetworks(): NetworkContracts[] {
     .sort((a, b) => a.chainId - b.chainId);
 }
 
-const RPC: Record<number, string> = {
-  8453: process.env.RPC_URL_8453 ?? "https://mainnet.base.org",
-  84532: process.env.RPC_URL_84532 ?? "https://sepolia.base.org",
-  11155111: process.env.RPC_URL_11155111 ?? "https://ethereum-sepolia-rpc.publicnode.com",
-  56: process.env.RPC_URL_56 ?? "https://bsc-dataseed.binance.org",
-  137: process.env.RPC_URL_137 ?? "https://polygon-rpc.com",
-  2222: process.env.RPC_URL_2222 ?? "https://evm.kava.io",
-  // BOT Chain. eth_getLogs is disabled on the public mainnet endpoint; set RPC_URL_677
-  // to a third-party provider if log-heavy indexing is added later.
-  677: process.env.RPC_URL_677 ?? "https://rpc.botchain.ai",
-  968: process.env.RPC_URL_968 ?? "https://rpc.bohr.life",
-};
-
+/**
+ * RPC per chain: RPC_URL_<chainId> when set, else the registry's default endpoint.
+ *
+ * Note for BOT Chain: eth_getLogs is disabled on the public mainnet endpoint, so set RPC_URL_677 to
+ * a third-party provider if log-heavy indexing is added later.
+ */
 export function getRpc(chainId: number): string | null {
-  return RPC[chainId] ?? null;
+  return getRegistryRpc(chainId);
 }
 
 /**

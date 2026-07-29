@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool } from 'pg';
+import { NETWORK_ALLOCATIONS_DDL } from './network-allocations';
 import { PLAN_ADMIN_CONTROLS_DDL } from './plan-admin-controls';
+import { PLAN_EXECUTION_GATES_DDL } from './plan-execution-gates';
 
 export interface RuntimeSessionRecord {
   sessionKey?: string;
@@ -209,6 +211,15 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
       -- Admin holds that stop the relayer auto-executing one plan; DDL shared with
       -- plan-admin-controls.ts. A row exists only while a hold is in force.
       ${PLAN_ADMIN_CONTROLS_DDL}
+
+      -- The wait a resumed plan still owes, so lifting a hold does not fire it immediately; DDL
+      -- shared with plan-execution-gates.ts. A row matters only until its not_before passes.
+      ${PLAN_EXECUTION_GATES_DDL}
+
+      -- Which registered networks are currently enabled / paused / removed, and any operator
+      -- override of their mainnet-vs-testnet classification. A row exists only where an operator
+      -- has overridden the registry default; DDL shared with network-allocations.ts.
+      ${NETWORK_ALLOCATIONS_DDL}
     `);
   }
 

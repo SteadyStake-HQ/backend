@@ -14,6 +14,7 @@
  * as "Not recorded" rather than guessed at.
  */
 import { Pool } from 'pg';
+import { NETWORK_ALLOCATIONS_DDL } from './network-allocations';
 import { PLAN_ADMIN_CONTROLS_DDL } from './plan-admin-controls';
 
 export type DcaPlanStatus = 'active' | 'completed' | 'cancelled';
@@ -102,6 +103,10 @@ export const DCA_PLANS_DDL = `
 
   -- The executor reads admin holds on every run, so the standalone/CLI path must create this too.
   ${PLAN_ADMIN_CONTROLS_DDL}
+
+  -- The executor reads network allocations on every run to skip paused/removed chains, so the
+  -- standalone/CLI path must create this too.
+  ${NETWORK_ALLOCATIONS_DDL}
 `;
 
 function rowFromDb(r: Record<string, unknown>): DcaPlanRow {

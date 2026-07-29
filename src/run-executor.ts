@@ -6,15 +6,24 @@
 import "dotenv/config";
 import { isSupabaseConfigured } from "./supabase/automation-users";
 import { getDcaPlanMembers, recordPlanExecuted } from "./supabase/dca-plans-store";
+import { getNonExecutableChainIds } from "./supabase/network-allocations";
 import {
   getPlanAdminControlMap,
   planAdminControlKey,
   type PlanAdminControl,
 } from "./supabase/plan-admin-controls";
 import {
+  getPlanExecutionGateMap,
+  planExecutionGateKey,
+  pruneExpiredPlanExecutionGates,
+  type PlanExecutionGate,
+} from "./supabase/plan-execution-gates";
+import {
   clearPlanExecuting,
   markPlanExecuting,
 } from "./plans/plan-execution-state";
+import { recordRunGas } from "./gas-profile";
+import { getRunPriceUsdc6, refreshRunPrices } from "./run-price";
 import {
   createPublicClient,
   createWalletClient,
@@ -24,7 +33,7 @@ import {
 } from "viem";
 import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, getEnvChainIds, usesDirectSwapRouter, CHAIN_NAMES } from "./config";
+import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, CHAIN_NAMES } from "./config";
 
 const ZERO_EX_BASE = "https://api.0x.org";
 
@@ -34,7 +43,9 @@ const COINGECKO_IDS: Record<number, string> = {
   84532: "ethereum",
   11155111: "ethereum", // Ethereum Sepolia
   56: "binancecoin",
-  137: "matic-network",
+  // POL, not MATIC: CoinGecko retired "matic-network" after the token migration and it now
+  // returns an empty object, which read as a 0 price for every Polygon run-cost estimate.
+  137: "polygon-ecosystem-token",
   2222: "kava",
   // BOT Chain mainnet. CoinGecko's "bot" is the fallback leg of the mainnet BOT fetch
   // (getBotMainnetPriceUsd) — the BOT Chain DEX pool price is tried first. Testnet 968 is
@@ -127,7 +138,7 @@ async function getBotMainnetPriceUsd(): Promise<number> {
 
 /** Fetch native token price in USD. Cached per chain for the run. */
 const nativePriceCache: Record<number, number> = {};
-async function getNativePriceUsd(chainId: number): Promise<number> {
+export async function getNativePriceUsd(chainId: number): Promise<number> {
   const override = getNativePriceOverride(chainId);
   if (override != null) return override;
   const staticUsd = STATIC_PRICE_USD[chainId];
@@ -308,35 +319,57 @@ export function getChain(chainId: number): Chain | undefined {
   return undefined;
 }
 
-/** Chains to process. Empty AUTOMATION_CHAIN_IDS = all chains with DCAVault+GasTank in deployed-addresses.json. */
+/**
+ * Chains to process: every chain with a DCAVault + GasTank in deployed-addresses.json.
+ *
+ * Which of those is actually in service is not decided here — network allocation subtracts the
+ * paused and removed ones on each run (see runExecutor below). That is the only chain filter, on
+ * purpose: a second, statically configured allow-list would have to be kept in step with the
+ * allocation store by hand, and the copy that fell behind would silently drop a deployed chain.
+ */
 export function getAllowedChainIds(): Set<number> {
-  const envChainIds = getEnvChainIds();
-  if (envChainIds) return new Set(envChainIds);
   return new Set(getChainIdsWithGasTank());
 }
 
+/**
+ * Fetch executable swap calldata from 0x Swap API v2 (AllowanceHolder flow).
+ *
+ * v1 (`/swap/v1/quote`) is sunset and now 404s for every chain, which silently disabled swaps on
+ * every 0x chain. v2 differs in three ways that matter here:
+ *  - it requires `0x-version: v2` and a `taker`, and builds calldata bound to that taker. The
+ *    caller of AllowanceHolder is the vault's swap adapter, so `taker` is the adapter address.
+ *  - slippage is `slippageBps` (integer basis points), not v1's fractional `slippagePercentage`.
+ *  - it reports "routable but no liquidity" as `liquidityAvailable: false` with a 200, so the
+ *    status code alone is not enough to tell a usable quote from an empty one.
+ */
 async function get0xQuote(
   chainId: number,
   sellToken: string,
   buyToken: string,
   sellAmountWei: string,
+  taker: string,
   apiKey?: string,
-  slippagePercent = 1
+  slippageBps = 100
 ): Promise<string | null> {
   const params = new URLSearchParams({
     chainId: String(chainId),
     sellToken,
     buyToken,
     sellAmount: sellAmountWei,
-    slippagePercentage: String(slippagePercent),
+    taker,
+    slippageBps: String(slippageBps),
   });
-  const url = `${ZERO_EX_BASE}/swap/v1/quote?${params}`;
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const url = `${ZERO_EX_BASE}/swap/allowance-holder/quote?${params}`;
+  const headers: Record<string, string> = { Accept: "application/json", "0x-version": "v2" };
   if (apiKey) headers["0x-api-key"] = apiKey;
   const res = await fetch(url, { headers });
   if (!res.ok) return null;
-  const json = (await res.json()) as { data?: string };
-  return json.data ?? null;
+  const json = (await res.json()) as {
+    liquidityAvailable?: boolean;
+    transaction?: { to?: string; data?: string };
+  };
+  if (json.liquidityAvailable === false) return null;
+  return json.transaction?.data ?? null;
 }
 
 function netAmountAfterFee(amount: bigint, feeBps: number): bigint {
@@ -446,8 +479,6 @@ export interface ExecutorResult {
 export type ProgressCallback = (message: string) => void;
 
 export interface RunExecutorOptions {
-  /** When set, only run on these chain IDs. Otherwise use AUTOMATION_CHAIN_IDS env or all chains with GasTank. */
-  chainIds?: number[];
   /**
    * Explicit plans selected by an operator. When present, only these plans are
    * considered and enrollment is not required because this is a manual backend action.
@@ -521,26 +552,45 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     throw new Error("Invalid targeted execution request");
   }
   const isTargetedRun = Boolean(options?.targets?.length);
-  // AUTOMATION_CHAIN_IDS is checked before the caller's list on purpose: the caller's list comes
-  // from the persisted scheduler config, which no UI can edit, so a chain deployed after it was
-  // last written (BOT Chain, on a config saved when only the Sepolia testnets existed) would never
-  // be scanned again and its plans would sit enrolled but unexecuted.
-  const envChainIds = getEnvChainIds();
-  const allowedChains =
-    isTargetedRun
-      ? new Set(requestedTargets!.map((target) => target.chainId))
-      : envChainIds
-      ? new Set(envChainIds)
-      : options?.chainIds?.length !== undefined && options.chainIds.length > 0
-      ? new Set(options.chainIds)
-      : getAllowedChainIds();
-  const chainSource = isTargetedRun
-    ? "targeted run"
-    : envChainIds
-    ? "AUTOMATION_CHAIN_IDS"
-    : options?.chainIds?.length
-    ? "scheduler config"
-    : "deployed chains with a GasTank";
+  // A scheduled run scans every deployed chain; only an operator's targeted run narrows that, and
+  // only to the plans they picked. There is deliberately no configured allow-list in between:
+  // network allocation is the one place a chain is taken out of service, and a static list that
+  // predated a deployment used to leave BOT Chain's plans enrolled but never scanned.
+  const allowedChains = isTargetedRun
+    ? new Set(requestedTargets!.map((target) => target.chainId))
+    : getAllowedChainIds();
+  const chainSource = isTargetedRun ? "targeted run" : "deployed chains with a GasTank";
+
+  // Network allocation is applied last and only ever subtracts, so pausing or removing a network
+  // holds against both sources above — including an operator's targeted run. A pause that either
+  // could override would not be a pause.
+  //
+  // A failed read aborts the run rather than proceeding on the unfiltered set, for the same reason
+  // admin plan holds do below: executing on a network an operator has just taken out of service
+  // cannot be undone, while a skipped run is picked up by the next tick.
+  try {
+    const excluded = await getNonExecutableChainIds();
+    const blocked = [...allowedChains].filter((cid) => excluded.has(cid));
+    if (blocked.length > 0) {
+      blocked.forEach((cid) => allowedChains.delete(cid));
+      log(
+        `Networks not in service, skipped: ${blocked
+          .sort((a, b) => a - b)
+          .map((cid) => `${CHAIN_NAMES[cid] ?? cid} (${cid})`)
+          .join(", ")}`,
+      );
+    }
+  } catch (e) {
+    const message = `Network allocation could not be read: ${(e as Error).message}. Aborting the run so no paused or removed network is executed on.`;
+    log(message);
+    return { ok: false, executed: 0, executedTasks: [], errors: [message] };
+  }
+
+  if (allowedChains.size === 0) {
+    const message = "No network is currently in service for execution.";
+    log(message);
+    return { ok: true, executed: 0, executedTasks: [], errors: [] };
+  }
   log(`Allowed chains for execution: ${[...allowedChains].sort((a, b) => a - b).join(", ")} (from ${chainSource})`);
   Object.keys(nativePriceCache).forEach((k) => delete nativePriceCache[Number(k)]);
   const members = isTargetedRun
@@ -572,6 +622,28 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     return { ok: false, executed: 0, executedTasks: [], errors: [message] };
   }
 
+  // Resume gates: the wait a plan still owed when it was paused, being served now that it has been
+  // resumed. Read and treated exactly like a hold — a failed read aborts the run, because executing
+  // a plan whose countdown has not finished cannot be undone and the next tick will pick it up.
+  let executionGates: Map<string, PlanExecutionGate>;
+  try {
+    if (isSupabaseConfigured()) {
+      await pruneExpiredPlanExecutionGates().catch(() => undefined);
+      executionGates = await getPlanExecutionGateMap([...allowedChains]);
+    } else {
+      executionGates = new Map();
+    }
+    if (executionGates.size > 0) {
+      log(
+        `Resumed plans still finishing their paused countdown: ${executionGates.size} plan(s) will not be auto-executed yet.`,
+      );
+    }
+  } catch (e) {
+    const message = `Plan resume gates could not be read: ${(e as Error).message}. Aborting the run so no plan is executed before its countdown finishes.`;
+    log(message);
+    return { ok: false, executed: 0, executedTasks: [], errors: [message] };
+  }
+
   const account = privateKeyToAccount(pk as `0x${string}`);
   const zeroExKey = process.env.ZERO_EX_API_KEY;
   const gasCostFallbackUsdc6 = getGasCostPerExecutionUsdc6Fallback();
@@ -584,6 +656,10 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
 
   // Pre-fetch native token prices for all allowed chains in one Coingecko request
   await prefetchNativePrices([...allowedChains]);
+  // Load the operator's per-chain run prices once for the whole sweep: every lookup below is
+  // synchronous, and a price edited mid-sweep must not charge two users in the same run
+  // differently. A failure here leaves the last known prices in place (see run-price.ts).
+  await refreshRunPrices().catch(() => undefined);
   const gasPriceCache: Record<number, bigint> = {};
 
   for (const member of members) {
@@ -641,10 +717,19 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
 
     let gasPriceWei = 0n;
     let nativePriceUsd = 0;
-    // Contract price first: it is what the frontend quoted and what the user prepaid into the
-    // tank. Env is only a fallback for a GasTank whose price was never set.
+    /**
+     * The operator's price for this chain, set from the dashboard (backend/src/run-price.ts).
+     * It outranks the contract because it is the same number the frontend quotes — both read it
+     * from here — whereas `gasCostPerExecutionUsdc6` can only be changed by an owner transaction
+     * per network. When none is set this is null and the contract's price stands, unchanged.
+     */
+    const manualCostUsdc6 = getRunPriceUsdc6(chainId);
+    // Operator price first, then the contract price the tank was funded against. Env is only a
+    // fallback for a GasTank whose price was never set.
     let estimatedCostUsdc6 = 0n;
-    if (gasCostPerExecutionFromContract > 0n) {
+    if (manualCostUsdc6 != null && manualCostUsdc6 > 0n) {
+      estimatedCostUsdc6 = manualCostUsdc6;
+    } else if (gasCostPerExecutionFromContract > 0n) {
       estimatedCostUsdc6 = gasCostPerExecutionFromContract;
     } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
       estimatedCostUsdc6 = gasCostFallbackUsdc6;
@@ -792,6 +877,31 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
       });
     }
 
+    // Drop any plan that was resumed with time still on its clock. The contract has long since
+    // stopped counting — its cooldown ran throughout the pause — so this is the only thing standing
+    // between "resume" and "buys immediately". Targeted runs are filtered too, for the same reason
+    // holds are: an operator resuming a plan and then executing it by hand would skip the wait the
+    // resume just promised the user.
+    if (executionGates.size > 0) {
+      const nowMs = Date.now();
+      readyScheduleIds = readyScheduleIds.filter((scheduleId) => {
+        const gate = executionGates.get(
+          planExecutionGateKey(chainId, userAddress, scheduleId),
+        );
+        if (!gate || gate.notBefore.getTime() <= nowMs) return true;
+        const seconds = Math.ceil((gate.notBefore.getTime() - nowMs) / 1000);
+        if (isTargetedRun) {
+          errors.push(
+            `Schedule ${member} scheduleId=${scheduleId} was resumed with ${seconds}s still to wait`,
+          );
+        }
+        log(
+          `  [${member}] Schedule ${scheduleId}: skip (resumed from a pause, ${seconds}s of its countdown left)`,
+        );
+        return false;
+      });
+    }
+
     // Only auto-execute schedules that are enrolled for auto-execution (one free per user per network; extra require fee)
     if (!isTargetedRun) {
       let enrolledScheduleIds: bigint[] = [];
@@ -858,7 +968,14 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
       if (usesDirectSwapRouter(chainId)) {
         swapData = "0x";
       } else {
-        swapData = await get0xQuote(chainId, cfg.usdc, targetToken, netAmount.toString(), zeroExKey, 1);
+        // 0x v2 binds calldata to a taker, and the contract that calls AllowanceHolder is the
+        // vault's adapter. Without it the quote would be built for the wrong caller and revert.
+        const adapter = getSwapAdapter(chainId);
+        if (!adapter) {
+          errors.push(`No swap adapter for chain ${chainId} ${member} scheduleId=${scheduleId}`);
+          continue;
+        }
+        swapData = await get0xQuote(chainId, cfg.usdc, targetToken, netAmount.toString(), adapter, zeroExKey);
       }
       if (swapData === null) {
         errors.push(`0x quote failed ${member} ${scheduleId}`);
@@ -969,7 +1086,9 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         // Same precedence as the estimate above — deducting a different number than the user
         // was quoted is what let a fully funded plan drain its tank early.
         let costToRecordUsdc6: bigint;
-        if (gasCostPerExecutionFromContract > 0n) {
+        if (manualCostUsdc6 != null && manualCostUsdc6 > 0n) {
+          costToRecordUsdc6 = manualCostUsdc6;
+        } else if (gasCostPerExecutionFromContract > 0n) {
           costToRecordUsdc6 = gasCostPerExecutionFromContract;
         } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
           costToRecordUsdc6 = gasCostFallbackUsdc6;
@@ -1005,6 +1124,8 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         // deduction while the run reported full success and the tank never moved. Simulate to
         // fail fast with the real revert reason, then wait for the receipt before believing it.
         let deductOk = false;
+        /** Gas the deduction burned, for the run-cost profile. Null unless it actually landed. */
+        let recordGasUsed: bigint | null = null;
         {
           const rpcDeduct = deductChainId === chainId ? rpcUrl : getRpc(deductChainId);
           const chainDeduct = deductChainId === chainId ? chain : getChain(deductChainId);
@@ -1051,6 +1172,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
             const recordReceipt = await publicClientDeduct.waitForTransactionReceipt({ hash: recordHash });
             if (recordReceipt.status === "success") {
               deductOk = true;
+              recordGasUsed = recordReceipt.gasUsed;
               log(`  [${member}] Gas deducted ${costToRecordUsdc6} on chain ${deductChainId} tx=${recordHash}`);
             } else {
               errors.push(
@@ -1072,6 +1194,13 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         if (deductOk) {
           globalGas.byChain[deductChainId] -= costToRecordUsdc6;
           globalGas.globalBalance -= costToRecordUsdc6;
+        }
+
+        // Teach the run-cost quote what a run on this chain really burns (see gas-profile.ts).
+        // Only same-chain runs are samples: the quote multiplies these units by one chain's gas
+        // price, so a total spanning two chains would be priced with the wrong one.
+        if (deductChainId === chainId) {
+          recordRunGas(chainId, receipt.gasUsed, recordGasUsed);
         }
 
         executedTasksDetail.push({

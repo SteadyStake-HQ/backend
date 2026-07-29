@@ -11,7 +11,7 @@ export class ConfigApiController {
     return this.scheduler.getConfig();
   }
 
-  /** Available chain IDs that have a GasTank (for network selector in dashboard). */
+  /** Chain IDs that have a GasTank, i.e. the chains a run can execute on before allocation is applied. */
   @Get('chains')
   getChains() {
     return { chainIds: getChainIdsWithGasTank().sort((a, b) => a - b) };
@@ -28,7 +28,6 @@ export class ConfigApiController {
     @Body()
     body: {
       intervalMs?: number;
-      chainIds?: number[];
       staticTimeEnabled?: boolean;
       staticStartAt?: string;
     },
@@ -36,7 +35,6 @@ export class ConfigApiController {
     try {
       return await this.scheduler.setConfig({
         intervalMs: body.intervalMs,
-        chainIds: body.chainIds,
         staticTimeEnabled: body.staticTimeEnabled,
         staticStartAt: body.staticStartAt,
       });
