@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relayer &amp; Fees — SteadyStake</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <link rel="stylesheet" href="/treasury.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="SteadyStake plan activity">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <nav class="main-nav" aria-label="Backend dashboard">
+        <a class="nav-link" href="/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Plan activity</span>
+        </a>
+        <a class="nav-link" href="/deployments.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9" />
+          </svg>
+          <span>Deployments</span>
+        </a>
+        <a class="nav-link" href="/networks.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v4M12 17v4M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7 4.9 19.1M19.1 4.9l-1.4 1.4" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="3.4" />
+          </svg>
+          <span>Networks</span>
+        </a>
+        <a class="nav-link" href="/run-price.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Run price</span>
+        </a>
+        <a class="nav-link active" href="/treasury.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M3 8.5 12 4l9 4.5v2H3v-2Z" stroke-linejoin="round" />
+            <path d="M5.5 10.5v7M9.5 10.5v7M14.5 10.5v7M18.5 10.5v7M3 20h18" stroke-linecap="round" />
+          </svg>
+          <span>Relayer &amp; fees</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell viz-root" id="viz-root">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Treasury</p>
+        <h1>Relayer wallet &amp; fees</h1>
+        <p class="page-description">
+          One wallet does two jobs on every network: it pays the native gas for each auto-execution,
+          and it receives the fee that execution charges the user's gas tank. The two are different
+          tokens, so the wallet can be collecting fees steadily and still be minutes from being
+          unable to execute — this page shows both sides, per network, and the margin between them.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <!-- One filter row above everything it scopes: the charts, the wallet cards and the ledger all
+         re-render against the same slice. Never a filter inside a chart card. -->
+    <div class="filters" role="group" aria-label="Filters">
+      <div class="filter-row filter-row-primary">
+        <div class="select-field">
+          <label for="window-select">History</label>
+          <select id="window-select">
+            <option value="25">Last 25 runs</option>
+            <option value="50" selected>Last 50 runs</option>
+            <option value="100">Last 100 runs</option>
+          </select>
+        </div>
+        <span class="result-line" id="result-line" role="status"></span>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Network</span>
+        <div class="chips" id="network-chips"></div>
+        <button class="clear-filters" id="clear-networks" type="button" hidden>All networks</button>
+      </div>
+    </div>
+
+    <!-- The hero is the one number the page leads with; everything else that is a single value is a
+         stat tile rather than a chart of one bar. -->
+    <section class="hero-panel" aria-label="Headline figures">
+      <div class="hero-figure">
+        <span class="hero-label">Net margin, window</span>
+        <span class="hero-value" id="hero-value">—</span>
+        <p class="hero-note" id="hero-note">Loading execution history…</p>
+      </div>
+      <div class="kpi-row" id="kpis"></div>
+    </section>
+
+    <div class="viz-grid-2">
+      <section class="viz-card" aria-labelledby="trend-title">
+        <div class="viz-head">
+          <div>
+            <h3 class="viz-title" id="trend-title">Fees charged vs gas spent, by day</h3>
+            <p class="viz-sub">
+              What the gas tanks paid the relayer, against what the relayer burned in native token
+              to earn it. The gap between the two lines is the margin.
+            </p>
+          </div>
+          <div class="viz-legend">
+            <span><i class="k-charged"></i>Charged</span>
+            <span><i class="k-spent"></i>Gas spent</span>
+          </div>
+        </div>
+        <div class="viz-plot" id="trend-plot"></div>
+      </section>
+
+      <section class="viz-card" aria-labelledby="margin-title">
+        <div class="viz-head">
+          <div>
+            <h3 class="viz-title" id="margin-title">Daily margin</h3>
+            <p class="viz-sub">
+              Charged minus spent, per day. A day below the line is a day automation ran at a loss —
+              usually a gas spike against a flat per-run price.
+            </p>
+          </div>
+          <div class="viz-legend">
+            <span><i class="k-pos"></i>Profit</span>
+            <span><i class="k-neg"></i>Loss</span>
+          </div>
+        </div>
+        <div class="viz-plot" id="margin-plot"></div>
+      </section>
+    </div>
+
+    <div class="viz-grid-2">
+      <section class="viz-card" aria-labelledby="networks-title">
+        <div class="viz-head">
+          <div>
+            <h3 class="viz-title" id="networks-title">Executions by network</h3>
+            <p class="viz-sub">Where the work happened over the window, and what each network earned.</p>
+          </div>
+        </div>
+        <div class="viz-plot" id="networks-plot"></div>
+      </section>
+
+      <section class="viz-card" aria-labelledby="tokens-title">
+        <div class="viz-head">
+          <div>
+            <h3 class="viz-title" id="tokens-title">What plans bought</h3>
+            <p class="viz-sub">
+              Stablecoin swapped into each target token over the window — the "in" side of every
+              trade, by what it bought.
+            </p>
+          </div>
+        </div>
+        <div class="viz-plot" id="tokens-plot"></div>
+      </section>
+    </div>
+
+    <div class="section-heading">
+      <h2>Wallet by network</h2>
+      <p>Balances read live from each chain.</p>
+    </div>
+    <section aria-label="Relayer wallet per network">
+      <div class="grid" id="wallets"><div class="empty">Loading wallet balances…</div></div>
+    </section>
+
+    <div class="section-heading">
+      <h2>Execution ledger</h2>
+      <p>Every auto-execution in the window, priced on both sides.</p>
+    </div>
+    <section class="content-panel" aria-label="Execution ledger">
+      <div class="ledger-scroll">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th scope="col">Network</th>
+              <th scope="col">Plan</th>
+              <th scope="col">Bought</th>
+              <th scope="col" class="num">In</th>
+              <th scope="col" class="num">Out</th>
+              <th scope="col" class="num">Charged</th>
+              <th scope="col" class="num">Gas spent</th>
+              <th scope="col" class="num">Margin</th>
+              <th scope="col">Tx</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-body">
+            <tr><td colspan="10" class="muted">Loading executions…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ledger-more">
+        <button class="button ghost" id="ledger-more" type="button" hidden>Show more</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script>
+    /* ==========================================================================================
+       State
+
+       `wallets` is live chain state, `flows` is execution history; they refresh together but come
+       from two endpoints so a slow RPC on one network cannot delay the charts, which need neither.
+       ========================================================================================== */
+    const state = {
+      wallets: null,
+      flows: null,
+      /** Null means every network. A Set of chain IDs otherwise. */
+      chains: null,
+      runs: 50,
+      ledgerLimit: 40,
+      loading: false,
+    };
+
+    const el = {
+      root: document.getElementById("viz-root"),
+      status: document.getElementById("status"),
+      result: document.getElementById("result-line"),
+      chips: document.getElementById("network-chips"),
+      clearChips: document.getElementById("clear-networks"),
+      windowSelect: document.getElementById("window-select"),
+      heroValue: document.getElementById("hero-value"),
+      heroNote: document.getElementById("hero-note"),
+      kpis: document.getElementById("kpis"),
+      trend: document.getElementById("trend-plot"),
+      margin: document.getElementById("margin-plot"),
+      networks: document.getElementById("networks-plot"),
+      tokens: document.getElementById("tokens-plot"),
+      wallets: document.getElementById("wallets"),
+      ledger: document.getElementById("ledger-body"),
+      ledgerMore: document.getElementById("ledger-more"),
+    };
+
+    /* ==========================================================================================
+       Formatting
+
+       Execution fees are fractions of a cent and gas reserves are hundreds of dollars, so a single
+       fixed precision is wrong at one end or the other. Every money figure picks its decimals from
+       its own magnitude.
+       ========================================================================================== */
+
+    function money(value, options) {
+      if (value == null || !isFinite(value)) return "—";
+      const abs = Math.abs(value);
+      const digits = abs === 0 ? 2 : abs < 0.001 ? 6 : abs < 0.1 ? 4 : abs < 1000 ? 2 : 0;
+      const body = abs.toLocaleString("en-US", {
+        minimumFractionDigits: (options && options.min != null) ? options.min : digits,
+        maximumFractionDigits: digits,
+      });
+      return (value < 0 ? "−$" : "$") + body;
+    }
+
+    /** Compact form for a stat tile: 1,284 / 12.9K / 4.2M. */
+    function compactMoney(value) {
+      if (value == null || !isFinite(value)) return "—";
+      const abs = Math.abs(value);
+      if (abs >= 1_000_000) return (value < 0 ? "−$" : "$") + (abs / 1_000_000).toFixed(1) + "M";
+      if (abs >= 10_000) return (value < 0 ? "−$" : "$") + (abs / 1000).toFixed(1) + "K";
+      return money(value);
+    }
+
+    /** Token amounts: significant digits rather than fixed decimals, since a token can be worth
+        $70,000 or $0.000004 and both show up in the same column. */
+    function tokenAmount(value) {
+      if (value == null || !isFinite(value)) return "—";
+      if (value === 0) return "0";
+      const abs = Math.abs(value);
+      if (abs >= 1000) return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+      return value.toLocaleString("en-US", { maximumSignificantDigits: 5 });
+    }
+
+    function count(value) {
+      return (value == null ? 0 : value).toLocaleString("en-US");
+    }
+
+    function shortTime(iso) {
+      const date = new Date(iso);
+      if (isNaN(date.getTime())) return "—";
+      return date.toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+    }
+
+    function dayLabel(isoDate) {
+      const date = new Date(isoDate + "T00:00:00Z");
+      if (isNaN(date.getTime())) return isoDate;
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+    }
+
+    /* ==========================================================================================
+       Chart primitives
+
+       Plain SVG strings, no chart library: the page is served off the backend itself and must not
+       depend on a CDN. The specs applied throughout — 2px lines, ≥8px end markers with a 2px
+       surface ring, bars capped at 24px with a 2px gap and a 4px rounded data end, solid hairline
+       gridlines — are the same ones the horizontal bars in CSS follow.
+       ========================================================================================== */
+
+    /** A round axis maximum: 1, 2, 2.5 or 5 x a power of ten, so ticks land on readable numbers. */
+    function niceCeil(value) {
+      if (!(value > 0)) return 1;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+      const scaled = value / magnitude;
+      const step = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 2.5 ? 2.5 : scaled <= 5 ? 5 : 10;
+      return step * magnitude;
+    }
+
+    /**
+     * A vertical bar with its data end rounded and its baseline end square.
+     *
+     * Drawn as a path rather than a rect with a border-radius because a rect rounds all four
+     * corners: rounding the baseline would lift the bar off its own axis and misstate where it
+     * starts, which is the one place a bar chart must be exact.
+     */
+    function columnPath(x, width, yData, yBase, radius) {
+      const height = Math.abs(yBase - yData);
+      const r = Math.max(0, Math.min(radius, height, width / 2));
+      const up = yData <= yBase;
+      if (up) {
+        return "M" + x + " " + yBase +
+          " L" + x + " " + (yData + r) +
+          " Q" + x + " " + yData + " " + (x + r) + " " + yData +
+          " L" + (x + width - r) + " " + yData +
+          " Q" + (x + width) + " " + yData + " " + (x + width) + " " + (yData + r) +
+          " L" + (x + width) + " " + yBase + " Z";
+      }
+      return "M" + x + " " + yBase +
+        " L" + x + " " + (yData - r) +
+        " Q" + x + " " + yData + " " + (x + r) + " " + yData +
+        " L" + (x + width - r) + " " + yData +
+        " Q" + (x + width) + " " + yData + " " + (x + width) + " " + (yData - r) +
+        " L" + (x + width) + " " + yBase + " Z";
+    }
+
+    /** Up to `maxLabels` evenly spaced indices, always including the first and the last. */
+    function tickIndices(length, maxLabels) {
+      if (length <= maxLabels) return Array.from({ length: length }, function (_, i) { return i; });
+      const step = (length - 1) / (maxLabels - 1);
+      const out = [];
+      for (let i = 0; i < maxLabels; i++) out.push(Math.round(i * step));
+      return [...new Set(out)];
+    }
+
+    function emptyPlot(message) {
+      return '<div class="viz-empty">' + escapeHtml(message) + "</div>";
+    }
+
+    /* ---- Chart 1: charged vs spent, by day ------------------------------------------------- */
+
+    function renderTrend(daily) {
+      if (!daily.length) {
+        el.trend.innerHTML = emptyPlot("No executions in this window yet.");
+        return;
+      }
+
+      const W = 680, H = 250;
+      const padL = 54, padR = 62, padT = 16, padB = 30;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+
+      const peak = daily.reduce(function (max, d) {
+        return Math.max(max, d.chargedUsd, d.spentUsd);
+      }, 0);
+      const top = niceCeil(peak || 0.01);
+      const n = daily.length;
+      const x = function (i) { return n === 1 ? padL + plotW / 2 : padL + (i * plotW) / (n - 1); };
+      const y = function (v) { return padT + plotH - (Math.max(0, v) / top) * plotH; };
+
+      let svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Daily fees charged and gas spent">';
+
+      // Gridlines and their value ticks. They carry every value that is not directly labelled.
+      for (let t = 0; t <= 4; t++) {
+        const value = (top * t) / 4;
+        const gy = y(value);
+        svg += '<line class="grid-line" x1="' + padL + '" y1="' + gy + '" x2="' + (padL + plotW) + '" y2="' + gy + '" />';
+        svg += '<text class="axis-text" x="' + (padL - 8) + '" y="' + (gy + 3.5) + '" text-anchor="end">' + money(value) + "</text>";
+      }
+
+      // Areas first, then lines: the wash is context and must never sit over a line.
+      ["charged", "spent"].forEach(function (series) {
+        const key = series === "charged" ? "chargedUsd" : "spentUsd";
+        if (n > 1) {
+          let area = "M" + x(0) + " " + y(daily[0][key]);
+          for (let i = 1; i < n; i++) area += " L" + x(i) + " " + y(daily[i][key]);
+          area += " L" + x(n - 1) + " " + (padT + plotH) + " L" + x(0) + " " + (padT + plotH) + " Z";
+          svg += '<path class="series-area ' + series + '" d="' + area + '" />';
+        }
+      });
+
+      ["charged", "spent"].forEach(function (series) {
+        const key = series === "charged" ? "chargedUsd" : "spentUsd";
+        if (n > 1) {
+          let line = "M" + x(0) + " " + y(daily[0][key]);
+          for (let i = 1; i < n; i++) line += " L" + x(i) + " " + y(daily[i][key]);
+          svg += '<path class="series-line ' + series + '" d="' + line + '" />';
+        }
+        // The end marker, r=4 so the mark clears 8px, ringed in the surface colour so it stays
+        // legible where the two series cross.
+        svg += '<circle class="series-dot ' + series + '" cx="' + x(n - 1) + '" cy="' + y(daily[n - 1][key]) + '" r="4" />';
+      });
+
+      // Direct labels on the endpoints only — a number on every point is chaos and goes unread.
+      // When the two ends nearly coincide the lower one is nudged so neither is unreadable.
+      const endCharged = y(daily[n - 1].chargedUsd);
+      const endSpent = y(daily[n - 1].spentUsd);
+      const collision = Math.abs(endCharged - endSpent) < 13;
+      const labelY = function (value, isLower) {
+        if (!collision) return value + 3.5;
+        return value + (isLower ? 11 : -4);
+      };
+      svg += '<text class="mark-label" x="' + (x(n - 1) + 9) + '" y="' +
+        labelY(endCharged, endCharged > endSpent) + '">' + money(daily[n - 1].chargedUsd) + "</text>";
+      svg += '<text class="mark-label dim" x="' + (x(n - 1) + 9) + '" y="' +
+        labelY(endSpent, endSpent >= endCharged) + '">' + money(daily[n - 1].spentUsd) + "</text>";
+
+      // Baseline, then the date ticks.
+      svg += '<line class="axis-line" x1="' + padL + '" y1="' + (padT + plotH) + '" x2="' + (padL + plotW) + '" y2="' + (padT + plotH) + '" />';
+      tickIndices(n, 6).forEach(function (i) {
+        const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+        svg += '<text class="axis-text" x="' + x(i) + '" y="' + (padT + plotH + 16) + '" text-anchor="' + anchor + '">' +
+          escapeHtml(dayLabel(daily[i].date)) + "</text>";
+      });
+
+      // The hover layer: a crosshair, a marker on each series, and one hit band per day. The band
+      // is the full plot height and at least as wide as the spacing, because a 2px line is
+      // impossible to land on.
+      svg += '<g id="trend-cursor" style="display:none">' +
+        '<line class="crosshair" x1="0" y1="' + padT + '" x2="0" y2="' + (padT + plotH) + '" />' +
+        '<circle class="series-dot charged" r="4" cx="0" cy="0" />' +
+        '<circle class="series-dot spent" r="4" cx="0" cy="0" />' +
+        "</g>";
+
+      const band = n === 1 ? plotW : plotW / (n - 1);
+      for (let i = 0; i < n; i++) {
+        const left = Math.max(padL, x(i) - band / 2);
+        const width = Math.min(band, padL + plotW - left);
+        svg += '<rect class="hit" data-i="' + i + '" x="' + left + '" y="' + padT + '" width="' + width + '" height="' + plotH + '" />';
+      }
+
+      svg += "</svg>";
+
+      el.trend.innerHTML = svg +
+        '<div class="viz-tooltip" id="trend-tip" role="tooltip"></div>';
+
+      wireTrendHover(daily, { W: W, H: H, padL: padL, padT: padT, plotH: plotH, x: x, y: y });
+    }
+
+    function wireTrendHover(daily, geom) {
+      const plot = el.trend;
+      const svg = plot.querySelector("svg");
+      const cursor = plot.querySelector("#trend-cursor");
+      const tip = plot.querySelector("#trend-tip");
+      if (!svg || !cursor || !tip) return;
+
+      const dots = cursor.querySelectorAll("circle");
+
+      function show(index) {
+        const point = daily[index];
+        if (!point) return;
+        const px = geom.x(index);
+        cursor.style.display = "";
+        cursor.querySelector("line").setAttribute("x1", px);
+        cursor.querySelector("line").setAttribute("x2", px);
+        dots[0].setAttribute("cx", px);
+        dots[0].setAttribute("cy", geom.y(point.chargedUsd));
+        dots[1].setAttribute("cx", px);
+        dots[1].setAttribute("cy", geom.y(point.spentUsd));
+
+        tip.innerHTML =
+          "<h4>" + escapeHtml(dayLabel(point.date)) + "</h4>" +
+          "<dl>" +
+            '<dt><i class="k-charged"></i>Charged</dt><dd>' + money(point.chargedUsd) + "</dd>" +
+            '<dt><i class="k-spent"></i>Gas spent</dt><dd>' + money(point.spentUsd) +
+              (point.unpricedExecutions ? "+" : "") + "</dd>" +
+            "<dt>Margin</dt><dd>" + money(point.marginUsd) + "</dd>" +
+            "<dt>Executions</dt><dd>" + count(point.executions) + "</dd>" +
+            (point.unpricedExecutions
+              ? "<dt>Unpriced</dt><dd>" + count(point.unpricedExecutions) + "</dd>"
+              : "") +
+          "</dl>";
+
+        // The SVG scales to its container, so viewBox units are converted to CSS pixels before the
+        // tooltip is placed — positioning it in viewBox units puts it in the wrong place at every
+        // width but one.
+        const scale = plot.clientWidth / geom.W;
+        tip.style.left = (px * scale) + "px";
+        tip.style.top = (Math.min(geom.y(point.chargedUsd), geom.y(point.spentUsd)) * scale - 12) + "px";
+        tip.dataset.show = "1";
+      }
+
+      function hide() {
+        cursor.style.display = "none";
+        tip.dataset.show = "0";
+      }
+
+      svg.addEventListener("mousemove", function (event) {
+        const hit = event.target.closest(".hit");
+        if (hit) show(Number(hit.dataset.i));
+      });
+      svg.addEventListener("mouseleave", hide);
+
+      // Keyboard reaches the same values as hover, so the tooltip is never the only way in.
+      svg.setAttribute("tabindex", "0");
+      let focusIndex = daily.length - 1;
+      svg.addEventListener("focus", function () { show(focusIndex); });
+      svg.addEventListener("blur", hide);
+      svg.addEventListener("keydown", function (event) {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        focusIndex = Math.max(0, Math.min(daily.length - 1, focusIndex + (event.key === "ArrowRight" ? 1 : -1)));
+        show(focusIndex);
+      });
+    }
+
+    /* ---- Chart 2: daily margin (diverging columns) ------------------------------------------ */
+
+    function renderMargin(daily) {
+      if (!daily.length) {
+        el.margin.innerHTML = emptyPlot("No executions in this window yet.");
+        return;
+      }
+
+      const W = 680, H = 250;
+      const padL = 54, padR = 16, padT = 18, padB = 30;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+
+      const values = daily.map(function (d) { return d.marginUsd; });
+      const rawMax = Math.max(0, ...values);
+      const rawMin = Math.min(0, ...values);
+      // Both arms get the same step size, so a $1 profit and a $1 loss are drawn the same length.
+      const extent = niceCeil(Math.max(rawMax, -rawMin) || 0.01);
+      const top = rawMax > 0 ? extent : 0;
+      const bottom = rawMin < 0 ? -extent : 0;
+      const span = (top - bottom) || 1;
+      const y = function (v) { return padT + plotH - ((v - bottom) / span) * plotH; };
+      const zeroY = y(0);
+
+      const n = daily.length;
+      const band = plotW / n;
+      // Capped at 24px and always leaving a 2px surface gap: touching bars are separated by the gap,
+      // never by a stroke drawn around them.
+      const barW = Math.max(2, Math.min(24, band - 2));
+
+      let svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Daily net margin">';
+
+      for (let t = 0; t <= 4; t++) {
+        const value = bottom + (span * t) / 4;
+        const gy = y(value);
+        svg += '<line class="grid-line" x1="' + padL + '" y1="' + gy + '" x2="' + (padL + plotW) + '" y2="' + gy + '" />';
+        svg += '<text class="axis-text" x="' + (padL - 8) + '" y="' + (gy + 3.5) + '" text-anchor="end">' + money(value) + "</text>";
+      }
+
+      // The extreme bar is the one worth a direct label — usually the day that went wrong.
+      let extremeIndex = 0;
+      daily.forEach(function (d, i) {
+        if (Math.abs(d.marginUsd) > Math.abs(daily[extremeIndex].marginUsd)) extremeIndex = i;
+      });
+
+      daily.forEach(function (day, i) {
+        const cx = padL + band * i + band / 2;
+        const bx = cx - barW / 2;
+        const positive = day.marginUsd >= 0;
+        svg += '<path class="' + (positive ? "bar-pos" : "bar-neg") + '" d="' +
+          columnPath(bx, barW, y(day.marginUsd), zeroY, 4) + '" />';
+      });
+
+      if (Math.abs(daily[extremeIndex].marginUsd) > 0) {
+        const day = daily[extremeIndex];
+        const cx = padL + band * extremeIndex + band / 2;
+        const positive = day.marginUsd >= 0;
+        const ly = y(day.marginUsd) + (positive ? -7 : 13);
+        svg += '<text class="mark-label" x="' + cx + '" y="' + ly + '" text-anchor="middle">' + money(day.marginUsd) + "</text>";
+      }
+
+      // The zero line is the axis, drawn over the bars so the baseline is unambiguous.
+      svg += '<line class="axis-line" x1="' + padL + '" y1="' + zeroY + '" x2="' + (padL + plotW) + '" y2="' + zeroY + '" />';
+
+      tickIndices(n, 6).forEach(function (i) {
+        const cx = padL + band * i + band / 2;
+        svg += '<text class="axis-text" x="' + cx + '" y="' + (padT + plotH + 16) + '" text-anchor="middle">' +
+          escapeHtml(dayLabel(daily[i].date)) + "</text>";
+      });
+
+      // Hit bands span the full plot height and the full band width, so a one-cent bar three pixels
+      // tall is as easy to hover as a tall one.
+      for (let i = 0; i < n; i++) {
+        svg += '<rect class="hit bar-hit" data-i="' + i + '" x="' + (padL + band * i) + '" y="' + padT +
+          '" width="' + band + '" height="' + plotH + '" />';
+      }
+      svg += "</svg>";
+
+      el.margin.innerHTML = svg + '<div class="viz-tooltip" id="margin-tip" role="tooltip"></div>';
+
+      const plot = el.margin;
+      const tip = plot.querySelector("#margin-tip");
+      plot.querySelector("svg").addEventListener("mousemove", function (event) {
+        const hit = event.target.closest(".hit");
+        if (!hit) return;
+        const day = daily[Number(hit.dataset.i)];
+        tip.innerHTML =
+          "<h4>" + escapeHtml(dayLabel(day.date)) + "</h4>" +
+          "<dl>" +
+            "<dt>Margin</dt><dd>" + money(day.marginUsd) +
+              (day.unpricedExecutions ? " at most" : "") + "</dd>" +
+            "<dt>Charged</dt><dd>" + money(day.chargedUsd) + "</dd>" +
+            "<dt>Gas spent</dt><dd>" + money(day.spentUsd) +
+              (day.unpricedExecutions ? "+" : "") + "</dd>" +
+            "<dt>Executions</dt><dd>" + count(day.executions) + "</dd>" +
+            (day.unpricedExecutions
+              ? "<dt>Unpriced</dt><dd>" + count(day.unpricedExecutions) + "</dd>"
+              : "") +
+          "</dl>";
+        const scale = plot.clientWidth / W;
+        tip.style.left = ((padL + band * Number(hit.dataset.i) + band / 2) * scale) + "px";
+        tip.style.top = ((Math.min(y(day.marginUsd), zeroY)) * scale - 10) + "px";
+        tip.dataset.show = "1";
+      });
+      plot.querySelector("svg").addEventListener("mouseleave", function () { tip.dataset.show = "0"; });
+    }
+
+    /* ---- Charts 3 & 4: horizontal bars ------------------------------------------------------
+       Nominal categories, so every bar wears the same slot-1 hue and length alone carries the
+       magnitude. The value rides at the tip of each row, always rendered — the hover tooltip adds
+       the secondary numbers but never holds the primary one hostage. */
+
+    function barRow(labelHtml, fraction, valueHtml, tipHtml) {
+      return '<div class="hbar-row" data-tip="' + escapeHtml(tipHtml) + '">' +
+        '<div class="hbar-label">' + labelHtml + "</div>" +
+        '<div class="hbar-track"><i style="width:' + Math.max(1, Math.round(fraction * 100)) + '%"></i></div>' +
+        '<div class="hbar-value">' + valueHtml + "</div>" +
+      "</div>";
+    }
+
+    function renderNetworkBars(byNetwork) {
+      if (!byNetwork.length) {
+        el.networks.innerHTML = emptyPlot("No executions in this window yet.");
+        return;
+      }
+      const peak = Math.max(...byNetwork.map(function (n) { return n.executions; })) || 1;
+      const rows = byNetwork.map(function (network) {
+        const label = '<span class="network-icon" style="width:20px;height:20px;font-size:10px">' +
+            escapeHtml(String(network.name || "?").slice(0, 1)) + "</span>" +
+          "<span>" + escapeHtml(network.name) + "</span>";
+        const value = count(network.executions) +
+          "<small>" + money(network.marginUsd) + " margin</small>";
+        const tip = network.name + " · " + count(network.executions) + " executions · charged " +
+          money(network.chargedUsd) + " · gas " + money(network.spentUsd) +
+          (network.freeRuns ? " · " + count(network.freeRuns) + " uncharged" : "");
+        return barRow(label, network.executions / peak, value, tip);
+      });
+      el.networks.innerHTML = '<div class="hbar-list">' + rows.join("") + "</div>" +
+        '<div class="viz-tooltip" role="tooltip"></div>';
+      wireBarHover(el.networks);
+    }
+
+    function renderTokenBars(byToken) {
+      if (!byToken.length) {
+        el.tokens.innerHTML = emptyPlot("No executions in this window yet.");
+        return;
+      }
+      const top = byToken.slice(0, 8);
+      const peak = Math.max(...top.map(function (t) { return t.volumeUsd; })) || 1;
+      const rows = top.map(function (token) {
+        const label = tokenCell(token);
+        const out = token.amountOut != null
+          ? "<small>" + escapeHtml(tokenAmount(token.amountOut)) + " " + escapeHtml(token.symbol || "out") + "</small>"
+          : "<small>" + count(token.executions) + " buys</small>";
+        const tip = (token.symbol || "Token") + " on " + token.chainName + " · " +
+          count(token.executions) + " buys · " + money(token.volumeUsd) + " in" +
+          (token.amountOut != null ? " · " + tokenAmount(token.amountOut) + " " + (token.symbol || "") + " out" : "");
+        return barRow(label, token.volumeUsd / peak, money(token.volumeUsd) + out, tip);
+      });
+      el.tokens.innerHTML = '<div class="hbar-list">' + rows.join("") + "</div>" +
+        '<div class="viz-tooltip" role="tooltip"></div>';
+      wireBarHover(el.tokens);
+    }
+
+    function wireBarHover(container) {
+      const tip = container.querySelector(".viz-tooltip");
+      const list = container.querySelector(".hbar-list");
+      if (!tip || !list) return;
+      list.addEventListener("mousemove", function (event) {
+        const row = event.target.closest(".hbar-row");
+        if (!row) return;
+        tip.innerHTML = "<h4>" + escapeHtml(row.dataset.tip) + "</h4>";
+        const rect = row.getBoundingClientRect();
+        const base = container.getBoundingClientRect();
+        tip.style.left = (rect.left - base.left + rect.width / 2) + "px";
+        tip.style.top = (rect.top - base.top) + "px";
+        tip.dataset.show = "1";
+      });
+      list.addEventListener("mouseleave", function () { tip.dataset.show = "0"; });
+    }
+
+    /* ==========================================================================================
+       Token identity
+       ========================================================================================== */
+
+    /**
+     * A token as name, symbol and logo. The logo is a CDN image over a lettered avatar: chains
+     * without an asset repo (BOT Chain, both networks) have no logo at all, and a token that has
+     * one still 404s often enough that the avatar has to be what is underneath rather than what
+     * replaces it.
+     */
+    function tokenCell(token) {
+      const symbol = token.symbol || (token.address ? shortenAddress(token.address) : "Unknown");
+      const initial = escapeHtml(String(symbol).slice(0, 2).toUpperCase());
+      const image = token.logoUrl
+        ? '<img src="' + escapeHtml(token.logoUrl) + '" alt="" loading="lazy" ' +
+          'onerror="this.remove()" />'
+        : "";
+      return '<span class="token-cell">' +
+        '<span class="token-logo">' + initial + image + "</span>" +
+        '<span class="token-names">' +
+          "<b>" + escapeHtml(symbol) + "</b>" +
+          (token.name ? "<span>" + escapeHtml(token.name) + "</span>" : "") +
+        "</span>" +
+      "</span>";
+    }
+
+    /* ==========================================================================================
+       Headline figures
+       ========================================================================================== */
+
+    function renderHero(flows, wallets) {
+      const totals = flows.totals;
+      const margin = totals.marginUsd;
+      el.heroValue.textContent = money(margin);
+      el.heroValue.className = "hero-value " + (margin < 0 ? "neg" : "pos");
+
+      const parts = [
+        count(totals.executions) + " executions over " + count(totals.runs) + " runs",
+        "charged " + money(totals.chargedUsd),
+        "gas " + money(totals.spentUsd),
+      ];
+      let note = parts.join(" · ") + ".";
+      if (totals.estimatedSpends > 0) {
+        note += " " + count(totals.estimatedSpends) + " of those spends were reconstructed from gas " +
+          "used at today's prices — runs recorded before the executor started saving its own gas " +
+          "price cannot be priced exactly, so the margin is approximate.";
+      }
+      if (totals.unpricedExecutions > 0) {
+        // Said plainly, because the alternative reading — that those runs cost nothing — is the
+        // flattering one, and it is wrong.
+        note += " " + count(totals.unpricedExecutions) + " could not be priced at all and count as " +
+          "zero spend here, so the true margin is lower than shown.";
+      }
+      el.heroNote.textContent = note;
+
+      const w = wallets && wallets.totals;
+      const alarms = w ? w.executorMismatches : 0;
+      const tiles = [
+        tile("Gas reserve", compactMoney(w ? w.gasReserveUsd : null),
+          "native, across mainnets"),
+        tile("Fees in wallet", compactMoney(w ? w.collectedFeesUsd : null),
+          "collected execution fees"),
+        tile("Claimable in vaults", compactMoney(w ? w.claimableFeesUsd : null),
+          "swap + cancel fees, unwithdrawn"),
+        tile("User gas float", compactMoney(w ? w.userFloatUsd : null),
+          "prepaid by users — owed"),
+        tile("Uncharged runs", count(totals.freeRuns),
+          totals.freeRuns > 0 ? "executed but never billed" : "every run was billed",
+          totals.freeRuns > 0),
+        tile("Executor mismatch", count(alarms),
+          alarms > 0 ? "networks where charges revert" : "relayer is executor everywhere",
+          alarms > 0),
+      ];
+      el.kpis.innerHTML = tiles.join("");
+    }
+
+    function tile(label, value, sub, alarm) {
+      return '<div class="stat-tile' + (alarm ? " alarm" : "") + '">' +
+        '<span class="stat-label">' + escapeHtml(label) + "</span>" +
+        '<span class="stat-value">' + escapeHtml(String(value)) + "</span>" +
+        '<span class="stat-sub">' + escapeHtml(sub) + "</span>" +
+      "</div>";
+    }
+
+    /* ==========================================================================================
+       Wallet cards
+       ========================================================================================== */
+
+    const STATUS_BADGE = { enabled: "Live", paused: "Paused", disabled: "Removed" };
+
+    function renderWallets(wallets) {
+      const networks = (wallets.networks || []).filter(inFilter);
+      if (!networks.length) {
+        el.wallets.innerHTML = '<div class="empty">No networks match this filter.</div>';
+        return;
+      }
+      el.wallets.innerHTML = networks.map(walletCard).join("");
+    }
+
+    function walletCard(network, index) {
+      const explorer = network.explorerUrl;
+      const badgeClass = network.status === "enabled" ? "ready"
+        : network.status === "paused" ? "cancelled" : "held";
+
+      if (network.error) {
+        return '<article class="card wallet-card is-error" style="--i:' + index + '">' +
+          '<div class="card-head">' +
+            '<span class="network-title"><span class="network-icon">' +
+              escapeHtml(String(network.name).slice(0, 1)) + "</span>" +
+              '<span class="net-name">' + escapeHtml(network.name) + "</span></span>" +
+            '<span class="badge ' + badgeClass + '">' + escapeHtml(STATUS_BADGE[network.status] || network.status) + "</span>" +
+          "</div>" +
+          '<div class="error" style="padding:20px 12px">' + escapeHtml(network.error) + "</div>" +
+        "</article>";
+      }
+
+      // Runway is the figure that decides whether anyone needs to act today, so it leads the card
+      // and wears the meter. Severity is by runs remaining, not by dollars: $40 of BOT and $40 of
+      // ETH buy wildly different numbers of executions.
+      const runway = network.runwayRuns;
+      const severity = runway == null ? "" : runway < 50 ? " critical" : runway < 250 ? " warning" : "";
+      const meterFill = runway == null ? 0 : Math.max(2, Math.min(100, (runway / 1000) * 100));
+
+      const gasBlock =
+        '<div class="wallet-block">' +
+          "<h4>Gas reserve" + (network.nativePrice.stale ? '<span class="chip pending">price stale</span>' : "") + "</h4>" +
+          '<div class="wallet-figure">' +
+            "<b>" + escapeHtml(tokenAmount(network.relayer.native)) + "</b>" +
+            "<span>" + escapeHtml(network.nativeSymbol) + "</span>" +
+          "</div>" +
+          '<p class="wallet-sub">' + money(network.relayer.nativeUsd) +
+            (network.nativePrice.usd != null
+              ? " · " + money(network.nativePrice.usd) + " / " + escapeHtml(network.nativeSymbol)
+              : " · no price feed") + "</p>" +
+          (runway != null
+            ? '<div style="margin-top:10px">' +
+                '<div class="meter-line"><b>' + count(runway) + " runs left</b><span>" +
+                  money(network.costPerRunUsd) +
+                  (network.costPerRunSource === "projected" ? " per run, projected" : " per run, measured") +
+                  "</span></div>" +
+                '<div class="meter' + severity + '"><i style="width:' + meterFill + '%"></i></div>' +
+              "</div>"
+            : '<p class="wallet-sub" style="margin-top:8px">Neither a recorded spend nor a gas price is available here, so there is no runway to project.</p>') +
+        "</div>";
+
+      const feeBlock =
+        '<div class="wallet-block">' +
+          "<h4>Fees collected here</h4>" +
+          '<div class="wallet-figure">' +
+            "<b>" + money(network.relayer.stableUsd) + "</b>" +
+            "<span>" + escapeHtml(network.stableSymbol) + "</span>" +
+          "</div>" +
+          '<p class="wallet-sub">Execution fees paid into this wallet by the gas tank.</p>' +
+          '<div style="margin-top:9px">' +
+            '<div class="wallet-pair"><span>Claimable in vault</span><span>' + money(network.vault.claimableUsd) + "</span></div>" +
+            '<div class="wallet-pair"><span>User gas float</span><span>' + money(network.gasTank.floatUsd) + "</span></div>" +
+            '<div class="wallet-pair"><span>Swap fee</span><span>' +
+              (network.vault.feePercent != null ? network.vault.feePercent.toFixed(2) + "%" : "—") + "</span></div>" +
+            '<div class="wallet-pair"><span>Per-run price</span><span>' + money(network.gasTank.priceUsd) + "</span></div>" +
+          "</div>" +
+        "</div>";
+
+      const recipient = network.vault.autoPlanFeeRecipient;
+      const recipientIsRelayer = recipient && network.relayer.address &&
+        recipient.toLowerCase() === network.relayer.address.toLowerCase();
+      const recipientUnset = !recipient || recipient === "0x0000000000000000000000000000000000000000";
+      const autoFeeBlock = network.vault.autoPlanFeeUsd
+        ? '<div class="wallet-block">' +
+            "<h4>Extra auto-plan fee</h4>" +
+            '<div class="wallet-pair"><span>Charged per extra plan</span><span>' + money(network.vault.autoPlanFeeUsd) + "</span></div>" +
+            '<div class="wallet-pair"><span>Paid to</span><span>' +
+              (recipientUnset ? '<span class="addr zero">unset</span>'
+                : recipientIsRelayer ? "this relayer" : addressElement(recipient, explorer)) + "</span></div>" +
+            (!recipientUnset && !recipientIsRelayer
+              ? '<div class="wallet-pair"><span>Its balance</span><span>' +
+                money(network.vault.autoPlanFeeRecipientBalanceUsd) + "</span></div>"
+              : "") +
+          "</div>"
+        : "";
+
+      const alerts = [];
+      if (network.relayer.isGasTankExecutor === false) {
+        alerts.push(alert(
+          "This wallet is not the GasTank executor here" +
+          (network.relayer.gasTankExecutor ? " — the tank names " + shortenAddress(network.relayer.gasTankExecutor) : "") +
+          ". Every charge on this network reverts: swaps run, cost gas, and collect nothing. " +
+          "Run scripts/set-gastank-executor.js.", false));
+      }
+      if (network.vault.autoPlanFeeUsd && recipientUnset) {
+        alerts.push(alert("The extra auto-plan fee is priced but has no recipient, so enrolling a second plan reverts.", true));
+      }
+      if (runway != null && runway < 50) {
+        alerts.push(alert("Fewer than 50 executions of gas left in this wallet. Top it up before automation stalls here.", true));
+      }
+
+      return '<article class="card wallet-card" style="--i:' + index + '">' +
+        '<div class="card-head">' +
+          '<span class="network-title"><span class="network-icon">' +
+            escapeHtml(String(network.name).slice(0, 1)) + "</span>" +
+            '<span class="net-name">' + escapeHtml(network.name) + "</span></span>" +
+          '<span class="badge ' + badgeClass + '">' + escapeHtml(STATUS_BADGE[network.status] || network.status) + "</span>" +
+        "</div>" +
+        '<div class="row"><span class="label">Relayer</span>' +
+          (network.relayer.address
+            ? addressElement(network.relayer.address, explorer)
+            : '<span class="addr zero">no signing key configured</span>') + "</div>" +
+        gasBlock + feeBlock + autoFeeBlock +
+        alerts.join("") +
+      "</article>";
+    }
+
+    function alert(message, isWarning) {
+      return '<p class="wallet-alert' + (isWarning ? " warn" : "") + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+          '<path d="M12 8v5" stroke-linecap="round" /><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none" />' +
+          '<path d="M10.3 3.9 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-linejoin="round" />' +
+        "</svg>" +
+        "<span>" + escapeHtml(message) + "</span>" +
+      "</p>";
+    }
+
+    /* ==========================================================================================
+       Ledger — the table view every chart here is answerable from
+       ========================================================================================== */
+
+    function renderLedger(flows) {
+      const rows = flows.filter(function (flow) { return inFilter({ chainId: flow.chainId }); });
+      if (!rows.length) {
+        el.ledger.innerHTML = '<tr><td colspan="10" class="muted">No executions match this filter.</td></tr>';
+        el.ledgerMore.hidden = true;
+        return;
+      }
+
+      const shown = rows.slice(0, state.ledgerLimit);
+      el.ledger.innerHTML = shown.map(function (flow) {
+        const marginClass = flow.marginUsd == null ? "" : flow.marginUsd < 0 ? " neg" : " pos";
+        const txCell = flow.explorerUrl
+          ? '<a class="addr" href="' + escapeHtml(flow.explorerUrl) + "/tx/" + escapeHtml(flow.txHash) +
+            '" target="_blank" rel="noopener">' + escapeHtml(shortenAddress(flow.txHash)) + "</a>"
+          : '<span class="addr">' + escapeHtml(shortenAddress(flow.txHash)) + "</span>";
+
+        return "<tr>" +
+          '<td class="when">' + escapeHtml(shortTime(flow.at)) + "</td>" +
+          "<td>" + escapeHtml(flow.chainName) + "</td>" +
+          '<td class="muted">' + escapeHtml(shortenAddress(flow.user)) + " #" + escapeHtml(flow.scheduleId) + "</td>" +
+          "<td>" + tokenCell(flow.token) + "</td>" +
+          '<td class="num">' + escapeHtml(tokenAmount(flow.amountIn)) + " " +
+            '<span class="muted">' + escapeHtml(flow.stableSymbol) + "</span></td>" +
+          '<td class="num">' + (flow.amountOut != null
+            ? escapeHtml(tokenAmount(flow.amountOut)) + ' <span class="muted">' + escapeHtml(flow.token.symbol || "") + "</span>"
+            : '<span class="muted">not recorded</span>') + "</td>" +
+          '<td class="num">' + (flow.charged
+            ? money(flow.chargedUsd)
+            : '<span class="muted" title="The GasTank deduction did not land — this run was executed for free.">uncharged</span>') + "</td>" +
+          '<td class="num">' + (flow.spentUsd != null
+            ? money(flow.spentUsd) + (flow.spendEstimated ? '<span class="muted" title="Reconstructed from gas used at today\'s price."> ≈</span>' : "")
+            : '<span class="muted">—</span>') + "</td>" +
+          '<td class="num' + marginClass + '">' + (flow.marginUsd != null ? money(flow.marginUsd) : "—") + "</td>" +
+          "<td>" + txCell + "</td>" +
+        "</tr>";
+      }).join("");
+
+      el.ledgerMore.hidden = rows.length <= state.ledgerLimit;
+      el.ledgerMore.textContent = "Show more (" + count(rows.length - shown.length) + " left)";
+    }
+
+    /* ==========================================================================================
+       Filtering
+
+       The chips scope every chart, the wallet cards and the ledger at once. Colour follows the
+       entity, never its rank, so filtering one network out never repaints the rest.
+       ========================================================================================== */
+
+    function inFilter(item) {
+      return state.chains == null || state.chains.has(item.chainId);
+    }
+
+    function filteredFlows() {
+      if (!state.flows) return [];
+      return state.flows.flows.filter(function (flow) { return inFilter(flow); });
+    }
+
+    /** The rollups the charts plot, recomputed for the current slice rather than refetched. */
+    function slice() {
+      const flows = filteredFlows();
+      const byDate = new Map();
+      for (const flow of flows) {
+        const date = flow.at.slice(0, 10);
+        const bucket = byDate.get(date) ||
+          { date: date, executions: 0, chargedUsd: 0, spentUsd: 0, unpricedExecutions: 0 };
+        bucket.executions += 1;
+        bucket.chargedUsd += flow.chargedUsd || 0;
+        bucket.spentUsd += flow.spentUsd || 0;
+        if (flow.spentUsd == null) bucket.unpricedExecutions += 1;
+        byDate.set(date, bucket);
+      }
+
+      // The unfiltered daily series already carries every day in the window, including the quiet
+      // ones; reusing its date list keeps a day with no executions on this network as a visible
+      // zero instead of closing the gap and making the days around it look adjacent.
+      const daily = (state.flows.daily || []).map(function (day) {
+        const bucket = byDate.get(day.date) || { executions: 0, chargedUsd: 0, spentUsd: 0, unpricedExecutions: 0 };
+        return {
+          date: day.date,
+          executions: bucket.executions,
+          chargedUsd: bucket.chargedUsd,
+          spentUsd: bucket.spentUsd,
+          marginUsd: bucket.chargedUsd - bucket.spentUsd,
+          unpricedExecutions: bucket.unpricedExecutions,
+        };
+      });
+
+      const byNetwork = (state.flows.byNetwork || []).filter(inFilter);
+      const byToken = (state.flows.byToken || []).filter(inFilter);
+
+      const totals = {
+        runs: state.flows.totals.runs,
+        executions: flows.length,
+        freeRuns: flows.filter(function (f) { return !f.charged; }).length,
+        chargedUsd: flows.reduce(function (s, f) { return s + (f.chargedUsd || 0); }, 0),
+        spentUsd: flows.reduce(function (s, f) { return s + (f.spentUsd || 0); }, 0),
+        estimatedSpends: flows.filter(function (f) { return f.spendEstimated && f.spentUsd != null; }).length,
+        unpricedExecutions: flows.filter(function (f) { return f.spentUsd == null; }).length,
+      };
+      totals.marginUsd = totals.chargedUsd - totals.spentUsd;
+
+      return { flows: flows, daily: daily, byNetwork: byNetwork, byToken: byToken, totals: totals };
+    }
+
+    function renderChips() {
+      const networks = (state.wallets && state.wallets.networks) || [];
+      const counts = new Map();
+      for (const flow of (state.flows ? state.flows.flows : [])) {
+        counts.set(flow.chainId, (counts.get(flow.chainId) || 0) + 1);
+      }
+
+      el.chips.innerHTML = networks.map(function (network) {
+        const on = state.chains != null && state.chains.has(network.chainId);
+        const runs = counts.get(network.chainId) || 0;
+        return '<button class="chip-btn' + (on ? " on" : "") + (runs === 0 ? " empty" : "") +
+          '" type="button" data-chain-id="' + network.chainId + '" aria-pressed="' + (on ? "true" : "false") + '">' +
+          escapeHtml(network.name) + '<span class="chip-count">' + count(runs) + "</span></button>";
+      }).join("");
+
+      el.clearChips.hidden = state.chains == null;
+    }
+
+    function renderAll() {
+      if (!state.flows || !state.wallets) return;
+      const view = slice();
+
+      renderChips();
+      renderHero(view, state.wallets);
+      renderTrend(view.daily);
+      renderMargin(view.daily);
+      renderNetworkBars(view.byNetwork);
+      renderTokenBars(view.byToken);
+      renderWallets(state.wallets);
+      renderLedger(view.flows);
+
+      const window_ = state.flows.window;
+      el.result.textContent = window_.to
+        ? count(view.totals.executions) + " executions · " + shortTime(window_.from) + " → " + shortTime(window_.to)
+        : "No executions recorded yet.";
+    }
+
+    /* ==========================================================================================
+       Loading
+       ========================================================================================== */
+
+    async function load(force) {
+      if (state.loading) return;
+      state.loading = true;
+      // The previous render is held at reduced opacity rather than replaced with a skeleton, so
+      // nothing jumps under an operator who is mid-read.
+      el.root.classList.add("refreshing");
+      el.status.textContent = force ? "Refreshing…" : "Loading…";
+
+      try {
+        const [wallets, flows] = await Promise.all([
+          fetch("/api/treasury/wallets" + (force ? "?refresh=1" : "")).then(readJson),
+          fetch("/api/treasury/flows?runs=" + state.runs).then(readJson),
+        ]);
+
+        state.wallets = wallets;
+        state.flows = flows;
+        state.ledgerLimit = 40;
+
+        if (!wallets.relayerConfigured) {
+          el.heroNote.textContent =
+            "RELAYER_PRIVATE_KEY is not set on this backend, so the wallet address cannot be derived " +
+            "and no balance can be read. Execution history below is unaffected.";
+        }
+
+        renderAll();
+        el.status.textContent = "Updated " + new Date().toLocaleTimeString();
+      } catch (error) {
+        el.status.textContent = "Error";
+        el.result.textContent = "Failed to load: " + error.message;
+        if (!state.flows) {
+          el.wallets.innerHTML = '<div class="error">Failed to load wallet balances: ' + escapeHtml(error.message) + "</div>";
+          el.ledger.innerHTML = '<tr><td colspan="10" class="muted">Failed to load executions.</td></tr>';
+        }
+      } finally {
+        state.loading = false;
+        el.root.classList.remove("refreshing");
+      }
+    }
+
+    async function readJson(response) {
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || data.message || "HTTP " + response.status);
+      return data;
+    }
+
+    /* ---- Events ----------------------------------------------------------------------------- */
+
+    el.chips.addEventListener("click", function (event) {
+      const chip = event.target.closest(".chip-btn");
+      if (!chip) return;
+      const chainId = Number(chip.dataset.chainId);
+      const next = new Set(state.chains || []);
+      if (next.has(chainId)) next.delete(chainId);
+      else next.add(chainId);
+      state.chains = next.size === 0 ? null : next;
+      state.ledgerLimit = 40;
+      renderAll();
+    });
+
+    el.clearChips.addEventListener("click", function () {
+      state.chains = null;
+      renderAll();
+    });
+
+    el.windowSelect.addEventListener("change", function () {
+      state.runs = Number(el.windowSelect.value) || 50;
+      load(false);
+    });
+
+    el.ledgerMore.addEventListener("click", function () {
+      state.ledgerLimit += 60;
+      renderLedger(filteredFlows());
+    });
+
+    document.getElementById("refresh").addEventListener("click", function () { load(true); });
+
+    // Charts are sized in viewBox units and scale with the container, but the tooltips are placed
+    // in CSS pixels — a resize invalidates those positions, so the charts are redrawn.
+    let resizeTimer = null;
+    window.addEventListener("resize", function () {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(function () {
+        if (state.flows && state.wallets) renderAll();
+      }, 180);
+    });
+
+    load(false);
+  </script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import { HistoryModule } from './history/history.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PlansModule } from './plans/plans.module';
 import { NetworksModule } from './networks/networks.module';
+import { TreasuryModule } from './treasury/treasury.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { NetworksModule } from './networks/networks.module';
     HistoryModule,
     SchedulerModule,
     PlansModule,
+    TreasuryModule,
   ],
 })
 export class AppModule {}

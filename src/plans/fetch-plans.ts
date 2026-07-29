@@ -47,6 +47,7 @@ import {
   planExecutionGateKey,
   type PlanExecutionGate,
 } from "../supabase/plan-execution-gates";
+import { getTokenSymbol } from "../token-metadata";
 
 /** DCAFrequency enum in DCAVault.sol: 0=ONEMIN, 1=DAILY, 2=WEEKLY, 3=BIWEEKLY, 4=MONTHLY. */
 const FREQUENCY_LABELS: Record<number, string> = {
@@ -67,75 +68,8 @@ const FREQUENCY_INTERVAL_SECONDS: Record<number, number> = {
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-const ERC20_SYMBOL_ABI = [
-  { type: "function", name: "symbol", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
-] as const;
-
-interface TokenSymbolEntry {
-  /** The token's symbol, or null when it could not be read. */
-  symbol: string | null;
-  /** When a null may be read again. Infinity once a symbol is known — symbols do not change. */
-  retryAt: number;
-}
-
-/**
- * `chainId:token` → symbol, cached for the life of the process.
- *
- * The dashboard polls this read every few seconds and many plans buy the same token, so without a
- * cache every poll would add an eth_call per plan. A failed read is cached too, but only briefly:
- * a token that has no `symbol()` is permanent, an unreachable RPC is not, and the two are not worth
- * telling apart when a retry costs one call every ten minutes.
- */
-const tokenSymbolCache = new Map<string, TokenSymbolEntry>();
-/** Reads in flight, so members holding the same token share one call rather than racing. */
-const tokenSymbolReads = new Map<string, Promise<string | null>>();
-const TOKEN_SYMBOL_RETRY_MS = 10 * 60 * 1000;
-
-const tokenKey = (chainId: number, token: string) => `${chainId}:${token.toLowerCase()}`;
-
-async function readTokenSymbol(chainId: number, token: string): Promise<string | null> {
-  const rpcUrl = getRpc(chainId);
-  const chain = getChain(chainId);
-  if (!rpcUrl || !chain) return null;
-  const client = createPublicClient({ chain, transport: http(rpcUrl) });
-  try {
-    const symbol = (await client.readContract({
-      address: token as `0x${string}`,
-      abi: ERC20_SYMBOL_ABI,
-      functionName: "symbol",
-    })) as string;
-    const trimmed = String(symbol).trim();
-    return trimmed.length > 0 ? trimmed : null;
-  } catch {
-    // A token that doesn't answer `symbol()` (a bytes32-symbol token, or a chain that is down) is
-    // not an error worth surfacing — the dashboard falls back to showing the address.
-    return null;
-  }
-}
-
-/** Symbol of an ERC-20, from cache when known. Never throws; null means "show the address". */
-async function getTokenSymbol(chainId: number, token: string): Promise<string | null> {
-  const key = tokenKey(chainId, token);
-  const cached = tokenSymbolCache.get(key);
-  if (cached && Date.now() < cached.retryAt) return cached.symbol;
-
-  const inFlight = tokenSymbolReads.get(key);
-  if (inFlight) return inFlight;
-
-  const read = readTokenSymbol(chainId, token)
-    .then((symbol) => {
-      tokenSymbolCache.set(key, {
-        symbol,
-        retryAt: symbol == null ? Date.now() + TOKEN_SYMBOL_RETRY_MS : Infinity,
-      });
-      return symbol;
-    })
-    .finally(() => {
-      tokenSymbolReads.delete(key);
-    });
-  tokenSymbolReads.set(key, read);
-  return read;
-}
+/* Token symbols come from ../token-metadata, which holds the per-process cache both this list and
+   the treasury page read through — many plans buy the same token, and the dashboard polls. */
 
 /** An admin hold as it appears on a plan; null when nothing is holding the plan. */
 export interface PlanAdminControlView {

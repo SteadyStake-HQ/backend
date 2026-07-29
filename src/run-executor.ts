@@ -58,6 +58,47 @@ async function getNextRelayerNonce(
   return nextNonce;
 }
 
+/** keccak256("Transfer(address,address,uint256)") — topic0 of every ERC-20 transfer. */
+const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/**
+ * How much of the target token the swap actually delivered to the user, from the receipt's own logs.
+ *
+ * Neither the vault's `ScheduleExecuted` event nor its return value carries the output amount — the
+ * event's `amountOut` field is emitted as a literal 0 — so the only record of what a run bought is
+ * the ERC-20 `Transfer` the swap itself emitted. The receipt is already in hand at this point, so
+ * reading it costs nothing extra, and capturing it now is the only chance: reconstructing it later
+ * would mean re-fetching receipts for every historical execution.
+ *
+ * Transfers are summed rather than taken singly because a route can settle in more than one hop, and
+ * a fee-on-transfer token emits its own. Null (rather than 0n) when the token emitted nothing to the
+ * user, so "not recorded" stays distinguishable from "the swap delivered nothing".
+ */
+function tokenDelivered(
+  logs: readonly { address?: string; topics?: readonly string[]; data?: string }[],
+  token: string,
+  user: string,
+): bigint | null {
+  let total = 0n;
+  let seen = false;
+  for (const log of logs) {
+    if (log.address?.toLowerCase() !== token.toLowerCase()) continue;
+    if (log.topics?.[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
+    // A non-standard token can emit Transfer with the value indexed and no data; those carry only
+    // three topics and no amount to read, so they are skipped rather than counted as zero.
+    if (log.topics.length < 3 || !log.data || log.data === "0x") continue;
+    const to = `0x${log.topics[2].slice(-40)}`;
+    if (to.toLowerCase() !== user.toLowerCase()) continue;
+    try {
+      total += BigInt(log.data);
+      seen = true;
+    } catch {
+      // Unparseable data means this log is not a standard Transfer; ignore it.
+    }
+  }
+  return seen ? total : null;
+}
+
 /**
  * Compute gas cost in settlement-stablecoin base units from gas used and gas price.
  * costUsd = (gasUsed * gasPriceWei) / 1e18 * nativePriceUsd, scaled to the chain's stablecoin
@@ -346,6 +387,11 @@ export interface ExecutedTask {
   /** Optional detail for UI/history */
   targetToken?: string;
   amountPerIntervalUsdc6?: string;
+  /**
+   * Target token delivered to the user by this swap, in the token's own base units — the "out" side
+   * of the trade. Read from the receipt's Transfer logs; absent when the token emitted none.
+   */
+  amountOutRaw?: string;
   frequency?: number;
   gasUsed?: string;
   costUsdc6?: string;
@@ -353,6 +399,32 @@ export interface ExecutedTask {
   gasDeducted?: boolean;
   /** Chain the gas was actually deducted on (may differ from the execution chain). */
   gasDeductChainId?: number;
+
+  /* ---- What the relayer actually spent -----------------------------------------------------
+     `costUsdc6` is what the *user* was charged; it is a price, not a cost, and on a chain with a
+     flat rate the two are unrelated. The fields below are the other side of that trade — the
+     native token the relayer really burned — so the treasury page can state the margin per run
+     instead of inferring it from a gas price it would have to guess at after the fact. */
+
+  /** Effective gas price of the swap tx, wei. */
+  gasPriceWei?: string;
+  /** Native token the swap tx burned, wei: its gas used x its effective gas price. */
+  nativeSpentWei?: string;
+  /** USD per native token on the execution chain at execution time, as the run priced it. */
+  nativeUsd?: number;
+
+  /** Gas the GasTank deduction burned. Absent when the deduction did not land. */
+  recordGasUsed?: string;
+  /** Effective gas price of the deduction tx, wei. */
+  recordGasPriceWei?: string;
+  /**
+   * Native the deduction burned, wei — on `gasDeductChainId`, which is not always the execution
+   * chain. Kept apart from `nativeSpentWei` for exactly that reason: the two can be different
+   * tokens at different prices, and adding them would produce a number in no currency at all.
+   */
+  recordNativeSpentWei?: string;
+  /** USD per native token on the deduct chain, when it differs from the execution chain. */
+  recordNativeUsd?: number;
 }
 
 export interface GasBalanceEntry {
@@ -1051,6 +1123,8 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         let deductOk = false;
         /** Gas the deduction burned, for the run-cost profile. Null unless it actually landed. */
         let recordGasUsed: bigint | null = null;
+        /** Its effective gas price, so the treasury page can price the deduction it paid for. */
+        let recordGasPriceWei: bigint | null = null;
         {
           const rpcDeduct = deductChainId === chainId ? rpcUrl : getRpc(deductChainId);
           const chainDeduct = deductChainId === chainId ? chain : getChain(deductChainId);
@@ -1098,6 +1172,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
             if (recordReceipt.status === "success") {
               deductOk = true;
               recordGasUsed = recordReceipt.gasUsed;
+              recordGasPriceWei = recordReceipt.effectiveGasPrice ?? null;
               log(`  [${member}] Gas deducted ${costToRecordUsdc6} on chain ${deductChainId} tx=${recordHash}`);
             } else {
               errors.push(
@@ -1130,6 +1205,15 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           recordRunGas(chainId, receipt.gasUsed, recordGasUsed);
         }
 
+        // What the swap really cost the relayer, in the execution chain's native token. Recorded
+        // now rather than reconstructed later: gas price moves, and a margin worked out from
+        // tomorrow's gas price is not this run's margin.
+        const swapGasPriceWei = receipt.effectiveGasPrice ?? gasPriceWei;
+        const recordNativeUsd =
+          deductOk && deductChainId !== chainId
+            ? await getNativePriceUsd(deductChainId).catch(() => 0)
+            : null;
+
         executedTasksDetail.push({
           chainId,
           user: userAddress,
@@ -1137,11 +1221,25 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           txHash: hash,
           targetToken: item.targetToken,
           amountPerIntervalUsdc6: item.amountPerInterval.toString(),
+          amountOutRaw:
+            item.targetToken != null
+              ? (tokenDelivered(receipt.logs, item.targetToken, userAddress)?.toString() ?? undefined)
+              : undefined,
           frequency: item.frequency,
           gasUsed: receipt.gasUsed.toString(),
           costUsdc6: costToRecordUsdc6.toString(),
           gasDeducted: deductOk,
           gasDeductChainId: deductOk ? deductChainId : undefined,
+          gasPriceWei: swapGasPriceWei > 0n ? swapGasPriceWei.toString() : undefined,
+          nativeSpentWei: swapGasPriceWei > 0n ? (receipt.gasUsed * swapGasPriceWei).toString() : undefined,
+          nativeUsd: nativePriceUsd > 0 ? nativePriceUsd : undefined,
+          recordGasUsed: recordGasUsed != null ? recordGasUsed.toString() : undefined,
+          recordGasPriceWei: recordGasPriceWei != null ? recordGasPriceWei.toString() : undefined,
+          recordNativeSpentWei:
+            recordGasUsed != null && recordGasPriceWei != null
+              ? (recordGasUsed * recordGasPriceWei).toString()
+              : undefined,
+          recordNativeUsd: recordNativeUsd != null && recordNativeUsd > 0 ? recordNativeUsd : undefined,
         });
 
         // Write the swap through to dca_plans while we're here: re-read the struct (one eth_call)

@@ -1,0 +1,849 @@
+/* Treasury page — figures and charts. Loaded after dashboard.css, which supplies the shell
+   (header, nav, cards, rows, badges); everything here is specific to this page.
+
+   The colour slots below are a validated categorical palette, not hand-picked hexes: they are the
+   documented data-viz slots re-stepped for a dark surface and checked against --viz-surface for the
+   lightness band, the chroma floor, adjacent colour-vision separation, and 3:1 contrast. Changing
+   one means re-running that check — a hue that reads fine to you can collapse into its neighbour
+   under protanopia, which is exactly what the check is for.
+
+   Series identity is fixed by role, never by rank: "charged" is always slot 1 and "spent" always
+   slot 2, so filtering a network out never repaints the series that remain. */
+
+.viz-root {
+  /* The surface every chart is drawn on, and the one the palette was validated against. Charts sit
+     on this rather than on the translucent panel so the contrast figures hold whatever is behind. */
+  --viz-surface: #101827;
+  --viz-grid: #1e2740;
+  --viz-axis: #2a3450;
+
+  /* Categorical slots. Only two are in play — money in and money out. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+
+  /* Diverging pair for margin above / below zero. Warm and cool, so the two sides read as
+     opposites; the zero baseline itself is the neutral midpoint. */
+  --viz-pos: #3987e5;
+  --viz-neg: #e66767;
+
+  /* Status. Reserved meaning, never reused as a series colour, and always shipped with a word
+     beside it rather than carrying meaning as colour alone. */
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-critical: #d03b3b;
+}
+
+/* ---- Hero figure & stat tiles -------------------------------------------------------------
+   The number a page leads with is not a one-bar bar chart. Exactly one hero per view; every other
+   standalone value is a tile. */
+
+.hero-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 28px;
+  padding: 22px 24px;
+  margin-bottom: 15px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(21, 30, 49, 0.96), rgba(14, 21, 36, 0.96));
+}
+
+.hero-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.hero-label {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Proportional figures, deliberately: tabular-nums gives every digit the width of a zero, which
+   makes a short number look gappy at display sizes. */
+.hero-value {
+  font-size: clamp(38px, 6vw, 54px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.hero-value.pos {
+  color: #a9c8ff;
+}
+
+.hero-value.neg {
+  color: #ffc0cb;
+}
+
+.hero-note {
+  max-width: 42ch;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.kpi-row {
+  display: grid;
+  flex: 1 1 460px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 138px), 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid rgba(141, 159, 199, 0.1);
+  border-radius: 12px;
+  background: rgba(5, 9, 17, 0.34);
+}
+
+.stat-label {
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+}
+
+.stat-value small {
+  margin-left: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.stat-sub {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.stat-tile.alarm {
+  border-color: rgba(208, 59, 59, 0.42);
+  background: rgba(208, 59, 59, 0.09);
+}
+
+.stat-tile.alarm .stat-value {
+  color: #ffc0cb;
+}
+
+/* ---- Chart cards ----------------------------------------------------------------------- */
+
+.viz-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.viz-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 17px 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--viz-surface);
+}
+
+.viz-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.viz-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+.viz-sub {
+  margin: 3px 0 0;
+  max-width: 58ch;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* A legend is present whenever a chart carries two or more series — colour is never the only
+   identity channel. A single-series chart gets none: the title already names what is plotted, and
+   a one-swatch box only restates it. */
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-left: auto;
+  padding-top: 2px;
+}
+
+.viz-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The swatch carries the series colour; the word beside it stays in text ink, because a mid-chroma
+   hue is not legible as body text. */
+.viz-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.viz-legend i.k-charged {
+  background: var(--series-1);
+}
+
+.viz-legend i.k-spent {
+  background: var(--series-2);
+}
+
+.viz-legend i.k-pos {
+  background: var(--viz-pos);
+}
+
+.viz-legend i.k-neg {
+  background: var(--viz-neg);
+}
+
+.viz-plot {
+  position: relative;
+  width: 100%;
+}
+
+.viz-plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.viz-plot text {
+  font-family: var(--font-sans);
+}
+
+.axis-text {
+  fill: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-line {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+}
+
+/* Solid hairlines, one step off the surface. Never dashed — dashing reads as "projection" or
+   "threshold" when it is only a grid. */
+.grid-line {
+  stroke: var(--viz-grid);
+  stroke-width: 1;
+}
+
+/* Direct labels — used sparingly (an endpoint, an extreme), never on every point. They double as
+   the relief channel that lets the chart be read without reaching for the tooltip. */
+.mark-label {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.mark-label.dim {
+  fill: var(--muted);
+  font-weight: 650;
+}
+
+.series-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.series-line.charged {
+  stroke: var(--series-1);
+}
+
+.series-line.spent {
+  stroke: var(--series-2);
+}
+
+.series-area.charged {
+  fill: var(--series-1);
+  opacity: 0.1;
+}
+
+.series-area.spent {
+  fill: var(--series-2);
+  opacity: 0.1;
+}
+
+/* End markers carry a ring in the surface colour so they stay legible where the two series cross.
+   The ring is part of the hit target, not only spacing. */
+.series-dot {
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+}
+
+.series-dot.charged {
+  fill: var(--series-1);
+}
+
+.series-dot.spent {
+  fill: var(--series-2);
+}
+
+.bar-pos {
+  fill: var(--viz-pos);
+}
+
+.bar-neg {
+  fill: var(--viz-neg);
+}
+
+.bar-1 {
+  fill: var(--series-1);
+}
+
+/* The track behind a horizontal bar: a lighter step of the bar's own ramp, so the proportion reads
+   even where the bar itself is very short. */
+.bar-track {
+  fill: rgba(57, 135, 229, 0.13);
+}
+
+.crosshair {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+}
+
+/* Hit targets are their own transparent rects, far wider than the mark — a 2px line and an 8px dot
+   are impossible to land on otherwise. */
+.hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.hit.bar-hit {
+  cursor: default;
+}
+
+.viz-tooltip {
+  position: absolute;
+  z-index: 8;
+  min-width: 150px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: rgba(9, 14, 25, 0.97);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -100%);
+  transition: opacity 110ms ease;
+}
+
+.viz-tooltip[data-show="1"] {
+  opacity: 1;
+}
+
+.viz-tooltip h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.viz-tooltip dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 3px 12px;
+  margin: 0;
+}
+
+.viz-tooltip dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.viz-tooltip dt i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.viz-tooltip dt i.k-charged {
+  background: var(--series-1);
+}
+
+.viz-tooltip dt i.k-spent {
+  background: var(--series-2);
+}
+
+.viz-tooltip dd {
+  margin: 0;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-empty {
+  padding: 34px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* A refetch holds the previous render at reduced opacity rather than flashing a skeleton, so
+   nothing jumps while an operator is reading it. */
+.viz-root.refreshing .viz-card,
+.viz-root.refreshing .hero-panel,
+.viz-root.refreshing #wallets,
+.viz-root.refreshing #ledger-body {
+  opacity: 0.55;
+  transition: opacity 160ms ease;
+}
+
+/* ---- Meter ------------------------------------------------------------------------------
+   A single ratio against a limit. The fill carries severity; the track is a lighter step of the
+   same ramp, so state reads across the whole bar. */
+
+.meter {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(57, 135, 229, 0.14);
+  overflow: hidden;
+}
+
+.meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--series-1);
+  transition: width 320ms ease;
+}
+
+.meter.warning > i {
+  background: var(--viz-warning);
+}
+
+.meter.critical > i {
+  background: var(--viz-critical);
+}
+
+.meter-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.meter-line b {
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-line span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+/* ---- Wallet cards ------------------------------------------------------------------------ */
+
+.wallet-card .row .val {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.wallet-block {
+  padding: 11px 12px;
+  border: 1px solid rgba(141, 159, 199, 0.1);
+  border-radius: 11px;
+  background: rgba(5, 9, 17, 0.3);
+}
+
+.wallet-block + .wallet-block {
+  margin-top: 8px;
+}
+
+.wallet-block h4 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.wallet-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.wallet-figure b {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.wallet-figure span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wallet-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.wallet-pair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 11px;
+}
+
+.wallet-pair + .wallet-pair {
+  border-top: 1px solid rgba(141, 159, 199, 0.07);
+}
+
+.wallet-pair > span:first-child {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.wallet-pair > span:last-child {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status never rides on colour alone: each of these carries its own sentence, and the icon beside
+   it is decorative rather than load-bearing. */
+.wallet-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(208, 59, 59, 0.4);
+  border-radius: 10px;
+  color: #ffc0cb;
+  background: rgba(208, 59, 59, 0.1);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.wallet-alert.warn {
+  border-color: rgba(250, 178, 25, 0.34);
+  color: #ffdda1;
+  background: rgba(250, 178, 25, 0.08);
+}
+
+.wallet-alert svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.wallet-card.is-error {
+  border-color: rgba(245, 181, 94, 0.3);
+}
+
+/* ---- Token identity ---------------------------------------------------------------------- */
+
+.token-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-logo {
+  position: relative;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(110, 140, 255, 0.16);
+  border-radius: 50%;
+  color: #bdc9f5;
+  background: rgba(110, 140, 255, 0.1);
+  font-size: 9px;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+/* The lettered avatar underneath stays in the box; the image covers it when it loads and is
+   removed when it 404s, which is the common case on a chain with no asset repo. */
+.token-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--surface-raised);
+}
+
+.token-names {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.token-names b {
+  font-size: 11.5px;
+  font-weight: 750;
+}
+
+.token-names span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Ledger ------------------------------------------------------------------------------
+   The table view every chart on this page is answerable from. Not a fallback: the tooltips
+   enhance it, they never gate a value. */
+
+.ledger-scroll {
+  overflow-x: auto;
+}
+
+.ledger {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 10px;
+  color: var(--dim);
+  background: var(--surface-soft);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ledger th.num {
+  text-align: right;
+}
+
+.ledger td {
+  padding: 9px 10px;
+  border-top: 1px solid rgba(141, 159, 199, 0.08);
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.ledger tbody tr:hover td {
+  background: rgba(110, 140, 255, 0.05);
+}
+
+.ledger .num {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ledger .num.pos {
+  color: #a9c8ff;
+}
+
+.ledger .num.neg {
+  color: #ffc0cb;
+}
+
+.ledger .muted {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.ledger .when {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ledger-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+/* ---- Horizontal bars ---------------------------------------------------------------------
+   Nominal categories — networks, tokens — so every bar takes the same slot-1 hue. Colouring them
+   darker-where-bigger would spend the identity channel re-encoding what bar length already shows.
+
+   Built in HTML rather than SVG so a token row can carry a real <img> logo and an ellipsised name,
+   which is exactly what this chart is for. The mark specs still hold: the bar is 14px (under the
+   24px cap), its data end is rounded 4px and its baseline end square, and the track behind it is a
+   lighter step of the bar's own ramp. */
+
+.hbar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(80px, 1.4fr) auto;
+  align-items: center;
+  gap: 14px;
+  /* A 32px row, so the hover target clears the 24px minimum without a separate hit area. */
+  min-height: 32px;
+  padding: 0 6px;
+  border-radius: 8px;
+  cursor: default;
+}
+
+.hbar-row:hover {
+  background: rgba(110, 140, 255, 0.05);
+}
+
+.hbar-label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.hbar-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hbar-track {
+  height: 14px;
+  border-radius: 0 4px 4px 0;
+  background: rgba(57, 135, 229, 0.13);
+}
+
+.hbar-track > i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--series-1);
+  transition: width 320ms ease;
+}
+
+/* The value at the tip. Always rendered, never only in the tooltip — a tooltip enhances a chart,
+   it never gates a number. */
+.hbar-value {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hbar-value small {
+  display: block;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.viz-note {
+  margin: 0;
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 26px 0 12px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+
+.section-heading p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .hero-panel {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .viz-legend {
+    margin-left: 0;
+    width: 100%;
+  }
+}
