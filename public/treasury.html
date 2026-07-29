@@ -80,14 +80,38 @@
          re-render against the same slice. Never a filter inside a chart card. -->
     <div class="filters" role="group" aria-label="Filters">
       <div class="filter-row filter-row-primary">
-        <div class="select-field">
-          <label for="window-select">History</label>
-          <select id="window-select">
-            <option value="25">Last 25 runs</option>
-            <option value="50" selected>Last 50 runs</option>
-            <option value="100">Last 100 runs</option>
-          </select>
+        <span class="filter-label">Show</span>
+        <!-- Mainnet first and by default: it is the only view whose dollars are real money. -->
+        <div class="segmented" id="realm-toggle" role="group" aria-label="Mainnet or testnet">
+          <button type="button" data-realm="mainnet" aria-pressed="true">
+            Mainnet <span class="seg-count" id="seg-mainnet">0</span>
+          </button>
+          <button type="button" data-realm="testnet" aria-pressed="false">
+            Testnet <span class="seg-count" id="seg-testnet">0</span>
+          </button>
+          <button type="button" data-realm="all" aria-pressed="false">
+            Both <span class="seg-count" id="seg-all">0</span>
+          </button>
         </div>
+
+        <div class="filter-group">
+          <span class="filter-label">History</span>
+          <div class="picker" id="window-picker" data-open="false">
+            <button class="picker-button" id="window-button" type="button"
+              aria-haspopup="listbox" aria-expanded="false" aria-controls="window-menu">
+              <span class="picker-current">
+                <b id="window-current">Last 50 runs</b>
+                <small id="window-current-sub">Loading…</small>
+              </span>
+              <svg class="picker-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.2" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <ul class="picker-menu" id="window-menu" role="listbox" aria-label="History window" hidden></ul>
+          </div>
+        </div>
+
         <span class="result-line" id="result-line" role="status"></span>
       </div>
       <div class="filter-row">
@@ -95,7 +119,28 @@
         <div class="chips" id="network-chips"></div>
         <button class="clear-filters" id="clear-networks" type="button" hidden>All networks</button>
       </div>
+      <!-- Same operator secret the plan-activity and run-price pages use, so entering it on any of
+           them unlocks the others. Only needed to change a fee; every figure here reads without it. -->
+      <div class="filter-row">
+        <span class="filter-label">Admin</span>
+        <div class="admin-field" style="max-width: 300px;">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token (to change fees)" aria-label="Admin API token" />
+        </div>
+      </div>
     </div>
+
+    <p class="notional-note" id="notional-note" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 8v5" stroke-linecap="round" /><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+      <span id="notional-text"></span>
+    </p>
 
     <!-- The hero is the one number the page leads with; everything else that is a single value is a
          stat tile rather than a chart of one bar. -->
@@ -169,12 +214,8 @@
       </section>
     </div>
 
-    <div class="section-heading">
-      <h2>Wallet by network</h2>
-      <p>Balances read live from each chain.</p>
-    </div>
-    <section aria-label="Relayer wallet per network">
-      <div class="grid" id="wallets"><div class="empty">Loading wallet balances…</div></div>
+    <section aria-label="Relayer wallet per network" id="wallets">
+      <div class="empty">Loading wallet balances…</div>
     </section>
 
     <div class="section-heading">
@@ -220,7 +261,13 @@
     const state = {
       wallets: null,
       flows: null,
-      /** Null means every network. A Set of chain IDs otherwise. */
+      /**
+       * "mainnet" | "testnet" | "all". Mainnet by default because it is the only view whose USD
+       * figures are money: a testnet's native token has no market, so its balances are notional and
+       * summing them beside real ones produces a total that means nothing.
+       */
+      realm: "mainnet",
+      /** Null means every network in the current realm. A Set of chain IDs otherwise. */
       chains: null,
       runs: 50,
       ledgerLimit: 40,
@@ -233,7 +280,15 @@
       result: document.getElementById("result-line"),
       chips: document.getElementById("network-chips"),
       clearChips: document.getElementById("clear-networks"),
-      windowSelect: document.getElementById("window-select"),
+      realmToggle: document.getElementById("realm-toggle"),
+      notionalNote: document.getElementById("notional-note"),
+      notionalText: document.getElementById("notional-text"),
+      adminToken: document.getElementById("admin-token"),
+      picker: document.getElementById("window-picker"),
+      pickerButton: document.getElementById("window-button"),
+      pickerMenu: document.getElementById("window-menu"),
+      pickerCurrent: document.getElementById("window-current"),
+      pickerCurrentSub: document.getElementById("window-current-sub"),
       heroValue: document.getElementById("hero-value"),
       heroNote: document.getElementById("hero-note"),
       kpis: document.getElementById("kpis"),
@@ -301,6 +356,162 @@
       if (isNaN(date.getTime())) return isoDate;
       return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
     }
+
+    /** A date range as one short phrase: "Jul 22 → Jul 28", or "Jul 28" when it is all one day. */
+    function spanLabel(from, to) {
+      if (!from || !to) return null;
+      const a = dayLabel(String(from).slice(0, 10));
+      const b = dayLabel(String(to).slice(0, 10));
+      return a === b ? a : a + " → " + b;
+    }
+
+    /* ==========================================================================================
+       History picker
+
+       A listbox, not a <select>. The useful thing to say about a window is what is in it — how many
+       runs are really there, how many executions they produced, and the dates they cover — and a
+       native option can only render one line of unstyled text.
+
+       Keyboard behaviour is the part a custom control usually loses, so it is written out in full:
+       Enter/Space/Down opens, Up/Down move, Home/End jump, Enter picks, Escape closes and returns
+       focus to the button, and Tab or a click elsewhere closes without changing anything.
+       ========================================================================================== */
+
+    const picker = {
+      /** Index the keyboard is on while the menu is open. -1 when closed. */
+      activeIndex: -1,
+
+      options: function () {
+        const fromApi = state.flows && state.flows.windowOptions;
+        if (fromApi && fromApi.length) return fromApi;
+        // Before the first response, offer the sizes with no detail rather than an empty menu.
+        return [25, 50, 100].map(function (runs) {
+          return { runs: runs, availableRuns: null, executions: null, from: null, to: null };
+        });
+      },
+
+      /** What one row says beneath its title: what is actually in that window. */
+      describe: function (option) {
+        if (option.executions == null) return "";
+        const parts = [count(option.executions) + (option.executions === 1 ? " execution" : " executions")];
+        // Only worth saying when the window is not yet full — "50 runs" that only has 12 behind it
+        // is the difference between a quiet week and a fresh deployment.
+        if (option.availableRuns != null && option.availableRuns < option.runs) {
+          parts.push("only " + count(option.availableRuns) + " runs so far");
+        }
+        const span = spanLabel(option.from, option.to);
+        if (span) parts.push(span);
+        return parts.join(" · ");
+      },
+
+      render: function () {
+        const options = picker.options();
+        el.pickerMenu.innerHTML = options.map(function (option, index) {
+          const selected = option.runs === state.runs;
+          const detail = picker.describe(option);
+          return '<li role="presentation">' +
+            '<button class="picker-option' + (option.executions === 0 ? " empty" : "") +
+              '" type="button" role="option" id="window-option-' + option.runs + '"' +
+              ' aria-selected="' + (selected ? "true" : "false") + '"' +
+              ' data-runs="' + option.runs + '" data-index="' + index + '"' +
+              ' tabindex="-1">' +
+              '<svg class="picker-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+                ' stroke-width="3" aria-hidden="true">' +
+                '<path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />' +
+              "</svg>" +
+              "<span><b>Last " + count(option.runs) + " runs</b>" +
+                (detail ? "<span>" + escapeHtml(detail) + "</span>" : "") +
+              "</span>" +
+            "</button>" +
+          "</li>";
+        }).join("") +
+        '<li class="picker-foot" role="presentation">A run is one sweep of every live network. ' +
+          'Only runs that executed something appear in the charts.</li>';
+
+        const current = options.find(function (option) { return option.runs === state.runs; });
+        el.pickerCurrent.textContent = "Last " + count(state.runs) + " runs";
+        el.pickerCurrentSub.textContent = current ? (picker.describe(current) || "no executions") : "";
+      },
+
+      open: function () {
+        el.picker.dataset.open = "true";
+        el.pickerButton.setAttribute("aria-expanded", "true");
+        el.pickerMenu.hidden = false;
+        const options = picker.options();
+        picker.activeIndex = Math.max(0, options.findIndex(function (o) { return o.runs === state.runs; }));
+        picker.highlight();
+        // Focus moves into the menu so arrow keys belong to it and Escape has somewhere to return from.
+        const active = el.pickerMenu.querySelector('[data-index="' + picker.activeIndex + '"]');
+        if (active) active.focus();
+      },
+
+      close: function (returnFocus) {
+        el.picker.dataset.open = "false";
+        el.pickerButton.setAttribute("aria-expanded", "false");
+        el.pickerMenu.hidden = true;
+        picker.activeIndex = -1;
+        if (returnFocus) el.pickerButton.focus();
+      },
+
+      isOpen: function () {
+        return el.picker.dataset.open === "true";
+      },
+
+      highlight: function () {
+        const rows = el.pickerMenu.querySelectorAll(".picker-option");
+        rows.forEach(function (row, index) {
+          row.dataset.active = index === picker.activeIndex ? "true" : "false";
+        });
+      },
+
+      move: function (delta) {
+        const rows = el.pickerMenu.querySelectorAll(".picker-option");
+        if (!rows.length) return;
+        picker.activeIndex = (picker.activeIndex + delta + rows.length) % rows.length;
+        picker.highlight();
+        rows[picker.activeIndex].focus();
+      },
+
+      choose: function (runs) {
+        picker.close(true);
+        if (runs === state.runs) return;
+        state.runs = runs;
+        picker.render();
+        load(false);
+      },
+    };
+
+    el.pickerButton.addEventListener("click", function () {
+      if (picker.isOpen()) picker.close(true);
+      else picker.open();
+    });
+
+    el.pickerButton.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        picker.open();
+      }
+    });
+
+    el.pickerMenu.addEventListener("click", function (event) {
+      const option = event.target.closest(".picker-option");
+      if (option) picker.choose(Number(option.dataset.runs));
+    });
+
+    el.pickerMenu.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowDown") { event.preventDefault(); picker.move(1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); picker.move(-1); }
+      else if (event.key === "Home") { event.preventDefault(); picker.activeIndex = -1; picker.move(1); }
+      else if (event.key === "End") { event.preventDefault(); picker.activeIndex = 0; picker.move(-1); }
+      else if (event.key === "Escape") { event.preventDefault(); picker.close(true); }
+      else if (event.key === "Tab") { picker.close(false); }
+    });
+
+    // A click anywhere else closes it. Registered on the document rather than on a backdrop element
+    // so the rest of the page stays interactive while the menu is open.
+    document.addEventListener("click", function (event) {
+      if (picker.isOpen() && !el.picker.contains(event.target)) picker.close(false);
+    });
 
     /* ==========================================================================================
        Chart primitives
@@ -736,7 +947,29 @@
        Headline figures
        ========================================================================================== */
 
-    function renderHero(flows, wallets) {
+    /**
+     * Wallet totals for the networks currently in view.
+     *
+     * Computed here rather than taken from the payload's own `totals`, which are mainnet-only by
+     * design. The rule this preserves is that every figure on the page describes the same slice —
+     * a mainnet hero above a testnet balance would be two answers to one question.
+     */
+    function walletTotals() {
+      const networks = networksInRealm().filter(inFilter);
+      const sum = function (pick) {
+        return networks.reduce(function (total, network) { return total + (pick(network) || 0); }, 0);
+      };
+      return {
+        gasReserveUsd: sum(function (n) { return n.relayer.nativeUsd; }),
+        collectedFeesUsd: sum(function (n) { return n.relayer.stableUsd; }),
+        claimableFeesUsd: sum(function (n) { return n.vault.claimableUsd; }),
+        userFloatUsd: sum(function (n) { return n.gasTank.floatUsd; }),
+        executorMismatches: networks.filter(function (n) { return n.relayer.isGasTankExecutor === false; }).length,
+        networks: networks.length,
+      };
+    }
+
+    function renderHero(flows) {
       const totals = flows.totals;
       const margin = totals.marginUsd;
       el.heroValue.textContent = money(margin);
@@ -761,16 +994,17 @@
       }
       el.heroNote.textContent = note;
 
-      const w = wallets && wallets.totals;
-      const alarms = w ? w.executorMismatches : 0;
+      const w = walletTotals();
+      const alarms = w.executorMismatches;
+      const scope = state.realm === "all" ? "across all networks"
+        : state.realm === "testnet" ? "across testnets" : "across mainnets";
       const tiles = [
-        tile("Gas reserve", compactMoney(w ? w.gasReserveUsd : null),
-          "native, across mainnets"),
-        tile("Fees in wallet", compactMoney(w ? w.collectedFeesUsd : null),
+        tile("Gas reserve", compactMoney(w.gasReserveUsd), "native, " + scope),
+        tile("Fees in wallet", compactMoney(w.collectedFeesUsd),
           "collected execution fees"),
-        tile("Claimable in vaults", compactMoney(w ? w.claimableFeesUsd : null),
+        tile("Claimable in vaults", compactMoney(w.claimableFeesUsd),
           "swap + cancel fees, unwithdrawn"),
-        tile("User gas float", compactMoney(w ? w.userFloatUsd : null),
+        tile("User gas float", compactMoney(w.userFloatUsd),
           "prepaid by users — owed"),
         tile("Uncharged runs", count(totals.freeRuns),
           totals.freeRuns > 0 ? "executed but never billed" : "every run was billed",
@@ -796,13 +1030,71 @@
 
     const STATUS_BADGE = { enabled: "Live", paused: "Paused", disabled: "Removed" };
 
-    function renderWallets(wallets) {
-      const networks = (wallets.networks || []).filter(inFilter);
-      if (!networks.length) {
-        el.wallets.innerHTML = '<div class="empty">No networks match this filter.</div>';
-        return;
+    /**
+     * Wallet cards, grouped by mainnet and testnet with their own headings and their own subtotals.
+     *
+     * Kept apart even under "Both", because the two are not comparable: a testnet's native token has
+     * no market price, so its USD column is a notional figure standing next to real money. One flat
+     * grid invites exactly the addition that should never be done.
+     */
+    function renderWallets() {
+      const groups = [
+        { type: "mainnet", title: "Mainnet", note: "Real balances. These are the wallets that stop working when they run dry." },
+        { type: "testnet", title: "Testnet", note: "Faucet tokens. USD figures here are notional — the native tokens have no market." },
+      ].filter(function (group) {
+        return state.realm === "all" || state.realm === group.type;
+      });
+
+      const html = groups.map(function (group) {
+        const networks = ((state.wallets && state.wallets.networks) || [])
+          .filter(function (network) { return network.type === group.type; })
+          .filter(function (network) { return state.chains == null || state.chains.has(network.chainId); });
+        if (!networks.length) return "";
+
+        const gas = networks.reduce(function (sum, n) { return sum + (n.relayer.nativeUsd || 0); }, 0);
+        const fees = networks.reduce(function (sum, n) { return sum + (n.relayer.stableUsd || 0); }, 0);
+
+        return '<div class="section-heading">' +
+            "<h2>" + escapeHtml(group.title) + "</h2>" +
+            "<p>" + escapeHtml(group.note) + "</p>" +
+            '<p style="margin-left:auto;color:var(--muted);font-size:11px;font-weight:700">' +
+              count(networks.length) + " networks · " + money(gas) + " gas · " + money(fees) + " fees" +
+            "</p>" +
+          "</div>" +
+          '<div class="grid">' + networks.map(walletCard).join("") + "</div>";
+      }).join("");
+
+      el.wallets.innerHTML = html || '<div class="empty">No networks match this filter.</div>';
+    }
+
+    function renderRealmToggle() {
+      const networks = (state.wallets && state.wallets.networks) || [];
+      const counts = {
+        mainnet: networks.filter(function (n) { return n.type === "mainnet"; }).length,
+        testnet: networks.filter(function (n) { return n.type === "testnet"; }).length,
+        all: networks.length,
+      };
+      document.getElementById("seg-mainnet").textContent = count(counts.mainnet);
+      document.getElementById("seg-testnet").textContent = count(counts.testnet);
+      document.getElementById("seg-all").textContent = count(counts.all);
+
+      el.realmToggle.querySelectorAll("button").forEach(function (button) {
+        button.setAttribute("aria-pressed", button.dataset.realm === state.realm ? "true" : "false");
+      });
+
+      // Said whenever a testnet figure is on screen, because the alternative is a reader adding a
+      // pinned tBOT price to a real BNB balance and believing the total.
+      const showsTestnet = state.realm !== "mainnet";
+      el.notionalNote.hidden = !showsTestnet;
+      if (showsTestnet) {
+        el.notionalText.textContent = state.realm === "testnet"
+          ? "Testnet view. These native tokens have no market, so every USD figure below is notional " +
+            "— tBOT is pinned to a fixed price purely so gas costs stay stable, and Sepolia ETH is " +
+            "priced as if it were real ETH. Treat them as run counts, not money."
+          : "This view mixes mainnets and testnets. Testnet USD figures are notional — their native " +
+            "tokens have no market — so the combined totals are not money. The Mainnet view is the " +
+            "one to read for real balances.";
       }
-      el.wallets.innerHTML = networks.map(walletCard).join("");
     }
 
     function walletCard(network, index) {
@@ -862,29 +1154,13 @@
           '<div style="margin-top:9px">' +
             '<div class="wallet-pair"><span>Claimable in vault</span><span>' + money(network.vault.claimableUsd) + "</span></div>" +
             '<div class="wallet-pair"><span>User gas float</span><span>' + money(network.gasTank.floatUsd) + "</span></div>" +
-            '<div class="wallet-pair"><span>Swap fee</span><span>' +
-              (network.vault.feePercent != null ? network.vault.feePercent.toFixed(2) + "%" : "—") + "</span></div>" +
             '<div class="wallet-pair"><span>Per-run price</span><span>' + money(network.gasTank.priceUsd) + "</span></div>" +
           "</div>" +
         "</div>";
 
       const recipient = network.vault.autoPlanFeeRecipient;
-      const recipientIsRelayer = recipient && network.relayer.address &&
-        recipient.toLowerCase() === network.relayer.address.toLowerCase();
       const recipientUnset = !recipient || recipient === "0x0000000000000000000000000000000000000000";
-      const autoFeeBlock = network.vault.autoPlanFeeUsd
-        ? '<div class="wallet-block">' +
-            "<h4>Extra auto-plan fee</h4>" +
-            '<div class="wallet-pair"><span>Charged per extra plan</span><span>' + money(network.vault.autoPlanFeeUsd) + "</span></div>" +
-            '<div class="wallet-pair"><span>Paid to</span><span>' +
-              (recipientUnset ? '<span class="addr zero">unset</span>'
-                : recipientIsRelayer ? "this relayer" : addressElement(recipient, explorer)) + "</span></div>" +
-            (!recipientUnset && !recipientIsRelayer
-              ? '<div class="wallet-pair"><span>Its balance</span><span>' +
-                money(network.vault.autoPlanFeeRecipientBalanceUsd) + "</span></div>"
-              : "") +
-          "</div>"
-        : "";
+      const settingsBlock = feeSettingsBlock(network, explorer);
 
       const alerts = [];
       if (network.relayer.isGasTankExecutor === false) {
@@ -912,9 +1188,217 @@
           (network.relayer.address
             ? addressElement(network.relayer.address, explorer)
             : '<span class="addr zero">no signing key configured</span>') + "</div>" +
-        gasBlock + feeBlock + autoFeeBlock +
+        gasBlock + feeBlock + settingsBlock +
         alerts.join("") +
       "</article>";
+    }
+
+    /* ==========================================================================================
+       Fee settings
+
+       Two of the three fees a vault charges can be changed from here; the third cannot, and saying
+       so plainly is part of the block rather than an omission:
+
+         - **Swap fee** (`feePercentage`) — owner-settable, capped by the contract at 5%.
+         - **Extra auto-plan fee** (`additionalAutoPlanFeeUsdc6`) — owner-settable, flat.
+         - **Early-cancellation fee** — a `constant` in DCAVault.sol. It is compiled into the
+           deployed bytecode, so there is no setter and no key that can change it. Shown read-only
+           with the reason, because an input that silently cannot work is worse than none.
+
+       The inputs are disabled unless this backend's signing key is the vault's owner. Whether the
+       operator has the admin token is checked when Save is pressed, not here — a missing token is
+       a thing to be told about at the moment it matters.
+       ========================================================================================== */
+
+    function feeSettingsBlock(network, explorer) {
+      const vault = network.vault;
+      const canEdit = vault.ownedByRelayer === true;
+      const disabled = canEdit ? "" : " disabled";
+      const chain = ' data-chain-id="' + network.chainId + '"';
+
+      const swapRow =
+        '<div class="fee-row">' +
+          '<label for="swap-fee-' + network.chainId + '">Swap fee, taken from every execution</label>' +
+          '<span class="fee-input">' +
+            '<input id="swap-fee-' + network.chainId + '" type="number" step="0.01" min="0" max="' +
+              (vault.maxFeePercent != null ? vault.maxFeePercent : 5) + '" value="' +
+              (vault.feePercent != null ? vault.feePercent : "") + '"' +
+              ' data-fee="swap"' + chain + disabled + " />" +
+            '<span class="fee-unit">%</span>' +
+          "</span>" +
+          '<button class="button" type="button" data-save="swap"' + chain + disabled + ">Save</button>" +
+        "</div>";
+
+      const autoRow =
+        '<div class="fee-row">' +
+          '<label for="auto-fee-' + network.chainId + '">Extra fee per additional auto plan</label>' +
+          '<span class="fee-input">' +
+            '<input id="auto-fee-' + network.chainId + '" type="number" step="0.01" min="0" value="' +
+              (vault.autoPlanFeeUsd != null ? vault.autoPlanFeeUsd : "") + '"' +
+              ' data-fee="auto"' + chain + disabled + " />" +
+            '<span class="fee-unit">' + escapeHtml(network.stableSymbol) + "</span>" +
+          "</span>" +
+          '<button class="button" type="button" data-save="auto"' + chain + disabled + ">Save</button>" +
+        "</div>";
+
+      const recipient = vault.autoPlanFeeRecipient;
+      const recipientUnset = !recipient || recipient === "0x0000000000000000000000000000000000000000";
+      const recipientIsRelayer = recipient && network.relayer.address &&
+        recipient.toLowerCase() === network.relayer.address.toLowerCase();
+      const recipientRow =
+        '<div class="wallet-pair"><span>That fee is paid to</span><span>' +
+          (recipientUnset ? '<span class="addr zero">unset</span>'
+            : recipientIsRelayer ? "this relayer" : addressElement(recipient, explorer)) +
+        "</span></div>" +
+        (!recipientUnset && !recipientIsRelayer
+          ? '<div class="wallet-pair"><span>Its balance</span><span>' +
+            money(vault.autoPlanFeeRecipientBalanceUsd) + "</span></div>"
+          : "");
+
+      // Read-only, with the reason stated. The threshold is part of the rule and meaningless
+      // without it: the fee only applies while more than half the plan's original total remains.
+      const cancelRow =
+        '<div class="wallet-pair"><span>Early-cancellation fee</span><span>' +
+          (vault.earlyCancelFeePercent != null ? vault.earlyCancelFeePercent.toFixed(2) + "%" : "—") +
+        "</span></div>" +
+        '<p class="fee-note locked">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+            '<rect x="4" y="10.5" width="16" height="10" rx="2" />' +
+            '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />' +
+          "</svg>" +
+          "<span>Fixed. It is a <code>constant</code> in DCAVault.sol, compiled into this vault's " +
+            "bytecode, so no owner key can change it — only a new contract and a redeployment can. " +
+            "It applies when a plan is cancelled with more than " +
+            (vault.earlyCancelThresholdPercent != null ? vault.earlyCancelThresholdPercent : 50) +
+            "% of its original total still unspent.</span>" +
+        "</p>";
+
+      const gate = canEdit
+        ? '<p class="fee-note">Saving sends a transaction from ' +
+            escapeHtml(shortenAddress(network.relayer.address || "")) +
+            ", the vault owner. It changes what every user of this network pays from the next block, " +
+            "and cannot be undone except by sending another one." +
+          "</p>"
+        : '<p class="fee-note locked">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+              '<rect x="4" y="10.5" width="16" height="10" rx="2" />' +
+              '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />' +
+            "</svg>" +
+            "<span>" + (vault.ownedByRelayer === false
+              ? "This vault is owned by " + escapeHtml(vault.owner ? shortenAddress(vault.owner) : "another address") +
+                ", not by the key this backend signs with, so these fees have to be changed from that key."
+              : "The vault owner could not be read, so no change can be attempted from here.") +
+            "</span>" +
+          "</p>";
+
+      return '<div class="wallet-block">' +
+        "<h4>Fee settings" +
+          (vault.maxFeePercent != null
+            ? '<span class="chip">max ' + vault.maxFeePercent + "%</span>"
+            : "") +
+        "</h4>" +
+        '<div class="fee-editor" style="margin-top:0;padding-top:0;border-top:0">' +
+          swapRow + autoRow +
+        "</div>" +
+        '<div style="margin-top:9px">' + recipientRow + cancelRow + "</div>" +
+        gate +
+        '<p class="fee-result" data-result="' + network.chainId + '" role="status" hidden></p>' +
+      "</div>";
+    }
+
+    /**
+     * Send one fee change.
+     *
+     * Confirmed explicitly before anything is signed, and the prompt names the network, the old
+     * value and the new one — this is not a preference, it is what every user of that network pays
+     * from the next block. The button is held disabled for the whole round trip because the backend
+     * waits for the receipt before answering, and a second click in that window would send a second
+     * transaction.
+     */
+    async function saveFee(button) {
+      const chainId = Number(button.dataset.chainId);
+      const kind = button.dataset.save;
+      const network = ((state.wallets && state.wallets.networks) || [])
+        .find(function (n) { return n.chainId === chainId; });
+      if (!network) return;
+
+      const input = document.querySelector('input[data-fee="' + kind + '"][data-chain-id="' + chainId + '"]');
+      const result = document.querySelector('[data-result="' + chainId + '"]');
+      const say = function (message, tone) {
+        result.textContent = message;
+        result.className = "fee-result " + tone;
+        result.hidden = !message;
+      };
+
+      const token = el.adminToken.value.trim();
+      if (!token) {
+        say("Enter the admin token above to change a fee.", "err");
+        el.adminToken.focus();
+        return;
+      }
+
+      const value = Number(input.value);
+      if (!isFinite(value) || value < 0) {
+        say("Enter a number of zero or more.", "err");
+        input.focus();
+        return;
+      }
+
+      const isSwap = kind === "swap";
+      const current = isSwap ? network.vault.feePercent : network.vault.autoPlanFeeUsd;
+      if (current != null && Math.abs(current - value) < 1e-9) {
+        say("That is already the current value.", "err");
+        return;
+      }
+      if (isSwap && network.vault.maxFeePercent != null && value > network.vault.maxFeePercent) {
+        say("The vault caps this at " + network.vault.maxFeePercent + "%.", "err");
+        return;
+      }
+
+      const label = isSwap
+        ? "the swap fee from " + (current != null ? current + "%" : "its current value") + " to " + value + "%"
+        : "the extra auto-plan fee from " + money(current) + " to " + money(value);
+      if (!window.confirm(
+        "Change " + label + " on " + network.name + "?\n\n" +
+        "This sends a transaction from the vault owner and takes effect from the next block. " +
+        "Every user of this network is charged the new amount, and undoing it means sending another " +
+        "transaction.",
+      )) return;
+
+      const previous = button.textContent;
+      button.disabled = true;
+      input.disabled = true;
+      button.textContent = "Sending…";
+      say("Waiting for the transaction to confirm…", "ok");
+
+      try {
+        const response = await fetch(
+          "/api/admin/treasury/" + (isSwap ? "swap-fee" : "auto-plan-fee"),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-admin-token": token },
+            body: JSON.stringify(
+              isSwap ? { chainId: chainId, percent: value } : { chainId: chainId, usd: value },
+            ),
+          },
+        );
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || data.message || "HTTP " + response.status);
+
+        // The backend answers with the value read back off the chain, not the one requested.
+        const confirmed = isSwap ? data.feePercent : data.autoPlanFeeUsd;
+        say(
+          "Confirmed. Now " + (isSwap ? confirmed + "%" : money(confirmed)) +
+          " · " + shortenAddress(data.txHash || ""),
+          "ok",
+        );
+        await load(true);
+      } catch (error) {
+        button.disabled = false;
+        input.disabled = false;
+        button.textContent = previous;
+        say("Failed: " + error.message, "err");
+      }
     }
 
     function alert(message, isWarning) {
@@ -979,8 +1463,29 @@
        entity, never its rank, so filtering one network out never repaints the rest.
        ========================================================================================== */
 
+    /** chainId -> "mainnet" | "testnet", from the network registry the wallets payload carries. */
+    function realmOf(chainId) {
+      const networks = (state.wallets && state.wallets.networks) || [];
+      const match = networks.find(function (network) { return network.chainId === chainId; });
+      return match ? match.type : null;
+    }
+
+    /**
+     * Both filters at once: the realm segmented control, then the network chips within it.
+     *
+     * The realm is applied first and always. A chain whose type is unknown — deployed but not in
+     * the registry — is only shown under "Both", so it can never be counted silently into a
+     * mainnet total.
+     */
     function inFilter(item) {
+      if (state.realm !== "all" && realmOf(item.chainId) !== state.realm) return false;
       return state.chains == null || state.chains.has(item.chainId);
+    }
+
+    function networksInRealm() {
+      const networks = (state.wallets && state.wallets.networks) || [];
+      if (state.realm === "all") return networks;
+      return networks.filter(function (network) { return network.type === state.realm; });
     }
 
     function filteredFlows() {
@@ -1036,7 +1541,9 @@
     }
 
     function renderChips() {
-      const networks = (state.wallets && state.wallets.networks) || [];
+      // Only the networks in the current realm: a mainnet view offering a testnet chip would let
+      // one click produce a slice that is neither.
+      const networks = networksInRealm();
       const counts = new Map();
       for (const flow of (state.flows ? state.flows.flows : [])) {
         counts.set(flow.chainId, (counts.get(flow.chainId) || 0) + 1);
@@ -1057,13 +1564,15 @@
       if (!state.flows || !state.wallets) return;
       const view = slice();
 
+      renderRealmToggle();
       renderChips();
-      renderHero(view, state.wallets);
+      picker.render();
+      renderHero(view);
       renderTrend(view.daily);
       renderMargin(view.daily);
       renderNetworkBars(view.byNetwork);
       renderTokenBars(view.byToken);
-      renderWallets(state.wallets);
+      renderWallets();
       renderLedger(view.flows);
 
       const window_ = state.flows.window;
@@ -1140,9 +1649,40 @@
       renderAll();
     });
 
-    el.windowSelect.addEventListener("change", function () {
-      state.runs = Number(el.windowSelect.value) || 50;
-      load(false);
+    el.realmToggle.addEventListener("click", function (event) {
+      const button = event.target.closest("button[data-realm]");
+      if (!button || button.dataset.realm === state.realm) return;
+      state.realm = button.dataset.realm;
+      // Chain chips are scoped to the realm, so a selection made under one realm would silently
+      // filter everything to nothing under another. Cleared rather than carried across.
+      state.chains = null;
+      state.ledgerLimit = 40;
+      renderAll();
+    });
+
+    // Saving a fee is delegated from the wallet container, because the cards are re-rendered on
+    // every refresh and per-button listeners would be lost with them.
+    el.wallets.addEventListener("click", function (event) {
+      const button = event.target.closest("button[data-save]");
+      if (button && !button.disabled) saveFee(button);
+    });
+
+    /* The admin token is a shared operator secret, not a per-user credential — same storage key as
+       the plan-activity and run-price pages, so entering it on any one unlocks the others. */
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    try {
+      el.adminToken.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
+    } catch (e) {
+      /* private browsing refuses localStorage; the field still works for this page load */
+    }
+    el.adminToken.addEventListener("change", function () {
+      try {
+        const value = el.adminToken.value.trim();
+        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch (e) {
+        /* as above — not remembering it is not a reason to fail the action */
+      }
     });
 
     el.ledgerMore.addEventListener("click", function () {

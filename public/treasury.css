@@ -33,6 +33,360 @@
   --viz-critical: #d03b3b;
 }
 
+/* ---- History picker ------------------------------------------------------------------------
+   A listbox rather than a native <select>, because the useful thing to say about each window is
+   what it contains — how many runs are actually there, how many executions, and the dates they
+   span — and a <select> can only render one line of unstyled text per option.
+
+   Presets as rows, selection marked by a bold check, hover kept a ghost wash so it never competes
+   with the selected row. */
+
+.picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.picker-button:hover {
+  border-color: var(--border-strong);
+  background: #131c2f;
+}
+
+.picker-button:focus-visible {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
+}
+
+.picker-button .picker-current {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+
+.picker-button .picker-current small {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.picker-caret {
+  width: 13px;
+  height: 13px;
+  margin-left: 2px;
+  color: var(--dim);
+  transition: transform 180ms ease;
+}
+
+.picker[data-open="true"] .picker-caret {
+  transform: rotate(180deg);
+}
+
+.picker-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 268px;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: rgba(12, 18, 32, 0.98);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+}
+
+.picker-menu[hidden] {
+  display: none;
+}
+
+.picker-option {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A ghost wash — present enough to track the pointer, quiet enough that the check still reads as
+   the selection. */
+.picker-option:hover,
+.picker-option[data-active="true"] {
+  background: rgba(110, 140, 255, 0.09);
+}
+
+.picker-option[aria-selected="true"] {
+  background: rgba(110, 140, 255, 0.14);
+}
+
+.picker-check {
+  width: 16px;
+  height: 16px;
+  color: var(--series-1);
+  opacity: 0;
+}
+
+.picker-option[aria-selected="true"] .picker-check {
+  opacity: 1;
+}
+
+.picker-option b {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 750;
+}
+
+.picker-option span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A window with nothing in it stays selectable — "is there anything there?" is a real question,
+   and greying it out answers it while refusing to let you look. */
+.picker-option.empty b,
+.picker-option.empty span {
+  color: var(--dim);
+}
+
+.picker-foot {
+  margin-top: 5px;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+/* ---- Mainnet / testnet segmented control ----------------------------------------------------
+   The first thing scoping the page, because a testnet dollar and a mainnet dollar are not the
+   same unit and summing them produces a number that means nothing. */
+
+.segmented {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button[aria-pressed="true"] {
+  color: var(--text);
+  background: rgba(110, 140, 255, 0.16);
+}
+
+.segmented button .seg-count {
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(141, 159, 199, 0.16);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented button[aria-pressed="true"] .seg-count {
+  color: var(--text);
+  background: rgba(110, 140, 255, 0.3);
+}
+
+/* Shown whenever the current view includes testnets, because their USD figures are notional. */
+.notional-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 10px 12px;
+  border: 1px solid rgba(250, 178, 25, 0.3);
+  border-radius: 11px;
+  color: #ffdda1;
+  background: rgba(250, 178, 25, 0.07);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.notional-note[hidden] {
+  display: none;
+}
+
+.notional-note svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+
+/* ---- Fee editor -----------------------------------------------------------------------------
+   These inputs send a transaction that changes what every user of a network pays. They are gated
+   on the admin token, on the signing key owning the vault, and on an explicit confirmation. */
+
+.fee-editor {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(141, 159, 199, 0.09);
+}
+
+.fee-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.fee-row label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.fee-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.fee-input input {
+  width: 86px;
+  min-height: 30px;
+  padding: 5px 26px 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(5, 9, 17, 0.5);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+
+.fee-input input::-webkit-outer-spin-button,
+.fee-input input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.fee-input input:focus {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.5);
+}
+
+.fee-input input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.fee-unit {
+  position: absolute;
+  right: 9px;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.fee-row .button {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 10px;
+}
+
+.fee-note {
+  margin: 8px 0 0;
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.fee-note.locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.fee-note.locked svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+}
+
+.fee-result {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.fee-result.ok {
+  color: #a9efd0;
+}
+
+.fee-result.err {
+  color: #ffc0cb;
+}
+
+.fee-result[hidden] {
+  display: none;
+}
+
 /* ---- Hero figure & stat tiles -------------------------------------------------------------
    The number a page leads with is not a one-bar bar chart. Exactly one hero per view; every other
    standalone value is a tile. */

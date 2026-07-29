@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { HistoryModule } from '../history/history.module';
 import { TreasuryController } from './treasury.controller';
+import { TreasuryAdminController } from './treasury-admin.controller';
 import { TreasuryService } from './treasury.service';
 
 /**
@@ -9,7 +10,7 @@ import { TreasuryService } from './treasury.service';
  */
 @Module({
   imports: [HistoryModule],
-  controllers: [TreasuryController],
+  controllers: [TreasuryController, TreasuryAdminController],
   providers: [TreasuryService],
 })
 export class TreasuryModule {}

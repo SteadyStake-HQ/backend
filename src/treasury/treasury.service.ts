@@ -27,8 +27,15 @@
  * other networks whole; it never takes the page down.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import { createPublicClient, formatUnits, http, type PublicClient } from 'viem';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  createPublicClient,
+  createWalletClient,
+  formatUnits,
+  http,
+  parseUnits,
+  type PublicClient,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
   CHAIN_NAMES,
@@ -64,6 +71,30 @@ const VAULT_READ_ABI = [
   { type: 'function', name: 'additionalAutoPlanFeeUsdc6', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { type: 'function', name: 'autoPlanFeeRecipient', inputs: [], outputs: [{ type: 'address' }], stateMutability: 'view' },
 ] as const;
+
+const VAULT_WRITE_ABI = [
+  { type: 'function', name: 'setFeePercentage', inputs: [{ name: 'newFee', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
+  { type: 'function', name: 'setAdditionalAutoPlanFeeUsdc6', inputs: [{ name: 'feeUsdc6', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
+] as const;
+
+/**
+ * The fee ceiling the contract enforces, in its own unit of hundredths of a percent, and the scale
+ * it divides by. Mirrored from DCAVault.sol (MAX_FEE, FEE_PRECISION) so a rejected value is caught
+ * here with a sentence rather than as an opaque revert.
+ */
+const MAX_FEE_BPS = 500;
+
+/**
+ * The early-cancellation fee, as a percentage.
+ *
+ * A `constant` in DCAVault.sol, which means it is compiled into every deployed vault's bytecode and
+ * there is no setter for it — not a permission this backend lacks, but a function that does not
+ * exist. Surfaced here so the dashboard can state the real figure and say plainly that changing it
+ * needs a contract change and a redeployment, rather than offering an input that cannot work.
+ */
+const EARLY_CANCEL_FEE_PERCENT = 3;
+/** Remaining balance above this share of the original total still counts as an early exit. */
+const EARLY_CANCEL_THRESHOLD_PERCENT = 50;
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -126,6 +157,16 @@ export interface TreasuryWalletNetwork {
     claimableUsd: number | null;
     /** Swap fee, as a percentage (0.25 means 0.25%). */
     feePercent: number | null;
+    /** The ceiling `setFeePercentage` enforces, as a percentage. */
+    maxFeePercent: number;
+    /** Compiled into the bytecode; reported so the page can show it and explain why it is fixed. */
+    earlyCancelFeePercent: number;
+    earlyCancelThresholdPercent: number;
+    /**
+     * True when the relayer key this backend holds is the vault's owner, i.e. when the fee editors
+     * on the dashboard can actually work. Null when either address is unknown.
+     */
+    ownedByRelayer: boolean | null;
     /** Flat fee for a user's second and later auto plans. */
     autoPlanFeeRaw: string | null;
     autoPlanFeeUsd: number | null;
@@ -255,7 +296,23 @@ export interface TreasuryFlowsPayload {
     unpricedExecutions: number;
   };
   window: { from: string | null; to: string | null; runs: number };
+  /**
+   * What each selectable window actually contains, so the history picker can say so instead of
+   * offering three indistinguishable run counts. Derived from one read of the largest window, so
+   * describing all three costs nothing beyond the read the request already makes.
+   */
+  windowOptions: Array<{
+    runs: number;
+    /** Runs actually available at this size — smaller than `runs` before enough have accumulated. */
+    availableRuns: number;
+    executions: number;
+    from: string | null;
+    to: string | null;
+  }>;
 }
+
+/** The windows the dashboard offers. The largest is also the cap the history API enforces. */
+const WINDOW_SIZES = [25, 50, 100] as const;
 
 @Injectable()
 export class TreasuryService {
@@ -412,6 +469,10 @@ export class TreasuryService {
         claimableRaw: null,
         claimableUsd: null,
         feePercent: null,
+        maxFeePercent: (MAX_FEE_BPS / FEE_PRECISION) * 100,
+        earlyCancelFeePercent: EARLY_CANCEL_FEE_PERCENT,
+        earlyCancelThresholdPercent: EARLY_CANCEL_THRESHOLD_PERCENT,
+        ownedByRelayer: null,
         autoPlanFeeRaw: null,
         autoPlanFeeUsd: null,
         autoPlanFeeRecipient: null,
@@ -534,6 +595,13 @@ export class TreasuryService {
           claimableRaw: claimable?.toString() ?? null,
           claimableUsd: toStable(claimable),
           feePercent: feeBps != null ? (Number(feeBps) / FEE_PRECISION) * 100 : null,
+          maxFeePercent: (MAX_FEE_BPS / FEE_PRECISION) * 100,
+          earlyCancelFeePercent: EARLY_CANCEL_FEE_PERCENT,
+          earlyCancelThresholdPercent: EARLY_CANCEL_THRESHOLD_PERCENT,
+          ownedByRelayer:
+            vaultOwner == null || relayer == null
+              ? null
+              : vaultOwner.toLowerCase() === relayer.toLowerCase(),
           autoPlanFeeRaw: autoPlanFee?.toString() ?? null,
           autoPlanFeeUsd: toStable(autoPlanFee),
           autoPlanFeeRecipient: autoPlanRecipient,
@@ -559,6 +627,154 @@ export class TreasuryService {
    * simulated question (run-cost.ts), and mixing a projection into a "how many runs left" number
    * would make it move for reasons that have nothing to do with the balance it is about.
    */
+  /* ==========================================================================================
+     Fee writes
+
+     These are the only calls in this service that change anything. Each one follows the same
+     three steps, in this order, and none of them is optional:
+
+       1. **Check the signer owns the vault.** `onlyOwner` reverts otherwise, and "execution
+          reverted" tells an operator nothing about which of the several possible causes it was.
+       2. **Simulate.** The contract's own `require` is the authority on what it will accept; a
+          simulation surfaces that as its real message before any gas is spent.
+       3. **Wait for the receipt, and re-read.** A submitted transaction is not a changed fee. The
+          value returned is the one read back from the chain afterwards, so the dashboard shows
+          what is true rather than what was asked for.
+     ========================================================================================== */
+
+  /** Set DCAVault.feePercentage. `percent` is a percentage: 0.25 means 0.25%. */
+  async setSwapFeePercent(chainId: number, percent: number) {
+    if (percent > (MAX_FEE_BPS / FEE_PRECISION) * 100) {
+      throw new BadRequestException({
+        ok: false,
+        error: `The vault caps its swap fee at ${(MAX_FEE_BPS / FEE_PRECISION) * 100}%; ${percent}% would revert.`,
+      });
+    }
+
+    // The contract's unit is hundredths of a percent, and it takes a uint — a fraction of one is
+    // not representable, so it is refused here rather than silently rounded to a different fee.
+    const bps = percent * FEE_PRECISION / 100;
+    if (!Number.isInteger(bps)) {
+      throw new BadRequestException({
+        ok: false,
+        error:
+          `The vault stores this fee in hundredths of a percent, so ${percent}% cannot be set exactly. ` +
+          `Use a multiple of 0.01% (for example ${(Math.round(bps) / 100).toFixed(2)}%).`,
+      });
+    }
+
+    const { hash } = await this.writeToVault(chainId, 'setFeePercentage', [BigInt(bps)]);
+    const after = await this.readVaultNumber(chainId, 'feePercentage');
+    return {
+      ok: true,
+      chainId,
+      txHash: hash,
+      /** Read back from the chain, not echoed from the request. */
+      feePercent: after != null ? (Number(after) / FEE_PRECISION) * 100 : null,
+    };
+  }
+
+  /** Set DCAVault.additionalAutoPlanFeeUsdc6. `usd` is whole stablecoin: 10 means $10. */
+  async setAutoPlanFeeUsd(chainId: number, usd: number) {
+    // Scaled by the chain's own stablecoin decimals rather than a fixed 1e6: the contract transfers
+    // this amount of the settlement token directly, and on BSC that token has 18 decimals. The
+    // `Usdc6` in the field name predates per-chain decimals and is a misnomer (see config.ts).
+    const decimals = getStableDecimals(chainId);
+    let raw: bigint;
+    try {
+      raw = parseUnits(String(usd), decimals);
+    } catch {
+      throw new BadRequestException({
+        ok: false,
+        error: `${usd} is not a valid amount for a ${decimals}-decimal token.`,
+      });
+    }
+
+    const { hash } = await this.writeToVault(chainId, 'setAdditionalAutoPlanFeeUsdc6', [raw]);
+    const after = await this.readVaultNumber(chainId, 'additionalAutoPlanFeeUsdc6');
+    return {
+      ok: true,
+      chainId,
+      txHash: hash,
+      autoPlanFeeUsd: after != null ? Number(formatUnits(after, decimals)) : null,
+    };
+  }
+
+  /** Sign, simulate and send one owner-only vault call. Throws with a readable reason on any leg. */
+  private async writeToVault(
+    chainId: number,
+    functionName: 'setFeePercentage' | 'setAdditionalAutoPlanFeeUsdc6',
+    args: readonly [bigint],
+  ): Promise<{ hash: string }> {
+    const pk = process.env.RELAYER_PRIVATE_KEY?.trim();
+    if (!pk) {
+      throw new BadRequestException({
+        ok: false,
+        error: 'RELAYER_PRIVATE_KEY is not set on this backend, so nothing here can sign a transaction.',
+      });
+    }
+
+    const cfg = getVaultUsdcGasTank(chainId);
+    const rpc = getRpc(chainId);
+    const chain = getChain(chainId);
+    if (!cfg || !rpc || !chain) {
+      throw new BadRequestException({
+        ok: false,
+        error: `Chain ${chainId} has no deployed vault or no RPC configured.`,
+      });
+    }
+
+    const account = privateKeyToAccount((pk.startsWith('0x') ? pk : `0x${pk}`) as `0x${string}`);
+    const vault = cfg.vault as `0x${string}`;
+    const publicClient = createPublicClient({ chain, transport: http(rpc, { timeout: RPC_TIMEOUT_MS }) });
+    const walletClient = createWalletClient({ account, chain, transport: http(rpc, { timeout: RPC_TIMEOUT_MS }) });
+
+    const owner = (await publicClient
+      .readContract({ address: vault, abi: VAULT_READ_ABI, functionName: 'owner' })
+      .catch(() => null)) as string | null;
+    if (owner && owner.toLowerCase() !== account.address.toLowerCase()) {
+      throw new BadRequestException({
+        ok: false,
+        error:
+          `This backend signs as ${account.address}, but the vault on chain ${chainId} is owned by ` +
+          `${owner}. Only the owner can change its fees, so this change has to be sent from that key.`,
+      });
+    }
+
+    try {
+      await publicClient.simulateContract({ account, address: vault, abi: VAULT_WRITE_ABI, functionName, args });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException({ ok: false, error: `The vault refused this change: ${reason}` });
+    }
+
+    const hash = await walletClient.writeContract({ address: vault, abi: VAULT_WRITE_ABI, functionName, args });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success') {
+      throw new BadRequestException({
+        ok: false,
+        error: `The transaction reverted on chain (${hash}). The fee is unchanged.`,
+      });
+    }
+
+    // The cached wallet payload now describes a vault that no longer exists as described.
+    this.walletsCache = null;
+    this.logger.log(`${functionName}(${args[0]}) on chain ${chainId} confirmed in ${hash}.`);
+    return { hash };
+  }
+
+  private async readVaultNumber(
+    chainId: number,
+    functionName: 'feePercentage' | 'additionalAutoPlanFeeUsdc6',
+  ): Promise<bigint | null> {
+    const cfg = getVaultUsdcGasTank(chainId);
+    const client = this.client(chainId);
+    if (!cfg || !client) return null;
+    return (await client
+      .readContract({ address: cfg.vault as `0x${string}`, abi: VAULT_READ_ABI, functionName })
+      .catch(() => null)) as bigint | null;
+  }
+
   private async spendPerRunByChain(): Promise<Map<number, number>> {
     const runs = await this.history.getRuns(100);
     const totals = new Map<number, { usd: number; count: number }>();
@@ -586,7 +802,13 @@ export class TreasuryService {
    * identities have to be read from the chains anyway.
    */
   async getFlows(limit = 50): Promise<TreasuryFlowsPayload> {
-    const runs = await this.history.getRuns(Math.min(Math.max(limit, 1), 100));
+    const size = Math.min(Math.max(limit, 1), WINDOW_SIZES[WINDOW_SIZES.length - 1]);
+
+    // The largest window is read whatever was asked for, and the requested one is a slice of it.
+    // That is one query either way, and it is what lets the history picker describe every option
+    // rather than presenting three run counts that mean nothing until one is chosen.
+    const allRuns = await this.history.getRuns(WINDOW_SIZES[WINDOW_SIZES.length - 1]);
+    const runs = allRuns.slice(0, size);
 
     // Prices for the chains that appear, before anything is priced: a per-flow price lookup would
     // be dozens of identical requests, and the batched call is what keeps the feeds from 429ing.
@@ -651,6 +873,19 @@ export class TreasuryService {
         to: flows.length ? flows[0].at : null,
         runs: runs.length,
       },
+      windowOptions: WINDOW_SIZES.map((windowSize) => {
+        const slice = allRuns.slice(0, windowSize);
+        const withTimes = slice.filter((run) => (run.executedTasks ?? []).length > 0);
+        return {
+          runs: windowSize,
+          availableRuns: slice.length,
+          executions: slice.reduce((sum, run) => sum + (run.executedTasks ?? []).length, 0),
+          // The span of the runs that *executed* something, not of every run: a window whose recent
+          // runs all found nothing due would otherwise report a range with no activity in it.
+          from: withTimes.length ? withTimes[withTimes.length - 1].at : null,
+          to: withTimes.length ? withTimes[0].at : null,
+        };
+      }),
     };
   }
 
