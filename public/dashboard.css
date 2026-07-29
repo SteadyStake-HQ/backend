@@ -1906,3 +1906,74 @@ a.addr:hover {
   border-color: rgba(245, 181, 94, 0.26);
   background: rgba(245, 181, 94, 0.1);
 }
+
+/* Each network's live figures arrive on their own, so each is a placeholder until it does.
+   A skeleton says "still coming" where an em dash would have said "there is nothing here". */
+.skel {
+  display: inline-block;
+  height: 11px;
+  max-width: 100%;
+  border-radius: 4px;
+  vertical-align: middle;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 214, 0.1) 25%,
+    rgba(148, 163, 214, 0.22) 37%,
+    rgba(148, 163, 214, 0.1) 63%
+  );
+  background-size: 400% 100%;
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+
+.price-value .skel {
+  height: 22px;
+  border-radius: 6px;
+}
+
+.chip.pending {
+  color: transparent;
+  border-color: var(--border);
+  background: transparent;
+}
+
+@keyframes skel-sweep {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+/* Inline "try again" inside a failure note — a button that reads as part of the sentence. */
+.link-button {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--text);
+}
+
+/* A card redrawn in place has already made its entrance. */
+.price-card.settled {
+  animation: none;
+}
+
+/* The gas and native-price rows carry a parenthetical saying where the number came from. Addresses
+   are nowrap for good reason; a sentence in the same slot has to wrap instead of leaving the card. */
+.price-card .row .val {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.price-card .row .addr {
+  white-space: normal;
+}

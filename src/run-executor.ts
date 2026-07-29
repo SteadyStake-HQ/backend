@@ -24,6 +24,7 @@ import {
 } from "./plans/plan-execution-state";
 import { recordRunGas } from "./gas-profile";
 import { getRunPriceUsdc6, refreshRunPrices } from "./run-price";
+import { getNativePriceUsd, prefetchNativePrices } from "./native-price";
 import {
   createPublicClient,
   createWalletClient,
@@ -36,62 +37,6 @@ import { privateKeyToAccount } from "viem/accounts";
 import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, getStableOne, toPooledUsd6, convertStableAmount, CHAIN_NAMES } from "./config";
 
 const ZERO_EX_BASE = "https://api.0x.org";
-
-/** Coingecko asset IDs for native token price (USD). */
-const COINGECKO_IDS: Record<number, string> = {
-  8453: "ethereum",
-  84532: "ethereum",
-  11155111: "ethereum", // Ethereum Sepolia
-  56: "binancecoin",
-  // POL, not MATIC: CoinGecko retired "matic-network" after the token migration and it now
-  // returns an empty object, which read as a 0 price for every Polygon run-cost estimate.
-  137: "polygon-ecosystem-token",
-  2222: "kava",
-  // BOT Chain mainnet. CoinGecko's "bot" is the fallback leg of the mainnet BOT fetch
-  // (getBotMainnetPriceUsd) — the BOT Chain DEX pool price is tried first. Testnet 968 is
-  // pinned via STATIC_PRICE_USD, not fetched.
-  677: "bot",
-};
-
-/**
- * Statically pinned native USD prices. BOT Chain testnet (968) tBOT is a faucet token with no
- * real market: a feed either has no quote or hands back mainnet BOT's number, a different token
- * at a different price. Pinning it keeps gas cost stable and unmistakably a testnet figure.
- */
-const STATIC_PRICE_USD: Record<number, number> = {
-  968: 130,
-};
-
-/**
- * BOT Chain mainnet (677) BOT price is fetched from two independent sources so a single outage
- * does not zero the quote (which would leave the GasTank undebited): the chain's own DEX pool
- * price for WBOT first, CoinGecko's "bot" ticker as the fallback. WBOT address on the price graph.
- */
-const BOT_MAINNET_PRICE_TOKEN = "0xD5452816194a3784dBa983426cCe7c122F4abd30";
-
-/** BOT Chain DEX pool price for WBOT, in USD. 0 on any failure so a fallback can take over. */
-async function fetchBotDexPriceUsd(): Promise<number> {
-  try {
-    const res = await fetch(
-      `https://dex-wallet.botchain.ai/api/graph/price?token=${BOT_MAINNET_PRICE_TOKEN}`
-    );
-    if (!res.ok) return 0;
-    const json = (await res.json()) as { success?: boolean; data?: { price?: string } };
-    if (!json.success) return 0;
-    const usd = parseFloat(json.data?.price ?? "");
-    return Number.isFinite(usd) && usd > 0 ? usd : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** Manual native-token USD price per chain: NATIVE_PRICE_USD_<chainId>. Wins over CoinGecko. */
-function getNativePriceOverride(chainId: number): number | null {
-  const raw = process.env[`NATIVE_PRICE_USD_${chainId}`]?.trim();
-  if (!raw) return null;
-  const n = parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
 
 const GAS_LIMIT_EXECUTE_SWAP = 400_000n;
 const ESTIMATE_BUFFER_BPS = 15000; // 1.5x for balance check
@@ -111,70 +56,6 @@ async function getNextRelayerNonce(
   const nextNonce = cachedNonce != null && cachedNonce > pendingNonce ? cachedNonce : pendingNonce;
   relayerNonceByChain.set(chainId, nextNonce + 1);
   return nextNonce;
-}
-
-/** CoinGecko price in USD for a single chain's native token. 0 on failure or when unlisted. */
-async function fetchCoingeckoPriceUsd(chainId: number): Promise<number> {
-  const id = COINGECKO_IDS[chainId];
-  if (!id) return 0;
-  try {
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`
-    );
-    if (!res.ok) return 0;
-    const data = (await res.json()) as Record<string, { usd?: number }>;
-    return data[id]?.usd ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** Mainnet BOT price: BOT Chain DEX pool first, CoinGecko as fallback. 0 if both fail. */
-async function getBotMainnetPriceUsd(): Promise<number> {
-  const dex = await fetchBotDexPriceUsd();
-  if (dex > 0) return dex;
-  return fetchCoingeckoPriceUsd(677);
-}
-
-/** Fetch native token price in USD. Cached per chain for the run. */
-const nativePriceCache: Record<number, number> = {};
-export async function getNativePriceUsd(chainId: number): Promise<number> {
-  const override = getNativePriceOverride(chainId);
-  if (override != null) return override;
-  const staticUsd = STATIC_PRICE_USD[chainId];
-  if (staticUsd != null) return staticUsd;
-  if (nativePriceCache[chainId] != null) return nativePriceCache[chainId];
-  const price = chainId === 677 ? await getBotMainnetPriceUsd() : await fetchCoingeckoPriceUsd(chainId);
-  if (price > 0) nativePriceCache[chainId] = price;
-  return price;
-}
-
-/** Pre-fill native price cache for multiple chains. CoinGecko chains batch into one request. */
-async function prefetchNativePrices(chainIds: number[]): Promise<void> {
-  // Pinned (testnet) chains never hit a feed; BOT mainnet uses its own DEX path, not the batch.
-  const cgChains = chainIds.filter((cid) => cid !== 677 && STATIC_PRICE_USD[cid] == null);
-  const ids = [...new Set(cgChains.map((cid) => COINGECKO_IDS[cid]).filter(Boolean))] as string[];
-  if (ids.length > 0) {
-    try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids.map((id) => encodeURIComponent(id)).join(",")}&vs_currencies=usd`
-      );
-      if (res.ok) {
-        const data = (await res.json()) as Record<string, { usd?: number }>;
-        for (const cid of cgChains) {
-          const id = COINGECKO_IDS[cid];
-          if (id && data[id]?.usd != null) nativePriceCache[cid] = data[id].usd!;
-        }
-      }
-    } catch {
-      // fallback: individual fetches already work via getNativePriceUsd
-    }
-  }
-  // Warm BOT mainnet via its DEX-first path so the batch above never shadows it with a bare ticker.
-  if (chainIds.includes(677) && nativePriceCache[677] == null) {
-    const price = await getBotMainnetPriceUsd();
-    if (price > 0) nativePriceCache[677] = price;
-  }
 }
 
 /**
@@ -277,7 +158,7 @@ export const DCA_VAULT_ABI = [
   },
 ] as const;
 
-const GAS_TANK_ABI = [
+export const GAS_TANK_ABI = [
   { type: "function", name: "balanceOf", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "gasCostPerExecutionUsdc6", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   {
@@ -355,7 +236,7 @@ export function getAllowedChainIds(): Set<number> {
  *  - it reports "routable but no liquidity" as `liquidityAvailable: false` with a 200, so the
  *    status code alone is not enough to tell a usable quote from an empty one.
  */
-async function get0xQuote(
+export async function get0xQuote(
   chainId: number,
   sellToken: string,
   buyToken: string,
@@ -385,7 +266,7 @@ async function get0xQuote(
   return json.transaction?.data ?? null;
 }
 
-function netAmountAfterFee(amount: bigint, feeBps: number): bigint {
+export function netAmountAfterFee(amount: bigint, feeBps: number): bigint {
   const fee = (amount * BigInt(feeBps)) / 10000n;
   return amount - fee;
 }
@@ -624,7 +505,10 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     return { ok: true, executed: 0, executedTasks: [], errors: [] };
   }
   log(`Allowed chains for execution: ${[...allowedChains].sort((a, b) => a - b).join(", ")} (from ${chainSource})`);
-  Object.keys(nativePriceCache).forEach((k) => delete nativePriceCache[Number(k)]);
+  // The native price cache used to be cleared here because it never expired and a long-lived
+  // process would otherwise price every future run at the first quote it ever saw. It now ages
+  // out on its own (native-price.ts), so a sweep gets a fresh price without discarding one that
+  // is seconds old — which matters when the feeds are throttling and a refetch may return nothing.
   const members = isTargetedRun
     ? [
         ...new Set(

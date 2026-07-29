@@ -39,12 +39,35 @@ plan run its tank dry mid-way:
 3. **`GAS_COST_PER_EXECUTION_USDC`** for a chain where neither is set.
 4. Otherwise each run is charged what it measured, so the amount moves with gas.
 
-The dashboard page shows each network's flat rate beside what a run costs the relayer right now —
-live gas price × gas measured from real runs (`src/gas-profile.ts`) × native token price — so a
-rate is set against the live cost rather than guessed, and a rate that has drifted far from it is
-called out. `GET /api/run-price` is open (it is the same figure every user is already shown);
-`POST` needs `ADMIN_API_TOKEN`. A change reaches the executor within ~30s and the app within about
-two minutes of caching.
+The dashboard page shows each network's flat rate beside what a run costs the relayer right now:
+**live gas price × the gas a run burns × the native token's USD price**. `POST /api/run-price`
+needs `ADMIN_API_TOKEN`; the GETs are open, because they are the same figure every user is already
+shown. A change reaches the executor within ~30s and the app within about two minutes of caching.
+
+The gas figure is the one that used to be assumed, and `src/run-cost.ts` now resolves it best-first,
+labelling every card with which step answered:
+
+1. **simulated** — a real plan on that network is picked, the exact calldata the relayer would send
+   is built for it (a live 0x quote included, on aggregator chains), and both transactions —
+   `executeSwap` and `recordExecution` — are put through `eth_estimateGas` from the relayer's own
+   address. Only a plan past its cooldown can be simulated: `executeSwap` on one still inside its
+   interval reverts, and a reverting call cannot be estimated.
+2. **measured** — the median of what recent completed runs on that chain really used
+   (`src/gas-profile.ts`).
+3. **seed** — the pre-measurement constant for that chain's swap path.
+
+Two endpoints, split because they have different costs:
+
+- `GET /api/run-price` — every network's stored price, and nothing that needs a network. Immediate.
+- `GET /api/run-price/live?chainId=<id>` — **one** network's GasTank rate and live cost. The page
+  draws its cards from the first call and fills each one in from this one, per network. Batching
+  these let the slowest chain set the speed of the whole page, and let one throttled price feed
+  blank every network's live cost at once.
+
+Native token prices (`src/native-price.ts`) come from CoinGecko in a single batched request, with
+Coinbase and Binance behind it and BOT Chain's own DEX in front of it for BOT. A price that was
+good a minute ago is served (flagged as such) rather than discarded when every feed is failing,
+and `NATIVE_PRICE_USD_<chainId>` overrides the lot.
 
 ## Network allocation
 
