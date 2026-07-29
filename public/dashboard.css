@@ -1672,9 +1672,11 @@ a.addr:hover {
 .prow-head,
 .prow-main {
   display: grid;
+  /* Status carries up to four badges and the action holds "Auto Executing…", so both get a
+     track wide enough to keep them on one line rather than wrapping mid-row. */
   grid-template-columns:
     26px minmax(92px, 0.85fr) 84px 116px minmax(150px, 1.35fr)
-    104px 82px minmax(132px, 0.9fr) 122px;
+    104px 82px minmax(200px, 1.2fr) 150px;
   align-items: center;
   gap: 10px;
 }
@@ -1863,6 +1865,8 @@ a.addr:hover {
   justify-content: center;
   padding: 7px 9px;
   font-size: 10px;
+  /* The row is one line tall; a label that wraps ("Auto Executing…") would push it taller. */
+  white-space: nowrap;
 }
 
 .prow-detail {
@@ -1898,7 +1902,7 @@ a.addr:hover {
   .prow-head,
   .prow-main {
     grid-template-columns:
-      26px minmax(80px, 0.8fr) 76px minmax(140px, 1.3fr) 96px 78px minmax(120px, 0.8fr) 118px;
+      26px minmax(80px, 0.8fr) 76px minmax(140px, 1.3fr) 96px 78px minmax(184px, 1.05fr) 146px;
   }
 }
 
