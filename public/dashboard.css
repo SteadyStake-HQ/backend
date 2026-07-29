@@ -16,6 +16,9 @@
   --red: #f07187;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* One knob for how wide the dashboard runs. The header and every page shell
+     read it, so they stay locked to the same gutters on any monitor. */
+  --shell-width: min(1720px, calc(100% - 56px));
 }
 
 * {
@@ -73,8 +76,8 @@ button {
 }
 
 .header-inner {
-  width: min(1220px, calc(100% - 36px));
-  min-height: 68px;
+  width: var(--shell-width);
+  min-height: 72px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -99,10 +102,16 @@ button {
   filter: drop-shadow(0 8px 18px rgba(85, 134, 255, 0.28));
 }
 
+/* The header runs the full shell width now, so the links get a rail to sit in
+   rather than floating in the middle of a very wide bar. */
 .main-nav {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(141, 159, 199, 0.1);
+  border-radius: 13px;
+  background: rgba(12, 18, 32, 0.55);
 }
 
 .nav-link {
@@ -156,7 +165,7 @@ button {
 }
 
 .page-shell {
-  width: min(1220px, calc(100% - 36px));
+  width: var(--shell-width);
   margin: 0 auto;
   padding: 42px 0 72px;
 }
@@ -655,7 +664,8 @@ a.addr:hover {
   flex: 0 0 auto;
 }
 
-.select-field label {
+.select-field label,
+.select-caption {
   color: var(--dim);
   font-size: 9px;
   font-weight: 800;
@@ -663,22 +673,217 @@ a.addr:hover {
   text-transform: uppercase;
 }
 
-#plan-sort {
+/* ---- Sort menu ---------------------------------------------------------
+   Custom listbox standing in for a native <select> (which paints its popup in
+   the OS theme and cannot hold a hint line). #plan-sort still exists, hidden,
+   and remains the value store the filter code reads. */
+.sortmenu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.sortmenu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 38px;
-  padding: 8px 10px;
+  min-width: 208px;
+  padding: 8px 10px 8px 11px;
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
   background: var(--surface-soft);
-  font: inherit;
   font-size: 11px;
   font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.sortmenu-trigger:hover {
+  border-color: var(--border-strong);
+  background: rgba(19, 28, 47, 0.9);
+}
+
+.sortmenu-trigger:focus-visible {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
+}
+
+.sortmenu-glyph {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: #91a6f3;
+}
+
+.sortmenu-value {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sortmenu-caret {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--dim);
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.sortmenu[data-open="true"] .sortmenu-trigger {
+  border-color: rgba(110, 140, 255, 0.5);
+  background: rgba(21, 30, 49, 0.95);
+}
+
+.sortmenu[data-open="true"] .sortmenu-caret {
+  color: var(--text);
+  transform: rotate(180deg);
+}
+
+.sortmenu-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 7px);
+  left: 0;
+  width: 306px;
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 32, 53, 0.99), rgba(14, 20, 34, 0.99));
+  box-shadow: 0 22px 48px rgba(3, 6, 14, 0.62), 0 0 0 1px rgba(6, 10, 20, 0.6);
+  backdrop-filter: blur(14px);
+  animation: sortmenu-in 130ms ease-out;
+}
+
+.sortmenu-pop[hidden] {
+  display: none;
+}
+
+@keyframes sortmenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+.sortmenu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sortmenu-list:focus {
+  outline: none;
+}
+
+.sortmenu-group {
+  padding: 9px 9px 5px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sortmenu-group:first-child {
+  padding-top: 4px;
+}
+
+.sortmenu-option {
+  display: grid;
+  grid-template-columns: 26px 1fr 14px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
-#plan-sort:focus {
-  outline: none;
-  border-color: rgba(110, 140, 255, 0.45);
+.sortmenu-option + .sortmenu-group {
+  margin-top: 3px;
+  border-top: 1px solid var(--border);
+}
+
+.sortmenu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(141, 159, 199, 0.09);
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.sortmenu-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sortmenu-text {
+  min-width: 0;
+}
+
+.sortmenu-text b {
+  display: block;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sortmenu-text em {
+  display: block;
+  margin-top: 1px;
+  color: var(--dim);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.sortmenu-check {
+  width: 14px;
+  height: 14px;
+  color: var(--blue);
+  opacity: 0;
+}
+
+/* Hover and the keyboard cursor share one highlight, so arrowing through the
+   list and pointing at it look the same. */
+.sortmenu-option:hover,
+.sortmenu-option[data-cursor="true"] {
+  background: rgba(110, 140, 255, 0.12);
+}
+
+.sortmenu-option:hover .sortmenu-icon,
+.sortmenu-option[data-cursor="true"] .sortmenu-icon {
+  color: #cfd9ff;
+  background: rgba(110, 140, 255, 0.2);
+}
+
+.sortmenu-option[aria-selected="true"] {
+  background: rgba(110, 140, 255, 0.16);
+}
+
+.sortmenu-option[aria-selected="true"] .sortmenu-icon {
+  color: #dfe6ff;
+  background: rgba(110, 140, 255, 0.26);
+}
+
+.sortmenu-option[aria-selected="true"] .sortmenu-text b {
+  color: #dfe6ff;
+}
+
+.sortmenu-option[aria-selected="true"] .sortmenu-check {
+  opacity: 1;
 }
 
 .view-toggle {
@@ -1326,10 +1531,20 @@ a.addr:hover {
   }
 }
 
+@media (max-width: 1180px) {
+  :root {
+    --shell-width: calc(100% - 36px);
+  }
+}
+
 @media (max-width: 700px) {
-  .header-inner,
-  .page-shell {
-    width: min(100% - 22px, 1220px);
+  :root {
+    --shell-width: calc(100% - 22px);
+  }
+
+  .main-nav {
+    padding: 3px;
+    border-radius: 11px;
   }
 
   .header-inner {
@@ -1410,6 +1625,22 @@ a.addr:hover {
     flex: 1 1 100%;
     max-width: none;
     margin-left: 0;
+  }
+
+  .select-field {
+    align-items: stretch;
+    flex: 1 1 100%;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .sortmenu-trigger {
+    width: 100%;
+  }
+
+  .sortmenu-pop {
+    width: 100%;
+    min-width: 0;
   }
 
   .clear-filters {

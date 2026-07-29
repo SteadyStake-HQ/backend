@@ -99,9 +99,30 @@
             <button class="search-clear" id="wallet-search-clear" type="button" aria-label="Clear search" hidden>×</button>
           </div>
 
+          <!-- The sort control is a custom listbox: a native <select> renders its popup with the
+               OS theme (a white list on this dark dashboard) and cannot carry the one-line hint
+               that says what each order is actually good for. The <select> itself stays in the
+               DOM, hidden, as the value store — every reader below still talks to #plan-sort. -->
           <div class="select-field">
-            <label for="plan-sort">Sort</label>
-            <select id="plan-sort" aria-label="Sort plans">
+            <span class="select-caption" id="plan-sort-caption">Sort</span>
+            <div class="sortmenu" id="sortmenu">
+              <button class="sortmenu-trigger" id="sortmenu-trigger" type="button"
+                aria-haspopup="listbox" aria-expanded="false" aria-controls="sortmenu-list"
+                aria-labelledby="plan-sort-caption sortmenu-value">
+                <svg class="sortmenu-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M4 7h11M4 12h8M4 17h5M17.5 5.5v13M17.5 18.5 20.5 15M17.5 18.5 14.5 15" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="sortmenu-value" id="sortmenu-value">Next buy — soonest</span>
+                <svg class="sortmenu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                  <path d="m6 9.5 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+              <div class="sortmenu-pop" id="sortmenu-pop" hidden>
+                <ul class="sortmenu-list" id="sortmenu-list" role="listbox" tabindex="-1"
+                  aria-label="Sort plans"></ul>
+              </div>
+            </div>
+            <select id="plan-sort" aria-hidden="true" tabindex="-1" hidden>
               <option value="due">Next buy — soonest</option>
               <option value="progress-desc">Progress — highest</option>
               <option value="progress-asc">Progress — lowest</option>
@@ -942,6 +963,8 @@
       searchClear.hidden = searchInput.value.length === 0;
       clearFiltersButton.hidden = activeFilterCount() === 0;
       sortSelect.value = filters.sort;
+      // Assigning .value fires no event, so the custom trigger is told directly.
+      sortMenu.sync();
       document.querySelectorAll(".view-toggle button").forEach(function (button) {
         button.classList.toggle("active", button.dataset.view === filters.view);
         button.setAttribute("aria-pressed", button.dataset.view === filters.view ? "true" : "false");
@@ -1045,6 +1068,253 @@
       filters.sort = SORTERS[sortSelect.value] ? sortSelect.value : "due";
       applyFilters();
     });
+
+    /* ---- Sort menu ---------------------------------------------------------
+       The listbox behind #sortmenu-trigger. It renders itself from #plan-sort's
+       options and writes back through them, so the hidden <select> stays the
+       single source of truth and every reader above is untouched: choosing an
+       order sets .value and fires the same "change" event a native select would.
+
+       SORT_META adds what a native option list has nowhere to put — the hint
+       line saying what each order is for, plus an icon and the grouping that
+       turns seven near-identical strings into three short scannable blocks. */
+    const SORT_META = {
+      due: {
+        hint: "Closest to their next buy first",
+        icon: '<circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.2l3.4 2" stroke-linecap="round" />',
+      },
+      recent: {
+        hint: "Most recently executed first",
+        icon: '<path d="M3.6 12a8.4 8.4 0 1 0 2.7-6.2" stroke-linecap="round" />' +
+          '<path d="M3.5 4.6V10H9" stroke-linecap="round" stroke-linejoin="round" />',
+      },
+      created: {
+        hint: "Newest plans first",
+        icon: '<rect x="3.5" y="5.2" width="17" height="15.3" rx="2.6" />' +
+          '<path d="M8 3v4M16 3v4M3.5 10h17M12 13.4v4.2M9.9 15.5h4.2" stroke-linecap="round" />',
+      },
+      "progress-desc": {
+        hint: "Nearly finished plans first",
+        icon: '<path d="M4 17.2 9.4 11.8l3.4 3.4L20 8" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<path d="M15.4 8H20v4.6" stroke-linecap="round" stroke-linejoin="round" />',
+      },
+      "progress-asc": {
+        hint: "Barely started plans first",
+        icon: '<path d="M4 8 9.4 13.4l3.4-3.4L20 17.2" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<path d="M15.4 17.2H20v-4.6" stroke-linecap="round" stroke-linejoin="round" />',
+      },
+      "amount-desc": {
+        hint: "Biggest buy amount first",
+        icon: '<ellipse cx="12" cy="6.6" rx="7.6" ry="3.1" />' +
+          '<path d="M4.4 6.6v10.8c0 1.7 3.4 3.1 7.6 3.1s7.6-1.4 7.6-3.1V6.6" stroke-linecap="round" />' +
+          '<path d="M4.4 12c0 1.7 3.4 3.1 7.6 3.1s7.6-1.4 7.6-3.1" />',
+      },
+      wallet: {
+        hint: "Grouped by owner address",
+        icon: '<path d="M3.6 18 7.5 6.4 11.4 18M5.1 14.4h4.8" stroke-linecap="round" stroke-linejoin="round" />' +
+          '<path d="M14.4 6.4h5.9l-5.9 11.6h5.9" stroke-linecap="round" stroke-linejoin="round" />',
+      },
+    };
+
+    // Menu order, which is deliberately not the <select>'s order: the select is
+    // a flat list, the menu reads as three questions an operator actually asks.
+    const SORT_GROUPS = [
+      { label: "Timing", values: ["due", "recent", "created"] },
+      { label: "Progress", values: ["progress-desc", "progress-asc"] },
+      { label: "Size & wallet", values: ["amount-desc", "wallet"] },
+    ];
+
+    const sortMenu = (function () {
+      const root = document.getElementById("sortmenu");
+      const trigger = document.getElementById("sortmenu-trigger");
+      const pop = document.getElementById("sortmenu-pop");
+      const list = document.getElementById("sortmenu-list");
+      const valueLabel = document.getElementById("sortmenu-value");
+      const CHECK = '<svg class="sortmenu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="2.6" aria-hidden="true"><path d="m5 12.5 4.8 4.8L19 6.8" stroke-linecap="round" ' +
+        'stroke-linejoin="round" /></svg>';
+
+      const labels = {};
+      Array.prototype.forEach.call(sortSelect.options, function (option) {
+        labels[option.value] = option.textContent.trim();
+      });
+
+      // Anything the groups above forgot still has to reach the menu, or a new
+      // <option> would silently become unreachable.
+      const grouped = new Set();
+      SORT_GROUPS.forEach(function (group) {
+        group.values.forEach(function (value) {
+          if (labels[value]) grouped.add(value);
+        });
+      });
+      const leftovers = Object.keys(labels).filter(function (value) { return !grouped.has(value); });
+      const groups = leftovers.length
+        ? SORT_GROUPS.concat([{ label: "More", values: leftovers }])
+        : SORT_GROUPS;
+
+      list.innerHTML = groups.map(function (group) {
+        const items = group.values.filter(function (value) { return labels[value]; });
+        if (!items.length) return "";
+        return '<li class="sortmenu-group" role="presentation">' + escapeHtml(group.label) + "</li>" +
+          items.map(function (value) {
+            const meta = SORT_META[value] || {};
+            return '<li class="sortmenu-option" role="option" aria-selected="false" ' +
+              'id="sortmenu-opt-' + escapeHtml(value) + '" data-value="' + escapeHtml(value) + '">' +
+              '<span class="sortmenu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+              'stroke-width="1.9" aria-hidden="true">' + (meta.icon || "") + "</svg></span>" +
+              '<span class="sortmenu-text"><b>' + escapeHtml(labels[value]) + "</b>" +
+              (meta.hint ? "<em>" + escapeHtml(meta.hint) + "</em>" : "") + "</span>" +
+              CHECK + "</li>";
+          }).join("");
+      }).join("");
+
+      const items = Array.prototype.slice.call(list.querySelectorAll(".sortmenu-option"));
+      let cursor = -1;
+      let typed = "";
+      let typedAt = 0;
+
+      function indexOfValue(value) {
+        for (let i = 0; i < items.length; i += 1) {
+          if (items[i].dataset.value === value) return i;
+        }
+        return -1;
+      }
+
+      function setCursor(index, scroll) {
+        cursor = Math.max(0, Math.min(index, items.length - 1));
+        items.forEach(function (item, i) {
+          item.dataset.cursor = i === cursor ? "true" : "false";
+        });
+        const current = items[cursor];
+        if (!current) return;
+        list.setAttribute("aria-activedescendant", current.id);
+        if (scroll !== false) current.scrollIntoView({ block: "nearest" });
+      }
+
+      function isOpen() {
+        return root.dataset.open === "true";
+      }
+
+      function open() {
+        if (isOpen()) return;
+        root.dataset.open = "true";
+        pop.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+        list.focus({ preventScroll: true });
+        setCursor(Math.max(0, indexOfValue(sortSelect.value)));
+      }
+
+      function close(refocus) {
+        if (!isOpen()) return;
+        root.dataset.open = "false";
+        pop.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+        list.removeAttribute("aria-activedescendant");
+        items.forEach(function (item) { item.dataset.cursor = "false"; });
+        if (refocus) trigger.focus();
+      }
+
+      /** Write the choice back through the hidden select so the existing
+          "change" listener — and nothing else — drives the re-sort. */
+      function commit(value) {
+        close(true);
+        if (!value || value === sortSelect.value) return;
+        sortSelect.value = value;
+        sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      /** Pull the trigger label and the ticks back in line with #plan-sort.
+          Called after any programmatic change to the select's value. */
+      function sync() {
+        const value = sortSelect.value;
+        valueLabel.textContent = labels[value] || value;
+        items.forEach(function (item) {
+          item.setAttribute("aria-selected", item.dataset.value === value ? "true" : "false");
+        });
+      }
+
+      trigger.addEventListener("click", function () {
+        if (isOpen()) close(true);
+        else open();
+      });
+
+      trigger.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
+      });
+
+      list.addEventListener("keydown", function (event) {
+        switch (event.key) {
+          case "ArrowDown":
+            event.preventDefault();
+            setCursor(cursor + 1);
+            return;
+          case "ArrowUp":
+            event.preventDefault();
+            setCursor(cursor - 1);
+            return;
+          case "Home":
+            event.preventDefault();
+            setCursor(0);
+            return;
+          case "End":
+            event.preventDefault();
+            setCursor(items.length - 1);
+            return;
+          case "Enter":
+          case " ":
+            event.preventDefault();
+            if (items[cursor]) commit(items[cursor].dataset.value);
+            return;
+          case "Escape":
+            event.preventDefault();
+            close(true);
+            return;
+          case "Tab":
+            close(false);
+            return;
+          default:
+            break;
+        }
+        // Type-ahead. stopPropagation keeps a stray "/" here from stealing focus
+        // for the global search shortcut.
+        if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
+        event.stopPropagation();
+        const now = Date.now();
+        typed = now - typedAt > 900 ? event.key : typed + event.key;
+        typedAt = now;
+        const needle = typed.toLowerCase();
+        const hit = items.findIndex(function (item) {
+          return (labels[item.dataset.value] || "").toLowerCase().startsWith(needle);
+        });
+        if (hit >= 0) setCursor(hit);
+      });
+
+      list.addEventListener("click", function (event) {
+        const option = event.target.closest(".sortmenu-option");
+        if (option) commit(option.dataset.value);
+      });
+
+      list.addEventListener("mousemove", function (event) {
+        const option = event.target.closest(".sortmenu-option");
+        if (option) setCursor(items.indexOf(option), false);
+      });
+
+      // Clicking anywhere else — including non-focusable page chrome, which
+      // fires no focusout — dismisses the menu.
+      document.addEventListener("pointerdown", function (event) {
+        if (isOpen() && !root.contains(event.target)) close(false);
+      });
+
+      root.addEventListener("focusout", function (event) {
+        if (isOpen() && !root.contains(event.relatedTarget)) close(false);
+      });
+
+      sync();
+      return { sync: sync, close: close };
+    })();
 
     searchInput.addEventListener("input", function () {
       // Addresses are rendered checksummed but pasted in any casing, so both sides are lowered.
