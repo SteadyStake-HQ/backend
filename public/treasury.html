@@ -915,8 +915,9 @@
      *
      * A stacked bar rather than a table: the whole point is that the cost has two parts in two
      * tokens and the income arrives somewhere else entirely, and length beside length is what makes
-     * an unprofitable route obvious at a glance. The marker is the fee — cost bar past the marker
-     * means the route lost money.
+     * an unprofitable route obvious at a glance. Each bar also carries a mark at the other bar's
+     * end, with the overshoot hatched: cost past the fee mark is what the fee failed to cover, fee
+     * past the cost mark is what the route kept.
      */
     function renderRoutes(byRoute) {
       if (!byRoute.length) {
@@ -930,21 +931,51 @@
         return Math.max(r.chargedUsd, r.execGasUsd + r.settleGasUsd);
       })) || 1;
 
-      el.routes.innerHTML = '<div class="route-list">' + byRoute.map(function (route) {
+      el.routes.innerHTML = '<div class="route-list">' + byRoute.map(function (route, index) {
         const cost = route.execGasUsd + route.settleGasUsd;
         const negative = route.marginUsd < 0;
         const pct = function (value) { return Math.max(0, Math.min(100, (value / peak) * 100)); };
 
-        return '<div class="route-row">' +
-          '<div class="route-head">' +
-            '<span class="route-pair">' +
-              "<b>" + escapeHtml(route.execChainName) + "</b>" +
-              '<svg class="route-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
-                '<path d="M4 12h15m-5-5 5 5-5 5" stroke-linecap="round" stroke-linejoin="round" /></svg>' +
-              "<b>" + escapeHtml(route.settleChainName) + "</b>" +
+        // A chain initial rather than a logo: the set of chains is open-ended and a missing logo
+        // would be a hole in the row.
+        const badge = function (name) {
+          return escapeHtml(String(name || "?").trim().slice(0, 1).toUpperCase());
+        };
+
+        // The band spans from the shorter bar's end to the longer one's, drawn inside the longer
+        // bar's track. Only one side can overshoot, so only one of these is ever non-empty.
+        const band = function (from, to, kind, tip) {
+          if (!(to > from)) return "";
+          return '<span class="route-band ' + kind + '" style="left:' + pct(from) + "%;right:" +
+              (100 - pct(to)) + '%" title="' + escapeHtml(tip) + '"></span>' +
+            '<span class="route-mark" style="left:' + pct(from) + '%"></span>';
+        };
+
+        const shortfall = band(route.chargedUsd, cost, "is-short",
+          "Fee covered " + money(route.chargedUsd) + " of " + money(cost) + " — " +
+          money(cost - route.chargedUsd) + " uncovered.");
+        const headroom = band(cost, route.chargedUsd, "is-head",
+          "Fee cleared gas by " + money(route.chargedUsd - cost) + ".");
+
+        return '<div class="route-row' + (negative ? " is-neg" : "") + '" style="--i:' + index + '">' +
+          '<div class="route-flow">' +
+            '<span class="route-node">' +
+              '<i class="route-badge" aria-hidden="true">' + badge(route.execChainName) + "</i>" +
+              '<span class="route-node-text"><b>' + escapeHtml(route.execChainName) + "</b>" +
+                "<small>gas burned</small></span>" +
             "</span>" +
-            '<span class="route-count">' + count(route.executions) + " executions</span>" +
-            '<span class="route-margin' + (negative ? " neg" : " pos") + '">' + money(route.marginUsd) + "</span>" +
+            '<span class="route-rail">' +
+              '<span class="route-runs">' + count(route.executions) + " executions</span>" +
+              '<span class="route-rail-line" aria-hidden="true"><i class="route-comet"></i></span>' +
+              '<span class="route-rail-tip" aria-hidden="true"></span>' +
+            "</span>" +
+            '<span class="route-node">' +
+              '<i class="route-badge is-settle" aria-hidden="true">' + badge(route.settleChainName) + "</i>" +
+              '<span class="route-node-text"><b>' + escapeHtml(route.settleChainName) + "</b>" +
+                "<small>fee banked</small></span>" +
+            "</span>" +
+            '<span class="route-margin' + (negative ? " neg" : " pos") + '">' + money(route.marginUsd) +
+              "<small>" + (negative ? "uncovered" : "margin") + "</small></span>" +
           "</div>" +
 
           '<div class="route-bars">' +
@@ -953,15 +984,17 @@
               '<div class="route-track">' +
                 '<i class="seg-exec" style="width:' + pct(route.execGasUsd) + '%" ' +
                   'title="' + escapeHtml(route.execChainName + " gas: " + tokenAmount(route.execGasNative) + " " + route.execNativeSymbol) + '"></i>' +
-                '<i class="seg-settle" style="width:' + pct(route.settleGasUsd) + '%" ' +
+                '<i class="seg-settle" style="--d:90ms;width:' + pct(route.settleGasUsd) + '%" ' +
                   'title="' + escapeHtml(route.settleChainName + " gas for the deduction: " + tokenAmount(route.settleGasNative) + " " + route.settleNativeSymbol) + '"></i>' +
+                shortfall +
               "</div>" +
               '<span class="route-bar-value">' + money(cost) + "</span>" +
             "</div>" +
             '<div class="route-bar">' +
               '<span class="route-bar-label">Fee collected</span>' +
               '<div class="route-track">' +
-                '<i class="seg-charged" style="width:' + pct(route.chargedUsd) + '%"></i>' +
+                '<i class="seg-charged" style="--d:180ms;width:' + pct(route.chargedUsd) + '%"></i>' +
+                headroom +
               "</div>" +
               '<span class="route-bar-value">' + money(route.chargedUsd) + "</span>" +
             "</div>" +
