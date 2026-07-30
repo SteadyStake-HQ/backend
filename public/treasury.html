@@ -58,11 +58,34 @@
         <p class="eyebrow">Treasury</p>
         <h1>Relayer wallet &amp; fees</h1>
         <p class="page-description">
-          One wallet does two jobs on every network: it pays the native gas for each auto-execution,
-          and it receives the fee that execution charges the user's gas tank. The two are different
-          tokens, so the wallet can be collecting fees steadily and still be minutes from being
-          unable to execute — this page shows both sides, per network, and the margin between them.
+          Two tokens, one wallet per network — and the margin between them.
         </p>
+        <!-- What the paragraph here used to say, drawn. Gas leaves in the native token and fees
+             arrive in a stablecoin, so a wallet can be earning steadily and still be unable to
+             execute; the two tinted ends carry that without a sentence. -->
+        <ul class="flow-strip" aria-label="What the relayer wallet does on every network">
+          <li class="flow-node out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 19V5m0 0-5 5m5-5 5 5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <b>Gas out</b><span>native</span>
+          </li>
+          <li class="flow-arrow" aria-hidden="true">→</li>
+          <li class="flow-node hub">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+              <rect x="3" y="6" width="18" height="13" rx="2.5" />
+              <path d="M3 10h18M16.5 14.5h1.5" stroke-linecap="round" />
+            </svg>
+            <b>Relayer wallet</b><span>1 per network</span>
+          </li>
+          <li class="flow-arrow" aria-hidden="true">→</li>
+          <li class="flow-node in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 5v14m0 0-5-5m5 5 5-5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <b>Fees in</b><span>stablecoin</span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
@@ -142,7 +165,11 @@
       <div class="hero-figure">
         <span class="hero-label">Net margin, window</span>
         <span class="hero-value" id="hero-value">—</span>
-        <p class="hero-note" id="hero-note">Loading execution history…</p>
+        <!-- Readings, not a paragraph. The counts are chips; the caveats that used to trail the
+             sentence are amber chips whose tip carries the reason. -->
+        <div class="fact-row" id="hero-facts">
+          <span class="fact">Loading execution history…</span>
+        </div>
       </div>
       <div class="kpi-row" id="kpis"></div>
     </section>
@@ -152,10 +179,7 @@
         <div class="viz-head">
           <div>
             <h3 class="viz-title" id="trend-title">Fees charged vs gas spent, by day</h3>
-            <p class="viz-sub">
-              What the gas tanks paid the relayer, against what the relayer burned in native token
-              to earn it. The gap between the two lines is the margin.
-            </p>
+            <p class="viz-sub">The gap between the lines is the margin.</p>
           </div>
           <div class="viz-legend">
             <span><i class="k-charged"></i>Charged</span>
@@ -169,10 +193,7 @@
         <div class="viz-head">
           <div>
             <h3 class="viz-title" id="margin-title">Daily margin</h3>
-            <p class="viz-sub">
-              Charged minus spent, per day. A day below the line is a day automation ran at a loss —
-              usually a gas spike against a flat per-run price.
-            </p>
+            <p class="viz-sub">Charged minus spent. Below the line is a day run at a loss.</p>
           </div>
           <div class="viz-legend">
             <span><i class="k-pos"></i>Profit</span>
@@ -189,9 +210,10 @@
           <div>
             <h3 class="viz-title" id="networks-title">Executions by network</h3>
             <p class="viz-sub">
-              Where the work happened over the window. The margin beside each bar is that
-              network's own wallet: fees it collected minus gas it burned — which is not the same as
-              the runs it executed, because a pooled tank can pay for a run from another chain.
+              Margin beside each bar is that network's own wallet
+              <i class="tip" tabindex="0" role="note"
+                aria-label="Fees that wallet collected minus gas it burned — not the same as the runs it executed, because a pooled tank can pay for a run from another chain."
+                data-tip="Fees that wallet collected minus gas it burned — not the same as the runs it executed, because a pooled tank can pay for a run from another chain."></i>
             </p>
           </div>
         </div>
@@ -202,10 +224,7 @@
         <div class="viz-head">
           <div>
             <h3 class="viz-title" id="tokens-title">What plans bought</h3>
-            <p class="viz-sub">
-              Stablecoin swapped into each target token over the window — the "in" side of every
-              trade, by what it bought.
-            </p>
+            <p class="viz-sub">Stablecoin swapped into each target token.</p>
           </div>
         </div>
         <div class="viz-plot" id="tokens-plot"></div>
@@ -220,9 +239,10 @@
         <div>
           <h3 class="viz-title" id="routes-title">Cross-chain settlement</h3>
           <p class="viz-sub">
-            Gas tanks are pooled, so a plan can run on one chain and be paid for by a balance on
-            another. Where that happened, the relayer burned native token on the left-hand chain and
-            was reimbursed in stablecoin on the right — two wallets, two tokens, one execution.
+            Gas burned left, reimbursed right — two wallets, one execution
+            <i class="tip" tabindex="0" role="note"
+              aria-label="Gas tanks are pooled, so a plan can run on one chain and be paid for by a balance on another."
+              data-tip="Gas tanks are pooled, so a plan can run on one chain and be paid for by a balance on another."></i>
           </p>
         </div>
       </div>
@@ -305,7 +325,7 @@
       pickerCurrent: document.getElementById("window-current"),
       pickerCurrentSub: document.getElementById("window-current-sub"),
       heroValue: document.getElementById("hero-value"),
-      heroNote: document.getElementById("hero-note"),
+      heroFacts: document.getElementById("hero-facts"),
       kpis: document.getElementById("kpis"),
       trend: document.getElementById("trend-plot"),
       margin: document.getElementById("margin-plot"),
@@ -444,10 +464,11 @@
             "</button>" +
           "</li>";
         }).join("") +
-        '<li class="picker-foot" role="presentation">A run is one sweep of every live network. ' +
-          'The scheduler sweeps every few seconds and nearly always finds nothing due, so these ' +
-          'windows count only the runs that executed a plan — an idle sweep can never push an ' +
-          'execution out of view.</li>';
+        '<li class="picker-foot" role="presentation">Executing runs only ' +
+          tip("A run is one sweep of every live network. The scheduler sweeps every few seconds " +
+            "and nearly always finds nothing due, so these windows count only the runs that " +
+            "executed a plan — an idle sweep can never push an execution out of view.") +
+        "</li>";
 
         const current = options.find(function (option) { return option.runs === state.runs; });
         el.pickerCurrent.textContent = "Last " + count(state.runs) + " executing runs";
@@ -1101,36 +1122,50 @@
       el.heroValue.textContent = money(margin);
       el.heroValue.className = "hero-value " + (margin < 0 ? "neg" : "pos");
 
-      const parts = [
-        count(totals.executions) + " executions over " + count(totals.runs) + " runs",
-        "charged " + money(totals.chargedUsd),
-        "gas " + money(totals.spentUsd),
-      ];
-      let note = parts.join(" · ") + ".";
-      // Said before the caveats about precision, because it changes what the margin *is* rather
-      // than how exact it is: gas and income landed on different wallets, so a positive margin here
-      // does not mean any single chain paid for itself.
+      // The figures first, then the caveats — each one a chip rather than a clause, because a
+      // caveat is only wanted by a reader who has already doubted the number beside it. The tip
+      // carries the same sentence the paragraph used to; nothing was dropped, only folded.
+      const facts = [];
+      // Said first when it applies, because it explains why every wallet figure on the page is
+      // blank. It lives here rather than being written straight to the row, so a re-render — a
+      // filter change, a refresh — cannot silently drop it.
+      if (state.wallets && state.wallets.relayerConfigured === false) {
+        facts.push(caveat("!", "no relayer key",
+          "RELAYER_PRIVATE_KEY is not set on this backend, so the wallet address cannot be " +
+          "derived and no balance can be read. Execution history is unaffected."));
+      }
+      facts.push(
+        fact(count(totals.executions), "executions"),
+        fact(count(totals.runs), "runs"),
+        fact(money(totals.chargedUsd), "charged", "pos"),
+        fact(money(totals.spentUsd), "gas", "neg"),
+      );
+      // Listed before the precision caveats, because it changes what the margin *is* rather than
+      // how exact it is: gas and income landed on different wallets, so a positive margin here does
+      // not mean any single chain paid for itself.
       if (totals.crossChainSettlements > 0) {
-        note += " " + count(totals.crossChainSettlements) + " of those were paid for by a gas tank " +
-          "on another chain — the relayer burned native token on one network and was reimbursed in " +
-          "stablecoin on another, so this margin spans two wallets. See cross-chain settlement below.";
+        facts.push(caveat(count(totals.crossChainSettlements), "cross-chain",
+          "Paid for by a gas tank on another chain: native token burned on one network, " +
+          "reimbursed in stablecoin on another. This margin spans two wallets — see cross-chain " +
+          "settlement below."));
       }
       if (totals.repricedSpends > 0) {
-        note += " " + count(totals.repricedSpends) + " burned an exact amount of gas that had no " +
-          "token price recorded against it, and are converted at today's price.";
+        facts.push(caveat(count(totals.repricedSpends), "repriced",
+          "Exact gas burned, but no token price was recorded against it. Converted at today's price."));
       }
       if (totals.estimatedSpends > 0) {
-        note += " " + count(totals.estimatedSpends) + " of those spends were reconstructed from gas " +
-          "used at today's prices — runs recorded before the executor started saving its own gas " +
-          "price cannot be priced exactly, so the margin is approximate.";
+        facts.push(caveat(count(totals.estimatedSpends), "estimated",
+          "Spend reconstructed from gas used at today's prices — these runs predate the executor " +
+          "saving its own gas price, so the margin is approximate."));
       }
       if (totals.unpricedExecutions > 0) {
         // Said plainly, because the alternative reading — that those runs cost nothing — is the
         // flattering one, and it is wrong.
-        note += " " + count(totals.unpricedExecutions) + " could not be priced at all and count as " +
-          "zero spend here, so the true margin is lower than shown.";
+        facts.push(caveat(count(totals.unpricedExecutions), "unpriced",
+          "Could not be priced at all and count as zero spend here, so the true margin is lower " +
+          "than shown."));
       }
-      el.heroNote.textContent = note;
+      el.heroFacts.innerHTML = facts.join("");
 
       const w = walletTotals();
       const alarms = w.executorMismatches;
@@ -1152,6 +1187,30 @@
           alarms > 0),
       ];
       el.kpis.innerHTML = tiles.join("");
+    }
+
+    /** A reading: the number, then what it counts. */
+    function fact(value, label, tone) {
+      return '<span class="fact' + (tone ? " " + tone : "") + '">' +
+        "<b>" + escapeHtml(String(value)) + "</b>" + escapeHtml(label) +
+      "</span>";
+    }
+
+    /**
+     * A figure that is true but not exact, or not what it looks like. Amber, and always with the
+     * explanation on a tip — colour alone never carries the meaning, and the reason is one hover
+     * away rather than a sentence everyone has to read past.
+     */
+    function caveat(value, label, why) {
+      return '<span class="fact caveat">' +
+        "<b>" + escapeHtml(String(value)) + "</b>" + escapeHtml(label) + tip(why) +
+      "</span>";
+    }
+
+    /** The mark that holds a sentence the page no longer prints. */
+    function tip(text, side) {
+      return '<i class="tip' + (side === "right" ? " tip-right" : "") + '" tabindex="0" role="note"' +
+        ' aria-label="' + escapeHtml(text) + '" data-tip="' + escapeHtml(text) + '"></i>';
     }
 
     function tile(label, value, sub, alarm) {
@@ -1177,8 +1236,8 @@
      */
     function renderWallets() {
       const groups = [
-        { type: "mainnet", title: "Mainnet", note: "Real balances. These are the wallets that stop working when they run dry." },
-        { type: "testnet", title: "Testnet", note: "Faucet tokens. USD figures here are notional — the native tokens have no market." },
+        { type: "mainnet", title: "Mainnet", note: "Real balances — automation stops when these run dry." },
+        { type: "testnet", title: "Testnet", note: "Faucet tokens · USD notional." },
       ].filter(function (group) {
         return state.realm === "all" || state.realm === group.type;
       });
@@ -1225,13 +1284,13 @@
       const showsTestnet = state.realm !== "mainnet";
       el.notionalNote.hidden = !showsTestnet;
       if (showsTestnet) {
-        el.notionalText.textContent = state.realm === "testnet"
-          ? "Testnet view. These native tokens have no market, so every USD figure below is notional " +
-            "— tBOT is pinned to a fixed price purely so gas costs stay stable, and Sepolia ETH is " +
-            "priced as if it were real ETH. Treat them as run counts, not money."
-          : "This view mixes mainnets and testnets. Testnet USD figures are notional — their native " +
-            "tokens have no market — so the combined totals are not money. The Mainnet view is the " +
-            "one to read for real balances.";
+        el.notionalText.innerHTML = state.realm === "testnet"
+          ? "Testnet USD is notional — read these as run counts, not money. " +
+            tip("These native tokens have no market. tBOT is pinned to a fixed price purely so gas " +
+              "costs stay stable, and Sepolia ETH is priced as if it were real ETH.")
+          : "Mixed view — the combined totals are not money. " +
+            tip("Testnet native tokens have no market, so their USD figures are notional and " +
+              "summing them with real balances means nothing. Switch to Mainnet for real money.");
       }
     }
 
@@ -1255,7 +1314,20 @@
       // Runway is the figure that decides whether anyone needs to act today, so it leads the card
       // and wears the meter. Severity is by runs remaining, not by dollars: $40 of BOT and $40 of
       // ETH buy wildly different numbers of executions.
+      //
+      // Since there is no per-run price left anywhere in the product, the divisor is an average of
+      // real runs (or a projection where none have happened), and the line says which — a runway
+      // read off an average is a forecast and should not be read as a guarantee.
       const runway = network.runwayRuns;
+      const perRunLabel = network.costPerRunSource === "projected"
+        ? " per run, projected"
+        : " average run, measured";
+      const perRunTip = network.costPerRunSource === "projected"
+        ? "No run has been recorded on this network yet, so this is the chain's gas profile at " +
+          "the current gas price — what a run would cost, not what one did. Runs left is the " +
+          "reserve divided by it."
+        : "The mean of what runs on this network actually burned. Runs left is the reserve " +
+          "divided by it, so a spell of expensive gas shortens it.";
       const severity = runway == null ? "" : runway < 50 ? " critical" : runway < 250 ? " warning" : "";
       const meterFill = runway == null ? 0 : Math.max(2, Math.min(100, (runway / 1000) * 100));
 
@@ -1273,12 +1345,13 @@
           (runway != null
             ? '<div style="margin-top:10px">' +
                 '<div class="meter-line"><b>' + count(runway) + " runs left</b><span>" +
-                  money(network.costPerRunUsd) +
-                  (network.costPerRunSource === "projected" ? " per run, projected" : " per run, measured") +
+                  money(network.costPerRunUsd) + perRunLabel + " " + tip(perRunTip, "right") +
                   "</span></div>" +
                 '<div class="meter' + severity + '"><i style="width:' + meterFill + '%"></i></div>' +
               "</div>"
-            : '<p class="wallet-sub" style="margin-top:8px">Neither a recorded spend nor a gas price is available here, so there is no runway to project.</p>') +
+            : '<p class="wallet-sub" style="margin-top:8px">No runway — nothing to project from ' +
+              tip("Neither a recorded spend nor a gas price is available on this network yet.") +
+              "</p>") +
         "</div>";
 
       const feeBlock =
@@ -1288,11 +1361,10 @@
             "<b>" + money(network.relayer.stableUsd) + "</b>" +
             "<span>" + escapeHtml(network.stableSymbol) + "</span>" +
           "</div>" +
-          '<p class="wallet-sub">Execution fees paid into this wallet by the gas tank.</p>' +
+          '<p class="wallet-sub">Paid in by the gas tank.</p>' +
           '<div style="margin-top:9px">' +
             '<div class="wallet-pair"><span>Claimable in vault</span><span>' + money(network.vault.claimableUsd) + "</span></div>" +
             '<div class="wallet-pair"><span>User gas float</span><span>' + money(network.gasTank.floatUsd) + "</span></div>" +
-            '<div class="wallet-pair"><span>Per-run price</span><span>' + money(network.gasTank.priceUsd) + "</span></div>" +
           "</div>" +
         "</div>";
 
@@ -1303,16 +1375,15 @@
       const alerts = [];
       if (network.relayer.isGasTankExecutor === false) {
         alerts.push(alert(
-          "This wallet is not the GasTank executor here" +
-          (network.relayer.gasTankExecutor ? " — the tank names " + shortenAddress(network.relayer.gasTankExecutor) : "") +
-          ". Every charge on this network reverts: swaps run, cost gas, and collect nothing. " +
-          "Run scripts/set-gastank-executor.js.", false));
+          "Not the GasTank executor here" +
+          (network.relayer.gasTankExecutor ? " — tank names " + shortenAddress(network.relayer.gasTankExecutor) : "") +
+          ". Every charge reverts: run scripts/set-gastank-executor.js.", false));
       }
       if (network.vault.autoPlanFeeUsd && recipientUnset) {
-        alerts.push(alert("The extra auto-plan fee is priced but has no recipient, so enrolling a second plan reverts.", true));
+        alerts.push(alert("Auto-plan fee priced with no recipient — a second plan reverts.", true));
       }
       if (runway != null && runway < 50) {
-        alerts.push(alert("Fewer than 50 executions of gas left in this wallet. Top it up before automation stalls here.", true));
+        alerts.push(alert("Under 50 runs of gas left. Top up before automation stalls.", true));
       }
 
       return '<article class="card wallet-card" style="--i:' + index + '">' +
@@ -1393,29 +1464,34 @@
             money(vault.autoPlanFeeRecipientBalanceUsd) + "</span></div>"
           : "");
 
-      // Read-only, with the reason stated. The threshold is part of the rule and meaningless
-      // without it: the fee only applies while more than half the plan's original total remains.
+      // Read-only. The padlock chip is the whole statement; why it cannot be changed, and the
+      // threshold the rule depends on, live on the tip beside it rather than in a paragraph under
+      // every card on the page.
+      const threshold = vault.earlyCancelThresholdPercent != null ? vault.earlyCancelThresholdPercent : 50;
       const cancelRow =
-        '<div class="wallet-pair"><span>Early-cancellation fee</span><span>' +
+        '<div class="wallet-pair"><span>Early-cancellation fee ' +
+            '<span class="locked-chip">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">' +
+                '<rect x="4" y="10.5" width="16" height="10" rx="2" />' +
+                '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />' +
+              "</svg>Fixed</span> " +
+            tip("A constant in DCAVault.sol, compiled into this vault's bytecode — no owner key " +
+              "can change it, only a redeployment. Charged when a plan is cancelled with more " +
+              "than " + threshold + "% of its original total still unspent.") +
+          "</span><span>" +
           (vault.earlyCancelFeePercent != null ? vault.earlyCancelFeePercent.toFixed(2) + "%" : "—") +
-        "</span></div>" +
-        '<p class="fee-note locked">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
-            '<rect x="4" y="10.5" width="16" height="10" rx="2" />' +
-            '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />' +
-          "</svg>" +
-          "<span>Fixed. It is a <code>constant</code> in DCAVault.sol, compiled into this vault's " +
-            "bytecode, so no owner key can change it — only a new contract and a redeployment can. " +
-            "It applies when a plan is cancelled with more than " +
-            (vault.earlyCancelThresholdPercent != null ? vault.earlyCancelThresholdPercent : 50) +
-            "% of its original total still unspent.</span>" +
-        "</p>";
+        "</span></div>";
 
       const gate = canEdit
-        ? '<p class="fee-note">Saving sends a transaction from ' +
-            escapeHtml(shortenAddress(network.relayer.address || "")) +
-            ", the vault owner. It changes what every user of this network pays from the next block, " +
-            "and cannot be undone except by sending another one." +
+        ? '<p class="fee-signer">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+              '<path d="M13 3 4 14h7l-1 7 9-11h-7l1-7Z" stroke-linejoin="round" />' +
+            "</svg>" +
+            "Live next block · signs as <code>" +
+            escapeHtml(shortenAddress(network.relayer.address || "")) + "</code>" +
+            tip("Saving sends a transaction from the vault owner. It changes what every user of " +
+              "this network pays from the next block, and can only be undone by sending another " +
+              "one.", "right") +
           "</p>"
         : '<p class="fee-note locked">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
@@ -1423,9 +1499,11 @@
               '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />' +
             "</svg>" +
             "<span>" + (vault.ownedByRelayer === false
-              ? "This vault is owned by " + escapeHtml(vault.owner ? shortenAddress(vault.owner) : "another address") +
-                ", not by the key this backend signs with, so these fees have to be changed from that key."
-              : "The vault owner could not be read, so no change can be attempted from here.") +
+              ? "Owned by " + escapeHtml(vault.owner ? shortenAddress(vault.owner) : "another address") +
+                " — change these from that key" +
+                tip("This vault's owner is not the key this backend signs with, so a save from " +
+                  "here would revert.", "right")
+              : "Owner could not be read, so no change can be attempted from here.") +
             "</span>" +
           "</p>";
 
@@ -1498,9 +1576,7 @@
         : "the extra auto-plan fee from " + money(current) + " to " + money(value);
       if (!window.confirm(
         "Change " + label + " on " + network.name + "?\n\n" +
-        "This sends a transaction from the vault owner and takes effect from the next block. " +
-        "Every user of this network is charged the new amount, and undoing it means sending another " +
-        "transaction.",
+        "Live for every user from the next block. Undoing it means another transaction.",
       )) return;
 
       const previous = button.textContent;
@@ -1823,12 +1899,6 @@
         state.wallets = wallets;
         state.flows = flows;
         state.ledgerLimit = 40;
-
-        if (!wallets.relayerConfigured) {
-          el.heroNote.textContent =
-            "RELAYER_PRIVATE_KEY is not set on this backend, so the wallet address cannot be derived " +
-            "and no balance can be read. Execution history below is unaffected.";
-        }
 
         renderAll();
         el.status.textContent = "Updated " + new Date().toLocaleTimeString();

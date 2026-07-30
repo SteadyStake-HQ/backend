@@ -58,10 +58,15 @@ const ERC20_ABI = [
   { type: 'function', name: 'balanceOf', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
 ] as const;
 
+/*
+ * `gasCostPerExecutionUsdc6` is deliberately absent. The contract still stores and still exposes it,
+ * but nothing has read it since a run started being charged the gas it actually burned (see
+ * config.ts) — and reading a dead field only to print it next to the live per-run figure gave an
+ * operator two prices for the same thing, one of which no user is ever charged.
+ */
 const GAS_TANK_READ_ABI = [
   { type: 'function', name: 'executor', inputs: [], outputs: [{ type: 'address' }], stateMutability: 'view' },
   { type: 'function', name: 'owner', inputs: [], outputs: [{ type: 'address' }], stateMutability: 'view' },
-  { type: 'function', name: 'gasCostPerExecutionUsdc6', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
 ] as const;
 
 const VAULT_READ_ABI = [
@@ -144,9 +149,6 @@ export interface TreasuryWalletNetwork {
     /** Users' prepaid balances sitting in the contract. A liability, not revenue. */
     floatRaw: string | null;
     floatUsd: number | null;
-    /** The contract's own per-run price, in stablecoin base units. */
-    priceRaw: string | null;
-    priceUsd: number | null;
   };
 
   vault: {
@@ -178,15 +180,20 @@ export interface TreasuryWalletNetwork {
 
   nativePrice: NativePriceQuote;
 
-  /** How many more runs the relayer's native balance covers on this chain. */
+  /**
+   * How many more runs the relayer's native balance covers on this chain: the balance divided by
+   * `costPerRunUsd`, which is an *average* run and not a price anybody sets. There is no per-run
+   * price left to divide by — the contract's is dead and unread (see GAS_TANK_READ_ABI above) — so
+   * this figure moves with what runs here have really been costing, which is the point of it.
+   */
   runwayRuns: number | null;
-  /** The per-run cost behind `runwayRuns`, USD. */
+  /** The average per-run cost behind `runwayRuns`, USD. */
   costPerRunUsd: number | null;
   /**
-   * Where that cost came from. `recorded` is the mean of what runs on this chain actually burned;
-   * `projected` multiplies the chain's gas profile by its gas price right now, which is what a run
-   * *would* cost rather than what one did. Reported so the UI never presents the second as the
-   * first. Null when neither could be worked out.
+   * Where that average came from. `recorded` is the mean of what runs on this chain actually
+   * burned; `projected` multiplies the chain's gas profile by its gas price right now, which is
+   * what a run *would* cost rather than what one did. Reported so the UI never presents the second
+   * as the first. Null when neither could be worked out.
    */
   costPerRunSource: 'recorded' | 'projected' | null;
 
@@ -570,7 +577,7 @@ export class TreasuryService {
         isGasTankExecutor: null,
         gasTankExecutor: null,
       },
-      gasTank: { address: cfg?.gasTank ?? null, owner: null, floatRaw: null, floatUsd: null, priceRaw: null, priceUsd: null },
+      gasTank: { address: cfg?.gasTank ?? null, owner: null, floatRaw: null, floatUsd: null },
       vault: {
         address: cfg?.vault ?? null,
         owner: null,
@@ -612,7 +619,6 @@ export class TreasuryService {
         gasTankFloat,
         gasTankExecutor,
         gasTankOwner,
-        gasTankPrice,
         vaultOwner,
         claimable,
         feeBps,
@@ -630,7 +636,6 @@ export class TreasuryService {
         settle(client.readContract({ address: stable, abi: ERC20_ABI, functionName: 'balanceOf', args: [cfg.gasTank as `0x${string}`] }) as Promise<bigint>),
         settle(client.readContract({ address: cfg.gasTank as `0x${string}`, abi: GAS_TANK_READ_ABI, functionName: 'executor' }) as Promise<string>),
         settle(client.readContract({ address: cfg.gasTank as `0x${string}`, abi: GAS_TANK_READ_ABI, functionName: 'owner' }) as Promise<string>),
-        settle(client.readContract({ address: cfg.gasTank as `0x${string}`, abi: GAS_TANK_READ_ABI, functionName: 'gasCostPerExecutionUsdc6' }) as Promise<bigint>),
         settle(client.readContract({ address: cfg.vault as `0x${string}`, abi: VAULT_READ_ABI, functionName: 'owner' }) as Promise<string>),
         settle(client.readContract({ address: cfg.vault as `0x${string}`, abi: VAULT_READ_ABI, functionName: 'totalFeesCollected' }) as Promise<bigint>),
         settle(client.readContract({ address: cfg.vault as `0x${string}`, abi: VAULT_READ_ABI, functionName: 'feePercentage' }) as Promise<bigint>),
@@ -694,8 +699,6 @@ export class TreasuryService {
           owner: gasTankOwner,
           floatRaw: gasTankFloat?.toString() ?? null,
           floatUsd: toStable(gasTankFloat),
-          priceRaw: gasTankPrice?.toString() ?? null,
-          priceUsd: toStable(gasTankPrice),
         },
         vault: {
           address: cfg.vault,

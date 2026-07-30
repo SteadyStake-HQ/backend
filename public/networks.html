@@ -12,6 +12,38 @@
   <link rel="stylesheet" href="/dashboard.css" />
   <style>
     /* Page-local only. Everything structural is dashboard.css. */
+
+    /* The reassurance the heading paragraph used to spell out, as three marks. What an operator
+       needs before touching a live network is not an explanation of bookkeeping — it is to see at
+       a glance that nothing here reaches a balance. */
+    .safe-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .safe-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border: 1px solid rgba(72, 217, 154, 0.24);
+      border-radius: 999px;
+      background: rgba(72, 217, 154, 0.06);
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .safe-chip svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+    }
+
     .net-actions {
       display: flex;
       flex-wrap: wrap;
@@ -122,10 +154,29 @@
         <p class="eyebrow">Infrastructure</p>
         <h1>Network allocation</h1>
         <p class="page-description">
-          Which networks the app offers and the relayer serves, and whether each is listed as a
-          mainnet or a testnet. Everything here is off-chain bookkeeping — no vault, plan, deposit,
-          or gas tank balance is touched, and a network comes back exactly as it was.
+          Which networks the app offers, and how each one is listed.
         </p>
+        <ul class="safe-strip" aria-label="What a change here does">
+          <li class="safe-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+              <path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Off-chain only
+          </li>
+          <li class="safe-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+              <path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            No balance touched
+          </li>
+          <li class="safe-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M4 10h9a5 5 0 1 1 0 10H7" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="m4 10 4-4M4 10l4 4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Fully reversible
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>

@@ -180,11 +180,17 @@
 }
 
 .picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 5px;
   padding: 8px 10px 4px;
   border-top: 1px solid var(--border);
   color: var(--dim);
   font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   line-height: 1.5;
 }
 
@@ -450,13 +456,6 @@
 
 .hero-value.neg {
   color: #ffc0cb;
-}
-
-.hero-note {
-  max-width: 42ch;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 .kpi-row {
@@ -928,7 +927,11 @@
   border-top: 1px solid rgba(141, 159, 199, 0.07);
 }
 
+/* A flex row so a label can carry a chip or a tip beside its words without them baseline-drifting. */
 .wallet-pair > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-weight: 650;
 }
@@ -1631,6 +1634,261 @@
 
 .ledger .leg-plus {
   opacity: 0.6;
+}
+
+/* ---- Info tip -------------------------------------------------------------------------------
+   The page used to carry its caveats as paragraphs. Each one was true and almost none of them were
+   read: the reader wants the figure, and the qualification only matters once they doubt it. So the
+   qualification became a mark beside the figure that opens on hover or focus, and the prose that
+   surrounded it is gone. `data-tip` holds the sentence; nothing is hidden, only folded. */
+
+.tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 8.5px;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1;
+  /* The mark sits inside labels that are uppercased and letter-spaced; neither belongs on a glyph
+     that has to read as an "i". */
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: help;
+}
+
+.tip::before {
+  content: "i";
+}
+
+.tip:hover,
+.tip:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 40;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #0b1120;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  transform: translate(-50%, 4px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+}
+
+.tip:hover::after,
+.tip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+/* Near the right edge a centred bubble would run off the panel; these variants anchor it to the
+   mark's own side instead. Applied by the markup that knows where the mark sits. */
+.tip.tip-right::after {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px);
+}
+
+.tip.tip-right:hover::after,
+.tip.tip-right:focus-visible::after {
+  transform: translate(0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip::after {
+    transition: none;
+  }
+}
+
+/* ---- Flow strip -----------------------------------------------------------------------------
+   The heading's paragraph, drawn. One wallet, two tokens, opposite directions — which is the whole
+   claim the prose was making and the only part worth the space. */
+
+.flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(5, 9, 17, 0.34);
+}
+
+.flow-node svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.flow-node b {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.flow-node span {
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.flow-node.out {
+  border-color: rgba(217, 89, 38, 0.34);
+  color: #ffb694;
+}
+
+.flow-node.in {
+  border-color: rgba(57, 135, 229, 0.34);
+  color: #a9c8ff;
+}
+
+.flow-node.hub {
+  color: var(--text);
+}
+
+.flow-arrow {
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ---- Fact chips -----------------------------------------------------------------------------
+   What the hero paragraph said, as a row of readings. A count and its label is a chip; a caveat is
+   the same chip tinted, carrying its explanation on a tip rather than in a trailing sentence. */
+
+.fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  /* Held to roughly the width the paragraph had, so the hero keeps its share of the panel and the
+     KPI grid beside it is not squeezed onto its own row by a long run of chips. */
+  max-width: 46ch;
+  margin-top: 4px;
+}
+
+.fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid rgba(141, 159, 199, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 9, 17, 0.34);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.fact b {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.fact.pos b {
+  color: #a9c8ff;
+}
+
+.fact.neg b {
+  color: #ffc0cb;
+}
+
+/* A caveat is amber whatever it says: every one of them is the same kind of thing — a figure that
+   is true but not exact. Colour is never the only channel, so each carries a tip as well. */
+.fact.caveat {
+  border-color: rgba(250, 178, 25, 0.32);
+  background: rgba(250, 178, 25, 0.08);
+  color: #ffdda1;
+}
+
+.fact.caveat b {
+  color: #ffdda1;
+}
+
+/* ---- Locked value ----------------------------------------------------------------------------
+   A figure no key can change. The padlock is the statement; the reason lives on the tip. */
+
+.locked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid rgba(141, 159, 199, 0.22);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.locked-chip svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* The signer line under an editable fee: who it sends as, and that it is live immediately. */
+.fee-signer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.fee-signer svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.fee-signer code {
+  color: var(--muted);
+  font-size: 10px;
 }
 
 /* The leg that was not on this row's chain — dimmer, because the row is about the other one. */

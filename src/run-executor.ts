@@ -281,7 +281,11 @@ export const DCA_VAULT_ABI = [
 
 export const GAS_TANK_ABI = [
   { type: "function", name: "balanceOf", inputs: [{ name: "user", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { type: "function", name: "gasCostPerExecutionUsdc6", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  /*
+   * `gasCostPerExecutionUsdc6` is not declared here. It still exists on the contract and nothing
+   * may read it: `recordExecution` debits the amount this relayer passes, which is what the run's
+   * receipt says it burned. An ABI entry for a dead price is how a dead price gets displayed again.
+   */
   {
     type: "function",
     name: "recordExecution",
