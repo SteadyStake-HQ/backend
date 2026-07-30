@@ -29,9 +29,7 @@ import { createPublicClient, formatUnits, http, type PublicClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { getGasProfile } from './gas-profile';
 import { getNativePriceQuote, type NativePriceQuote } from './native-price';
-import { getRunPriceUsdc6 } from './run-price';
 import {
-  getGasCostPerExecutionUsdc6Fallback,
   getRpc,
   getStableOne,
   getSwapAdapter,
@@ -161,13 +159,14 @@ async function candidateUsers(chainId: number): Promise<string[]> {
 
 /**
  * The amount to put through `recordExecution`. It has to be one the tank can actually pay, or the
- * call reverts and estimates nothing: the run price when the user's balance covers it, their whole
- * balance when it does not. The gas is the same either way — the same storage slots are written.
+ * call reverts and estimates nothing: a nominal cent when the user's balance covers it, their whole
+ * balance when it does not. The exact figure does not matter — the gas is the same either way,
+ * since the same storage slots are written whatever the amount.
  */
-function recordAmount(chainId: number, balance: bigint, effectivePrice: bigint | null): bigint {
-  const price = effectivePrice && effectivePrice > 0n ? effectivePrice : getStableOne(chainId) / 100n;
+function recordAmount(chainId: number, balance: bigint): bigint {
+  const nominal = getStableOne(chainId) / 100n;
   if (balance <= 0n) return 0n;
-  return balance >= price ? price : balance;
+  return balance >= nominal ? nominal : balance;
 }
 
 /**
@@ -203,8 +202,6 @@ async function simulateRunGas(chainId: number): Promise<RunGasEstimate> {
 
   const vault = cfg.vault as `0x${string}`;
   const gasTank = cfg.gasTank as `0x${string}`;
-  const effectivePrice =
-    getRunPriceUsdc6(chainId) ?? getGasCostPerExecutionUsdc6Fallback(chainId) ?? null;
 
   let feeBps = 25;
   try {
@@ -300,7 +297,7 @@ async function simulateRunGas(chainId: number): Promise<RunGasEstimate> {
     } catch {
       // Treated as an empty tank below, which skips this user for the deduction leg.
     }
-    const amount = recordAmount(chainId, balance, effectivePrice);
+    const amount = recordAmount(chainId, balance);
     if (amount <= 0n) {
       lastReason =
         'The plan that could be simulated has an empty gas tank on this network, so the deduction leg could not be estimated.';

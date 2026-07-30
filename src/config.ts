@@ -121,6 +121,24 @@ export function convertStableAmount(amount: bigint, fromChainId: number, toChain
   return fromPooledUsd6(toPooledUsd6(amount, fromChainId), toChainId);
 }
 
+/**
+ * The same conversion, rounded up.
+ *
+ * `convertStableAmount` goes through the pooled scale, and stepping down from 18 decimals to 6
+ * truncates — harmless when restating a balance, not harmless when restating a charge. A BSC run
+ * settled against a 6-decimal tank would round its cost down by up to a hundredth of a cent every
+ * time, and the relayer is the one that already paid that gas. Use this wherever the amount is
+ * money owed rather than money held.
+ */
+export function convertStableAmountUp(amount: bigint, fromChainId: number, toChainId: number): bigint {
+  const from = getStableDecimals(fromChainId);
+  const to = getStableDecimals(toChainId);
+  if (from === to || amount <= 0n) return amount;
+  if (to > from) return amount * 10n ** BigInt(to - from);
+  const divisor = 10n ** BigInt(from - to);
+  return (amount + divisor - 1n) / divisor;
+}
+
 type DeployedEntry = {
   chainId: number;
   DCAVault?: string;
@@ -255,22 +273,14 @@ export function usesDirectSwapRouter(chainId: number): boolean {
   return DIRECT_SWAP_ROUTER_CHAINS.has(chainId);
 }
 
-/**
- * Optional fallback: fixed gas cost per execution in USDC (6 decimals).
+/*
+ * `getGasCostPerExecutionUsdc6Fallback` used to live here: a GAS_COST_PER_EXECUTION_USDC env var
+ * that fixed what a run charged when the GasTank's own `gasCostPerExecutionUsdc6` was unset. Both
+ * are gone from the pricing path. A run is charged the gas it burned, read from its receipt at the
+ * chain's own gas price (backend/src/run-executor.ts), so there is no longer a rate for an env var
+ * to stand in for — and a fixed one could only ever be wrong in one of two directions: charging a
+ * user more than their run cost, or leaving the relayer to pay the difference.
  *
- * This is a *fallback*, not an override. The GasTank's own `gasCostPerExecutionUsdc6` is the
- * source of truth, because that is the number the frontend quotes to the user and prepays into
- * the tank at plan creation. When this env var outranked the contract the two disagreed —
- * the UI charged the contract price and the relayer deducted the env price — so a plan funded
- * to completion could still run the tank dry mid-way and then fail every deduction silently.
- * Used only when the contract has no price set (returns 0).
+ * The contract's `gasCostPerExecutionUsdc6` still exists and is still settable; nothing reads it.
+ * `recordExecution` debits the amount the relayer passes it, which is now that receipt's cost.
  */
-export function getGasCostPerExecutionUsdc6Fallback(chainId: number): bigint | null {
-  const raw = process.env.GAS_COST_PER_EXECUTION_USDC?.trim();
-  if (!raw) return null;
-  const usd = parseFloat(raw);
-  if (!Number.isFinite(usd) || usd <= 0) return null;
-  // Scaled by the chain's own stablecoin decimals, not a fixed 1e6 — the GasTank deducts in the
-  // settlement token's base units, which is 1e18 on BSC.
-  return (BigInt(Math.round(usd * 1_000_000)) * getStableOne(chainId)) / 1_000_000n;
-}

@@ -1943,16 +1943,10 @@ a.addr:hover {
   }
 }
 
-/* ---- Run price (run-price.html) ---------------------------------------
-   The per-run charge, per network. Every rule here is scoped to that page's
-   own classes so it cannot reach the plan-activity or deployments cards. */
-
-.price-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 14px;
-}
+/* ---- Shared bits that outlived the run-price page -----------------------
+   These were written for /run-price.html, which is gone: a run is no longer
+   priced by anyone, it is charged the gas it burned. The rules below stayed
+   because other pages had already adopted them. */
 
 .result-line.success {
   color: var(--green);
@@ -1960,133 +1954,6 @@ a.addr:hover {
 
 .result-line.error {
   color: var(--red);
-}
-
-.price-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  border: 1px solid rgba(110, 140, 255, 0.16);
-  border-radius: 12px;
-  background: linear-gradient(140deg, rgba(110, 140, 255, 0.11), rgba(65, 201, 243, 0.05));
-}
-
-.price-label {
-  color: var(--dim);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.price-value {
-  color: var(--text);
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.price-value small {
-  margin-left: 4px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.price-dim {
-  color: var(--dim);
-}
-
-/* The gap between the flat rate and what a run costs right now. Both directions are worth
-   knowing: underpriced burns the relayer, overpriced quietly overcharges every user. */
-.price-drift {
-  margin: 0;
-  padding: 9px 11px;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.price-drift.warn {
-  color: #ffd9a3;
-  border: 1px solid rgba(245, 181, 94, 0.28);
-  background: rgba(245, 181, 94, 0.09);
-}
-
-.price-drift.ok {
-  color: #b6f0d5;
-  border: 1px solid rgba(72, 217, 154, 0.24);
-  background: rgba(72, 217, 154, 0.08);
-}
-
-.price-editor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 11px;
-  border-top: 1px solid var(--border);
-}
-
-.price-input {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex: 0 0 130px;
-}
-
-.price-currency {
-  position: absolute;
-  left: 11px;
-  color: var(--dim);
-  font-size: 12px;
-  font-weight: 800;
-  pointer-events: none;
-}
-
-.price-input input,
-.price-note-input {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-  font: inherit;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  transition: border-color 160ms ease, background 160ms ease;
-}
-
-.price-input input {
-  padding-left: 24px;
-}
-
-.price-note-input {
-  flex: 1 1 160px;
-  font-family: var(--font-sans);
-  font-weight: 600;
-}
-
-.price-input input:focus,
-.price-note-input:focus {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--surface-raised);
-}
-
-.price-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex: 1 1 auto;
-}
-
-.price-actions .button {
-  flex: 0 0 auto;
 }
 
 .button.ghost {
@@ -2110,38 +1977,6 @@ a.addr:hover {
   background: rgba(240, 113, 135, 0.12);
 }
 
-.price-meta {
-  margin: 0;
-  color: var(--dim);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.price-note {
-  color: var(--muted);
-  font-weight: 600;
-}
-
-/* Where the charged number comes from. "Set here" is the only one an operator chose. */
-.chip.src-manual {
-  color: var(--green);
-  border-color: rgba(72, 217, 154, 0.26);
-  background: rgba(72, 217, 154, 0.1);
-}
-
-.chip.src-onchain {
-  color: var(--blue);
-  border-color: rgba(110, 140, 255, 0.26);
-  background: rgba(110, 140, 255, 0.1);
-}
-
-.chip.src-env,
-.chip.src-live {
-  color: var(--amber);
-  border-color: rgba(245, 181, 94, 0.26);
-  background: rgba(245, 181, 94, 0.1);
-}
-
 /* Each network's live figures arrive on their own, so each is a placeholder until it does.
    A skeleton says "still coming" where an em dash would have said "there is nothing here". */
 .skel {
@@ -2160,11 +1995,6 @@ a.addr:hover {
   animation: skel-sweep 1.4s ease-in-out infinite;
 }
 
-.price-value .skel {
-  height: 22px;
-  border-radius: 6px;
-}
-
 .chip.pending {
   color: transparent;
   border-color: var(--border);
@@ -2178,37 +2008,4 @@ a.addr:hover {
   to {
     background-position: 0 50%;
   }
-}
-
-/* Inline "try again" inside a failure note — a button that reads as part of the sentence. */
-.link-button {
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: none;
-  font: inherit;
-  font-weight: 800;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.link-button:hover {
-  color: var(--text);
-}
-
-/* A card redrawn in place has already made its entrance. */
-.price-card.settled {
-  animation: none;
-}
-
-/* The gas and native-price rows carry a parenthetical saying where the number came from. Addresses
-   are nowrap for good reason; a sentence in the same slot has to wrap instead of leaving the card. */
-.price-card .row .val {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  text-align: right;
-}
-
-.price-card .row .addr {
-  white-space: normal;
 }

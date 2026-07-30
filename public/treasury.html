@@ -40,12 +40,6 @@
           </svg>
           <span>Networks</span>
         </a>
-        <a class="nav-link" href="/run-price.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>Run price</span>
-        </a>
         <a class="nav-link active" href="/treasury.html" aria-current="page">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M3 8.5 12 4l9 4.5v2H3v-2Z" stroke-linejoin="round" />
@@ -119,8 +113,8 @@
         <div class="chips" id="network-chips"></div>
         <button class="clear-filters" id="clear-networks" type="button" hidden>All networks</button>
       </div>
-      <!-- Same operator secret the plan-activity and run-price pages use, so entering it on any of
-           them unlocks the others. Only needed to change a fee; every figure here reads without it. -->
+      <!-- Same operator secret the plan-activity page uses, so entering it on either one unlocks
+           the other. Only needed to change a fee; every figure here reads without it. -->
       <div class="filter-row">
         <span class="filter-label">Admin</span>
         <div class="admin-field" style="max-width: 300px;">
@@ -1895,7 +1889,7 @@
     });
 
     /* The admin token is a shared operator secret, not a per-user credential — same storage key as
-       the plan-activity and run-price pages, so entering it on any one unlocks the others. */
+       the plan-activity page, so entering it on either unlocks the other. */
     const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
     try {
       el.adminToken.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";

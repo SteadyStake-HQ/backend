@@ -8,8 +8,7 @@ Standalone backend that runs DCA execution: reads registered users from Supabase
    - `RELAYER_PRIVATE_KEY` – wallet that sends txs (must be GasTank executor)
    - `SUPABASE_DB_URL` – Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores DCA plans (`dca_plans`), the registered-user list, scheduler state/config, and history. Scheduler state/config/history fall back to local JSON files when unset, but **plans and members are database-only** — without it, `/api/plans` returns nothing and the executor has no members to run (see “DCA plans” below).
    - `ZERO_EX_API_KEY` (optional)
-   - `GAS_COST_PER_EXECUTION_USDC` (optional): last-resort fixed USD amount per execution. An operator price set on the **Run price** dashboard page, and then the GasTank's own `gasCostPerExecutionUsdc6`, both outrank it (see “Per-run price” below); with none of the three set, cost is derived from network gas + native token price.
-   - `ADMIN_API_TOKEN` (required to use the operator controls): gates changing the per-run price, holding a plan, and allocating networks. Unset, those endpoints refuse every request.
+   - `ADMIN_API_TOKEN` (required to use the operator controls): gates holding a plan and allocating networks. Unset, those endpoints refuse every request.
    - `PORT` (optional, default `3340`): HTTP server port for the scheduler dashboard
 
    There is no chain list to configure. The executor runs **every chain that has a GasTank in `deployed-addresses.json`**, minus the ones paused or removed under “Network allocation” below.
@@ -25,27 +24,52 @@ Standalone backend that runs DCA execution: reads registered users from Supabase
 
 Use pm2 or systemd in production to keep `npm start` running (the server process runs the executor on the configured interval).
 
-## Per-run price
+## What a run charges
 
-What one scheduled run charges a user's gas tank is resolved in one order, by this executor and by
-the app alike — a number the UI quotes and the relayer does not debit is what lets a fully funded
-plan run its tank dry mid-way:
+Nobody sets a per-run price, and there is nothing to configure. A run is charged the gas it burned:
 
-1. **Operator price**, set per network on the **Run price** dashboard page (`/run-price.html`) and
-   stored by `src/run-price.ts` — Supabase `kv_store`, or `run-price.json` when `SUPABASE_DB_URL`
-   is unset. Changeable in seconds without a transaction, which is why it wins.
-2. **`gasCostPerExecutionUsdc6`** on that chain's GasTank, changed only by an owner transaction
-   (`scripts/set-gas-cost.js`).
-3. **`GAS_COST_PER_EXECUTION_USDC`** for a chain where neither is set.
-4. Otherwise each run is charged what it measured, so the amount moves with gas.
+```
+charge = swap receipt (gasUsed × effectiveGasPrice)      ← exact, from the chain
+       + deduction leg (measured gas × gas price × 1.2)  ← estimated; its receipt does not exist yet
+       × the native token's USD price
+```
 
-The dashboard page shows each network's flat rate beside what a run costs the relayer right now:
-**live gas price × the gas a run burns × the native token's USD price**. `POST /api/run-price`
-needs `ADMIN_API_TOKEN`; the GETs are open, because they are the same figure every user is already
-shown. A change reaches the executor within ~30s and the app within about two minutes of caching.
+stated in the paying tank's stablecoin and **rounded up** at every step. Truncation would write
+off a fraction of gas the relayer had already paid on the user's behalf; a rounding has to fall on
+the side of whoever fronted the money.
 
-The gas figure is the one that used to be assumed, and `src/run-cost.ts` now resolves it best-first,
-labelling every card with which step answered:
+The deduction leg is the only part that has to be predicted rather than read, because the amount
+`recordExecution` debits is an argument to `recordExecution`. It is priced from the gas that
+chain's own deduction transactions have really burned (`src/gas-profile.ts`), plus 20%.
+
+Gas price and token price are read live per chain and **held for one sweep**, so two users whose
+plans run in the same pass are charged against the same reading rather than against whichever block
+happened to arrive between them. A run whose gas price or token price cannot be read is skipped,
+not given away.
+
+Balances are pooled, so a run on one network can be settled from another's tank. The deduction then
+runs on the *paying* network at its gas price, in its token — so a cross-network run costs more,
+and the app tells users that before it happens rather than after.
+
+Every completed run reports back to `src/gas-profile.ts`, which keeps the last **1,000 per chain**
+— the gas, to price the next run's deduction leg, and the charge, to publish what runs on that
+network actually cost. `GET /api/gas-profile?chainId=<id>` serves both:
+
+```
+{ gasUnitsPerRun, recordGasUnits, samples, source,
+  cost: { samples, avgUsd, maxUsd, minUsd, lastUsd,
+          crossChainSamples, crossChainAvgUsd, sameChainAvgUsd } }
+```
+
+`avgUsd` and `maxUsd` are what the gas tank modal shows users: a charge that follows gas has a
+spread, and the average alone would let someone fund a plan for a calm week and have it stall on a
+busy one. Omit `chainId` for every chain at once.
+
+The GasTank's `gasCostPerExecutionUsdc6` still exists on chain and nothing reads it —
+`recordExecution` debits the amount the relayer passes, which is the receipt's cost.
+
+`src/run-cost.ts` is the operator-facing view of the same arithmetic, and resolves the gas figure
+best-first:
 
 1. **simulated** — a real plan on that network is picked, the exact calldata the relayer would send
    is built for it (a live 0x quote included, on aggregator chains), and both transactions —
@@ -55,14 +79,6 @@ labelling every card with which step answered:
 2. **measured** — the median of what recent completed runs on that chain really used
    (`src/gas-profile.ts`).
 3. **seed** — the pre-measurement constant for that chain's swap path.
-
-Two endpoints, split because they have different costs:
-
-- `GET /api/run-price` — every network's stored price, and nothing that needs a network. Immediate.
-- `GET /api/run-price/live?chainId=<id>` — **one** network's GasTank rate and live cost. The page
-  draws its cards from the first call and fills each one in from this one, per network. Batching
-  these let the slowest chain set the speed of the whole page, and let one throttled price feed
-  blank every network's live cost at once.
 
 Native token prices (`src/native-price.ts`) come from CoinGecko in a single batched request, with
 Coinbase and Binance behind it and BOT Chain's own DEX in front of it for BOT. A price that was

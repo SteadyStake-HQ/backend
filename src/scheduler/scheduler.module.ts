@@ -10,7 +10,6 @@ import { NetworkMetricsService } from './network-metrics.service';
 import { RuntimeSessionController } from './runtime-session.controller';
 import { PlanTimingController } from './plan-timing.controller';
 import { GasProfileController } from './gas-profile.controller';
-import { RunPriceController } from './run-price.controller';
 
 @Module({
   imports: [HistoryModule],
@@ -24,7 +23,6 @@ import { RunPriceController } from './run-price.controller';
     RuntimeSessionController,
     PlanTimingController,
     GasProfileController,
-    RunPriceController,
   ],
   exports: [SchedulerService],
 })

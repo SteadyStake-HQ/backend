@@ -26,8 +26,7 @@ import {
   clearPlanExecuting,
   markPlanExecuting,
 } from "./plans/plan-execution-state";
-import { recordRunGas } from "./gas-profile";
-import { getRunPriceUsdc6, refreshRunPrices } from "./run-price";
+import { getGasProfile, recordRun } from "./gas-profile";
 import { getNativePriceUsd, prefetchNativePrices } from "./native-price";
 import {
   createPublicClient,
@@ -38,13 +37,17 @@ import {
 } from "viem";
 import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { getVaultUsdcGasTank, getRpc, getGasCostPerExecutionUsdc6Fallback, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, getStableOne, toPooledUsd6, convertStableAmount, CHAIN_NAMES } from "./config";
+import { getVaultUsdcGasTank, getRpc, getChainIdsWithGasTank, usesDirectSwapRouter, getSwapAdapter, getStableOne, toPooledUsd6, convertStableAmountUp, CHAIN_NAMES } from "./config";
 
 const ZERO_EX_BASE = "https://api.0x.org";
 
 /**
- * Floor for an executeSwap gas limit, and the figure the pre-swap *price* estimate is worked out
- * against. The real limit each transaction is sent with comes from `estimateExecuteSwapGas` below.
+ * Floor for an executeSwap gas limit. The real limit each transaction is sent with comes from
+ * `estimateExecuteSwapGas` below.
+ *
+ * A limit, not a cost: the EVM refunds what a transaction does not use, so nothing prices a run
+ * off this. What a run is charged comes from its receipt, and what it is *expected* to cost before
+ * it runs comes from the gas real runs on that chain have burned (gas-profile.ts).
  *
  * This was the limit itself, fixed, and that is what broke swaps on BNB Chain: a 0x route through
  * PancakeSwap Infinity CL needs ~540k, so every run stopped a few opcodes into the aggregator. The
@@ -62,7 +65,16 @@ const GAS_LIMIT_EXECUTE_SWAP_MAX = 3_000_000n;
 /** Headroom over eth_estimateGas: routes move between the estimate and the block that mines it. */
 const GAS_LIMIT_BUFFER_BPS = 13000; // 1.3x
 const ESTIMATE_BUFFER_BPS = 15000; // 1.5x for balance check
-const RECORD_BUFFER_BPS = 11000; // 1.1x when recording actual cost
+/**
+ * Headroom on the one leg of a run that has to be priced before it happens.
+ *
+ * The swap's cost is read from its receipt — exact, no guess involved. The `recordExecution` that
+ * debits the tank cannot be: the amount it debits is an argument to it, so it must be chosen
+ * before the transaction exists. It is priced from the chain's measured record-leg gas at the
+ * current gas price, and widened by this, because that estimate being low is the only way the
+ * relayer ends up paying for part of a user's run out of its own pocket.
+ */
+const RECORD_BUFFER_BPS = 12000; // 1.2x on the estimated deduction leg
 const relayerNonceByChain = new Map<number, number>();
 
 async function getNextRelayerNonce(
@@ -152,28 +164,43 @@ function tokenDelivered(
   return seen ? total : null;
 }
 
+/** Divide, rounding up. Every gas charge uses this — see gasCostToStable. */
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  if (numerator <= 0n) return 0n;
+  return (numerator + denominator - 1n) / denominator;
+}
+
 /**
- * Compute gas cost in settlement-stablecoin base units from gas used and gas price.
- * costUsd = (gasUsed * gasPriceWei) / 1e18 * nativePriceUsd, scaled to the chain's stablecoin
+ * What a quantity of gas comes to in a stablecoin, at a chain's gas price and its token's USD
+ * price: `(gasUnits * gasPriceWei) / 1e18 * nativePriceUsd`, scaled to `scaleChainId`'s stablecoin
  * decimals (1e6 on most chains, 1e18 on BSC) and widened by the buffer (bps).
+ *
+ * `scaleChainId` is only the unit the answer is stated in — the gas price and token price are the
+ * caller's, and are not always the same chain's. A run executed on one network and settled from
+ * another network's tank costs the gas of both, at each one's own price, expressed in one currency.
+ *
+ * Rounded **up**, always. This is the arithmetic that turns money the relayer has already spent
+ * into money it asks back, so every fraction of a base unit lost to truncation is a fraction the
+ * relayer paid for on the user's behalf and never gets back. It is a rounding either way; it
+ * should fall on the side of the party that fronted the gas.
  */
-function gasCostToUsdc6(
-  chainId: number,
-  gasUsed: bigint,
+function gasCostToStable(
+  scaleChainId: number,
+  gasUnits: bigint,
   gasPriceWei: bigint,
   nativePriceUsd: number,
-  bufferBps: number,
+  bufferBps: number = 10000,
 ): bigint {
-  if (nativePriceUsd <= 0) return 0n;
-  const weiSpent = gasUsed * gasPriceWei;
+  if (nativePriceUsd <= 0 || gasUnits <= 0n || gasPriceWei <= 0n) return 0n;
   // All multiplications happen before any division so the 1e6-scaled native price keeps its
   // precision even when the target scale is smaller than the intermediate.
-  const usdScaled =
-    (weiSpent * BigInt(Math.round(nativePriceUsd * 1e6)) * BigInt(bufferBps) * getStableOne(chainId)) /
-    (10n ** 18n) /
-    1_000_000n /
-    10000n;
-  return usdScaled;
+  const numerator =
+    gasUnits *
+    gasPriceWei *
+    BigInt(Math.round(nativePriceUsd * 1e6)) *
+    BigInt(bufferBps) *
+    getStableOne(scaleChainId);
+  return ceilDiv(numerator, 10n ** 18n * 1_000_000n * 10_000n);
 }
 
 export const DCA_VAULT_ABI = [
@@ -748,21 +775,66 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
 
   // Pre-fetch native token prices for all allowed chains in one Coingecko request
   await prefetchNativePrices([...allowedChains]);
-  // Load the operator's per-chain run prices once for the whole sweep: every lookup below is
-  // synchronous, and a price edited mid-sweep must not charge two users in the same run
-  // differently. A failure here leaves the last known prices in place (see run-price.ts).
-  await refreshRunPrices().catch(() => undefined);
   const gasPriceCache: Record<number, bigint> = {};
+  const nativeUsdCache: Record<number, number> = {};
+
+  /**
+   * Gas price on a chain, read once for the whole sweep.
+   *
+   * Held for the sweep on purpose: two users whose plans are executed by the same pass are
+   * charged against the same reading, so a block that arrives mid-sweep cannot make one of them
+   * pay more than the other for the same work.
+   */
+  const gasPriceOf = async (cid: number): Promise<bigint> => {
+    if (gasPriceCache[cid] === undefined) {
+      const rpc = getRpc(cid);
+      const chain = getChain(cid);
+      if (!rpc || !chain) return 0n;
+      gasPriceCache[cid] = await createPublicClient({ chain, transport: http(rpc) })
+        .getGasPrice()
+        .catch(() => 0n);
+    }
+    return gasPriceCache[cid];
+  };
+
+  const nativeUsdOf = async (cid: number): Promise<number> => {
+    if (nativeUsdCache[cid] === undefined) {
+      nativeUsdCache[cid] = await getNativePriceUsd(cid).catch(() => 0);
+    }
+    return nativeUsdCache[cid];
+  };
+
+  /**
+   * What the deduction transaction will cost on the chain that settles it, stated in
+   * `scaleChainId`'s stablecoin base units.
+   *
+   * Every other figure in a run's price is read from a receipt. This one cannot be: the amount
+   * `recordExecution` debits is an argument to it, so it has to be priced before it is sent. It is
+   * priced from that chain's own measured record-leg gas (gas-profile.ts) at that chain's current
+   * gas price and token price, plus RECORD_BUFFER_BPS.
+   *
+   * When the settling chain is not the executing one this is where the difference shows up, and
+   * why a plan paid out of another network's tank costs more: the swap's gas is the execution
+   * chain's, but this leg is charged at the settling chain's gas price, in the settling chain's
+   * token, whatever either happens to be worth.
+   */
+  const recordLegCost = async (scaleChainId: number, settleChainId: number): Promise<bigint> => {
+    const [price, usd] = await Promise.all([gasPriceOf(settleChainId), nativeUsdOf(settleChainId)]);
+    if (price <= 0n || usd <= 0) return 0n;
+    return gasCostToStable(
+      scaleChainId,
+      BigInt(getGasProfile(settleChainId).recordGasUnits),
+      price,
+      usd,
+      RECORD_BUFFER_BPS,
+    );
+  };
 
   for (const member of members) {
     const [chainIdStr, userAddress] = member.split(":");
     const chainId = parseInt(chainIdStr, 10);
     if (!userAddress || isNaN(chainId)) continue;
     if (!allowedChains.has(chainId)) continue;
-
-    // Resolved per chain: the env value is a USD figure, and scaling it to base units depends on
-    // the chain's stablecoin decimals.
-    const gasCostFallbackUsdc6 = getGasCostPerExecutionUsdc6Fallback(chainId);
 
     log(`  [${member}] Processing…`);
     const cfg = getVaultUsdcGasTank(chainId);
@@ -788,19 +860,6 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
     const user = userAddress as `0x${string}`;
     const gasTankAddr = cfg.gasTank as `0x${string}`;
 
-    // Prefer on-chain gas cost per execution (editable by owner) when set
-    let gasCostPerExecutionFromContract = 0n;
-    try {
-      gasCostPerExecutionFromContract = (await publicClient.readContract({
-        address: gasTankAddr,
-        abi: GAS_TANK_ABI,
-        functionName: "gasCostPerExecutionUsdc6",
-        args: [],
-      })) as bigint;
-    } catch {
-      // ignore; will fall back to env or gas-price derived
-    }
-
     // Global gas tank balance (CEX-style: top-up on any network of this kind, use on any of them).
     const deductChainIds = eligibleDeductChainIds(chainId, networkTypes);
     let globalGas: { globalBalance: bigint; byChain: Record<number, bigint> };
@@ -812,44 +871,50 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
       continue;
     }
 
+    /*
+     * The two live figures every charge on this chain is built from. Nothing sets a price any
+     * more: a run is billed the gas it burned, at the price the chain charged for it, valued in
+     * the token the chain charges in — so without both of these there is no charge to make, and a
+     * run that cannot be charged is not one to perform. It is skipped rather than given away.
+     */
     let gasPriceWei = 0n;
     let nativePriceUsd = 0;
-    /**
-     * The operator's price for this chain, set from the dashboard (backend/src/run-price.ts).
-     * It outranks the contract because it is the same number the frontend quotes — both read it
-     * from here — whereas `gasCostPerExecutionUsdc6` can only be changed by an owner transaction
-     * per network. When none is set this is null and the contract's price stands, unchanged.
-     */
-    const manualCostUsdc6 = getRunPriceUsdc6(chainId);
-    // Operator price first, then the contract price the tank was funded against. Env is only a
-    // fallback for a GasTank whose price was never set.
-    let estimatedCostUsdc6 = 0n;
-    if (manualCostUsdc6 != null && manualCostUsdc6 > 0n) {
-      estimatedCostUsdc6 = manualCostUsdc6;
-    } else if (gasCostPerExecutionFromContract > 0n) {
-      estimatedCostUsdc6 = gasCostPerExecutionFromContract;
-    } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
-      estimatedCostUsdc6 = gasCostFallbackUsdc6;
-    } else {
-      try {
-        if (gasPriceCache[chainId] === undefined) {
-          gasPriceCache[chainId] = await publicClient.getGasPrice();
-        }
-        gasPriceWei = gasPriceCache[chainId];
-        nativePriceUsd = await getNativePriceUsd(chainId);
-        if (nativePriceUsd > 0) {
-          estimatedCostUsdc6 = gasCostToUsdc6(chainId, GAS_LIMIT_EXECUTE_SWAP, gasPriceWei, nativePriceUsd, ESTIMATE_BUFFER_BPS);
-        } else {
-          errors.push(`Native price unavailable for chain ${chainId}, skipping`);
-          log(`  [${member}] Skip: native price unavailable`);
-          continue;
-        }
-      } catch (e) {
-        errors.push(`Gas price / native price ${chainId}: ${(e as Error).message}`);
-        log(`  [${member}] Skip: ${(e as Error).message}`);
-        continue;
-      }
+    try {
+      gasPriceWei = await gasPriceOf(chainId);
+      nativePriceUsd = await nativeUsdOf(chainId);
+    } catch (e) {
+      errors.push(`Gas price / native price ${chainId}: ${(e as Error).message}`);
+      log(`  [${member}] Skip: ${(e as Error).message}`);
+      continue;
     }
+    if (gasPriceWei <= 0n) {
+      errors.push(`Gas price unavailable for chain ${chainId}, skipping`);
+      log(`  [${member}] Skip: gas price unavailable`);
+      continue;
+    }
+    if (nativePriceUsd <= 0) {
+      errors.push(`Native price unavailable for chain ${chainId}, skipping`);
+      log(`  [${member}] Skip: native price unavailable`);
+      continue;
+    }
+
+    /**
+     * A run's cost before any of it has happened, for the "can this tank afford to start?" checks.
+     *
+     * Built from what this chain's runs have really burned (gas-profile.ts) rather than from the
+     * transaction's gas *limit*, which the EVM refunds the unused part of and which would overstate
+     * a run by more than twice — and now that the charge is the real cost, an inflated pre-check
+     * would turn away plans that can comfortably pay. ESTIMATE_BUFFER_BPS is the headroom for a
+     * busier block than the one that priced this; the settled charge below is exact regardless.
+     */
+    const estimatedCostUsdc6 =
+      gasCostToStable(
+        chainId,
+        BigInt(getGasProfile(chainId).gasUnitsPerRun),
+        gasPriceWei,
+        nativePriceUsd,
+        ESTIMATE_BUFFER_BPS,
+      ) || 1n;
 
     let activeScheduleIds: bigint[];
     try {
@@ -1145,7 +1210,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               address: gasTankPre,
               abi: GAS_TANK_ABI,
               // Restated in the preflight chain's own base units, as the real charge below is.
-              args: [user, convertStableAmount(estimatedCostUsdc6, chainId, preflightChainId)],
+              args: [user, convertStableAmountUp(estimatedCostUsdc6, chainId, preflightChainId)],
               functionName: "recordExecution",
             });
           } catch (e) {
@@ -1202,27 +1267,49 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
         log(`  [${member}] Schedule ${item.scheduleId}: confirmed tx=${hash}`);
         executed.push(`${member} scheduleId=${item.scheduleId} tx=${hash}`);
 
-        // Same precedence as the estimate above — deducting a different number than the user
-        // was quoted is what let a fully funded plan drain its tank early.
-        let costToRecordUsdc6: bigint;
-        if (manualCostUsdc6 != null && manualCostUsdc6 > 0n) {
-          costToRecordUsdc6 = manualCostUsdc6;
-        } else if (gasCostPerExecutionFromContract > 0n) {
-          costToRecordUsdc6 = gasCostPerExecutionFromContract;
-        } else if (gasCostFallbackUsdc6 != null && gasCostFallbackUsdc6 > 0n) {
-          costToRecordUsdc6 = gasCostFallbackUsdc6;
-        } else {
-          costToRecordUsdc6 = gasCostToUsdc6(
-            chainId,
-            receipt.gasUsed,
-            receipt.effectiveGasPrice ?? gasPriceWei,
-            nativePriceUsd,
-            RECORD_BUFFER_BPS
-          );
-        }
+        /*
+         * What this run actually cost, now that most of it has happened.
+         *
+         * The swap is no longer an estimate: `gasUsed` and `effectiveGasPrice` are what the chain
+         * charged for the transaction that just confirmed, so this leg is exact, unbuffered, and
+         * owes nothing to any rate anyone set. The deduction leg still has to be predicted, since
+         * the amount it debits is the argument it is about to be sent with — see recordLegCost.
+         */
+        const swapCostUsdc6 = gasCostToStable(
+          chainId,
+          receipt.gasUsed,
+          receipt.effectiveGasPrice ?? gasPriceWei,
+          nativePriceUsd,
+        );
 
-        const deductChainId = pickDeductChain(globalGas.byChain, chainId, costToRecordUsdc6);
-        if (deductChainId == null) {
+        /*
+         * Which tank pays, and the total to charge it.
+         *
+         * These decide each other: the deduction's own gas is part of the bill, and how much that
+         * is depends on the chain it settles on. So the chain is chosen against this chain's own
+         * deduction cost — the ordinary case, and the cheapest — and the total is then restated
+         * against whatever chain that turned out to be. If the cross-network premium pushes the
+         * bill past what that tank holds, the choice is made again with the true figure.
+         */
+        let deductChainId = pickDeductChain(
+          globalGas.byChain,
+          chainId,
+          swapCostUsdc6 + (await recordLegCost(chainId, chainId)),
+        );
+        let costToRecordUsdc6 = 0n;
+        if (deductChainId != null) {
+          costToRecordUsdc6 = swapCostUsdc6 + (await recordLegCost(chainId, deductChainId));
+          if (
+            toPooledUsd6(globalGas.byChain[deductChainId] ?? 0n, deductChainId) <
+            toPooledUsd6(costToRecordUsdc6, chainId)
+          ) {
+            deductChainId = pickDeductChain(globalGas.byChain, chainId, costToRecordUsdc6);
+            if (deductChainId != null) {
+              costToRecordUsdc6 = swapCostUsdc6 + (await recordLegCost(chainId, deductChainId));
+            }
+          }
+        }
+        if (deductChainId == null || costToRecordUsdc6 <= 0n) {
           errors.push(
             `No ${networkTypes.get(chainId) ?? "eligible"} chain of ${deductChainIds.join(", ")} has enough gas balance to deduct ${costToRecordUsdc6} ${member} scheduleId=${item.scheduleId}`
           );
@@ -1235,8 +1322,9 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           continue;
         }
         // The tank being debited may be on another chain whose stablecoin has different decimals,
-        // so the charge is restated in that chain's base units before it is encoded.
-        const costOnDeductChain = convertStableAmount(costToRecordUsdc6, chainId, deductChainId);
+        // so the charge is restated in that chain's base units before it is encoded — rounded up,
+        // because this is gas the relayer has already paid and truncation would write some of it off.
+        const costOnDeductChain = convertStableAmountUp(costToRecordUsdc6, chainId, deductChainId);
         const recordData = encodeFunctionData({
           abi: GAS_TANK_ABI,
           functionName: "recordExecution",
@@ -1330,12 +1418,21 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
           globalGas.globalBalance -= toPooledUsd6(costOnDeductChain, deductChainId);
         }
 
-        // Teach the run-cost quote what a run on this chain really burns (see gas-profile.ts).
-        // Only same-chain runs are samples: the quote multiplies these units by one chain's gas
-        // price, so a total spanning two chains would be priced with the wrong one.
-        if (deductChainId === chainId) {
-          recordRunGas(chainId, receipt.gasUsed, recordGasUsed);
-        }
+        /*
+         * Teach the next quote what a run on this chain really costs (see gas-profile.ts). Both
+         * halves matter and they answer different questions: the gas is what the relayer needs to
+         * price the deduction leg of the *next* run, and the charge is what users are shown as the
+         * average and the worst case on this network. A run whose deduction never landed reports a
+         * charge of zero — it was not charged, and publishing it as if it were would drag the
+         * average users are quoted below anything anyone actually pays.
+         */
+        recordRun({
+          chainId,
+          swapGasUsed: receipt.gasUsed,
+          recordGasUsed,
+          chargedUsd6: deductOk ? toPooledUsd6(costOnDeductChain, deductChainId) : 0n,
+          crossChain: deductChainId !== chainId,
+        });
 
         // What the swap really cost the relayer, in the execution chain's native token. Recorded
         // now rather than reconstructed later: gas price moves, and a margin worked out from

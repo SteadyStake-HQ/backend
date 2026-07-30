@@ -1,22 +1,29 @@
 /**
- * How much gas a run actually burns, learned from the runs themselves.
+ * What runs really cost on each chain, learned from the runs themselves.
  *
  * A run is two transactions the relayer signs: `executeSwap` on the vault and `recordExecution`
- * on the gas tank. Their combined gas is the multiplier in
- * `run cost = gas units x gas price x native token price` — the only one of the three that was
- * ever a hardcoded constant. Gas price and token price are read live per chain; the units were
- * a single 200,000 shared by every network, hand-anchored to a BOT Chain estimate.
+ * on the gas tank. Nothing about their cost is decided in advance any more — the tank is debited
+ * the gas those two actually burned, priced in the network's own token (see run-executor.ts). So
+ * this module is the record of what that came to, kept for two audiences:
  *
- * Measured on BOT Chain mainnet (677) from relayer receipts, that constant was low:
+ *  - the relayer, which needs the median gas a run burns on a chain to size the charge for the
+ *    `recordExecution` leg — the one transaction whose receipt does not exist yet when the amount
+ *    to debit has to be chosen;
+ *  - users, who are quoted the **average** and the **worst** of the last runs on that network
+ *    rather than a flat rate, because a variable charge is only fair if its range is published.
+ *
+ * Measured on BOT Chain mainnet (677) from relayer receipts:
  *   executeSwap      187,631 / 205,666 / 238,931
  *   recordExecution   43,375 /  51,418 /  51,418
  *   per run          239,049 / 249,041 / 290,349
- * — roughly 25% more than 200,000, and a different number again on any chain whose swap path
- * is not BDEX V2. Guessing it per chain does not scale and goes stale the moment a route changes.
+ * — a different number again on any chain whose swap path is not BDEX V2, which is why the seeds
+ * below only cover the window before a chain has observations of its own.
  *
- * So it is not guessed: every completed run reports its two receipts here, and the quote users
- * see is the median of what recent runs on that chain really cost. The seeds below only cover
- * the window before a chain has observations of its own.
+ * Samples are kept per chain and per leg. Cross-chain settlements — a run on one network paid out
+ * of another network's tank — are recorded too, but never counted toward a chain's gas medians:
+ * their two transactions ran on two chains at two gas prices, so their total is not a fact about
+ * either one. They are counted in the cost statistics, where they belong, and flagged, because
+ * costing more is exactly what users are told to expect of them.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -48,31 +55,84 @@ const SEED_GAS_UNITS: Record<number, number> = {
 const DEFAULT_SEED_GAS_UNITS = 320_000;
 
 /**
- * Samples kept per chain. Enough that one anomalous run cannot move the median, few enough that
- * the number still tracks a real change in the swap path rather than averaging over its history.
+ * Gas the `recordExecution` leg burns, before a chain has measured its own. It is the deduction
+ * transaction, whose cost has to be *predicted* rather than read: the relayer must choose the
+ * amount to debit before sending the transaction that debits it. Measured at 43k–51k on BOT
+ * Chain; the seed rounds up, since under-estimating this leg is the one error that costs the
+ * relayer money.
  */
-const MAX_SAMPLES = 25;
+const SEED_RECORD_GAS_UNITS = 60_000;
+
+/**
+ * Samples kept per chain — the window every published figure is drawn from, and the "last 1000
+ * transactions" the app quotes. Wide enough that the average is a real average and the maximum
+ * has seen a congested day, bounded so a chain's history cannot grow without limit.
+ */
+const MAX_SAMPLES = 1000;
 
 /** A sane band for a per-run total. Anything outside is a mis-attributed or failed receipt. */
 const MIN_PLAUSIBLE_GAS = 21_000;
 const MAX_PLAUSIBLE_GAS = 5_000_000;
 
-interface ChainGasSamples {
-  /** Total gas (swap + record) for recent runs, oldest first. */
-  samples: number[];
+/**
+ * A charge above this ($10 on the pooled 6-decimal scale) is not a run, it is a units mistake.
+ * Recording one would poison the maximum users are quoted for the rest of the window.
+ */
+const MAX_PLAUSIBLE_COST_USD6 = 10_000_000;
+
+/** One completed run, as it is persisted. Tuple-shaped: 1000 of these per chain, times 8 chains. */
+type StoredSample = [
+  /** Total gas both transactions burned. 0 when they ran on two different chains. */
+  gas: number,
+  /** Gas the `recordExecution` leg burned, on whichever chain settled it. 0 when unknown. */
+  recordGas: number,
+  /** What the tank was actually charged, on the pooled 6-decimal USD scale. */
+  costUsd6: number,
+  /** 1 when the paying tank was on another network, 0 when it was the execution chain's own. */
+  cross: 0 | 1,
+  /** When it ran, epoch ms. */
+  at: number,
+];
+
+interface ChainSamples {
+  runs: StoredSample[];
   updatedAt: string;
 }
 
-type GasProfileState = Record<string, ChainGasSamples>;
+type GasProfileState = Record<string, ChainSamples>;
+
+/** What the last runs on a chain were charged. Null figures mean nothing has run there yet. */
+export interface RunCostStats {
+  /** Runs behind these figures — up to MAX_SAMPLES. */
+  samples: number;
+  /** Mean charge over the window, pooled 6-decimal USD. */
+  avgUsd6: number | null;
+  /** The worst single charge in the window — what a user should be ready for. */
+  maxUsd6: number | null;
+  /** The cheapest, for the range. */
+  minUsd6: number | null;
+  /** The most recent charge. */
+  lastUsd6: number | null;
+  /** How many of the window's runs were paid out of another network's tank. */
+  crossChainSamples: number;
+  /** Mean charge of those, which is the premium the app warns users about, measured. */
+  crossChainAvgUsd6: number | null;
+  /** Mean charge of the runs paid from this network's own tank, for the comparison. */
+  sameChainAvgUsd6: number | null;
+}
 
 export interface GasProfileEntry {
   chainId: number;
   /** Gas units one run burns across both transactions. */
   gasUnitsPerRun: number;
-  /** How many real runs that figure is drawn from. 0 means the seed is still in use. */
+  /** Gas the deduction leg alone burns — what the relayer prices before it can measure it. */
+  recordGasUnits: number;
+  /** How many same-chain runs those gas figures are drawn from. 0 means the seed is still in use. */
   samples: number;
   /** "measured" once this chain has run at least once; "seed" until then. */
   source: 'measured' | 'seed';
+  /** What those runs were charged. */
+  cost: RunCostStats;
   updatedAt: string | null;
 }
 
@@ -90,19 +150,57 @@ function stateFileCandidates(): string[] {
   ];
 }
 
+function plausibleGas(n: unknown): number {
+  return typeof n === 'number' && Number.isFinite(n) && n >= MIN_PLAUSIBLE_GAS && n <= MAX_PLAUSIBLE_GAS
+    ? n
+    : 0;
+}
+
+/**
+ * Read one persisted run, in either shape this file has had.
+ *
+ * The first version stored gas totals alone (`samples: number[]`) and knew nothing about what a
+ * run was charged, because back then it was charged a flat rate that had nothing to do with gas.
+ * Those totals are still true and still worth their place in the median, so they are carried
+ * forward with no cost attached rather than discarded — a chain that has been running for months
+ * should not go back to reading "estimated" because the format changed underneath it.
+ */
+function parseSample(raw: unknown): StoredSample | null {
+  if (typeof raw === 'number') {
+    const gas = plausibleGas(raw);
+    return gas === 0 ? null : [gas, 0, 0, 0, 0];
+  }
+  if (!Array.isArray(raw)) return null;
+  const gas = plausibleGas(raw[0]);
+  const recordGas = plausibleGas(raw[1]);
+  const cost =
+    typeof raw[2] === 'number' && Number.isFinite(raw[2]) && raw[2] > 0 && raw[2] <= MAX_PLAUSIBLE_COST_USD6
+      ? Math.round(raw[2])
+      : 0;
+  if (gas === 0 && recordGas === 0 && cost === 0) return null;
+  const at = typeof raw[4] === 'number' && Number.isFinite(raw[4]) ? raw[4] : 0;
+  return [gas, recordGas, cost, raw[3] === 1 ? 1 : 0, at];
+}
+
 function load(): void {
   if (loaded) return;
   loaded = true;
   for (const path of stateFileCandidates()) {
     try {
       if (!existsSync(path)) continue;
-      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as GasProfileState;
+      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
       for (const [chainId, entry] of Object.entries(parsed ?? {})) {
-        const samples = (entry?.samples ?? []).filter(
-          (n) => Number.isFinite(n) && n >= MIN_PLAUSIBLE_GAS && n <= MAX_PLAUSIBLE_GAS,
-        );
-        if (samples.length > 0) {
-          state[chainId] = { samples: samples.slice(-MAX_SAMPLES), updatedAt: entry.updatedAt };
+        const record = entry as { runs?: unknown[]; samples?: unknown[]; updatedAt?: string } | null;
+        const rawRuns = record?.runs ?? record?.samples ?? [];
+        const runs = rawRuns
+          .map(parseSample)
+          .filter((s): s is StoredSample => s !== null)
+          .slice(-MAX_SAMPLES);
+        if (runs.length > 0) {
+          state[chainId] = {
+            runs,
+            updatedAt: typeof record?.updatedAt === 'string' ? record.updatedAt : new Date().toISOString(),
+          };
         }
       }
       return;
@@ -113,7 +211,7 @@ function load(): void {
 }
 
 function persist(): void {
-  const serialized = JSON.stringify(state, null, 2);
+  const serialized = JSON.stringify(state);
   for (const path of stateFileCandidates()) {
     try {
       const dir = dirname(path);
@@ -133,48 +231,89 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
 }
 
+function mean(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, n) => sum + n, 0) / values.length);
+}
+
 /**
- * Report what one completed run burned. `recordGasUsed` is null when the swap landed but the
- * gas-tank deduction did not — that run is not a complete two-transaction sample, so it is
- * dropped rather than recorded as an artificially cheap one.
+ * Report what one completed run cost.
+ *
+ * `swapGasUsed` and `recordGasUsed` are receipts. `chargedUsd6` is what the tank was actually
+ * debited, on the pooled scale, and is what users are quoted from — so a run that executed but
+ * whose deduction never landed reports `chargedUsd6: 0` and is kept only for its gas.
+ *
+ * `crossChain` marks a run settled from another network's tank. Such a run's two transactions
+ * ran at two different gas prices, so its total is excluded from this chain's gas medians while
+ * its cost still counts: the premium is real and users are told about it.
  */
-export function recordRunGas(
-  chainId: number,
-  swapGasUsed: bigint,
-  recordGasUsed: bigint | null,
-): void {
-  if (recordGasUsed == null) return;
+export function recordRun(input: {
+  chainId: number;
+  swapGasUsed: bigint;
+  recordGasUsed: bigint | null;
+  chargedUsd6: bigint;
+  crossChain: boolean;
+}): void {
   load();
-  const total = Number(swapGasUsed) + Number(recordGasUsed);
-  if (!Number.isFinite(total) || total < MIN_PLAUSIBLE_GAS || total > MAX_PLAUSIBLE_GAS) return;
+  const { chainId, swapGasUsed, recordGasUsed, chargedUsd6, crossChain } = input;
+
+  const recordGas = recordGasUsed == null ? 0 : plausibleGas(Number(recordGasUsed));
+  // A total is only a total when both legs are in it and both ran here.
+  const total =
+    crossChain || recordGas === 0 ? 0 : plausibleGas(Number(swapGasUsed) + recordGas);
+  const cost = Number(chargedUsd6);
+  const costUsd6 =
+    Number.isFinite(cost) && cost > 0 && cost <= MAX_PLAUSIBLE_COST_USD6 ? Math.round(cost) : 0;
+  // Nothing usable happened — neither a gas measurement nor a charge worth publishing.
+  if (total === 0 && costUsd6 === 0 && (crossChain || recordGas === 0)) return;
 
   const key = String(chainId);
-  const entry = state[key] ?? { samples: [], updatedAt: new Date().toISOString() };
-  entry.samples = [...entry.samples, total].slice(-MAX_SAMPLES);
+  const entry = state[key] ?? { runs: [], updatedAt: new Date().toISOString() };
+  entry.runs = [
+    ...entry.runs,
+    [total, crossChain ? 0 : recordGas, costUsd6, crossChain ? 1 : 0, Date.now()] as StoredSample,
+  ].slice(-MAX_SAMPLES);
   entry.updatedAt = new Date().toISOString();
   state[key] = entry;
   persist();
+}
+
+function costStats(runs: StoredSample[]): RunCostStats {
+  const charged = runs.filter((r) => r[2] > 0);
+  const costs = charged.map((r) => r[2]);
+  const cross = charged.filter((r) => r[3] === 1).map((r) => r[2]);
+  const same = charged.filter((r) => r[3] === 0).map((r) => r[2]);
+  return {
+    samples: costs.length,
+    avgUsd6: mean(costs),
+    maxUsd6: costs.length > 0 ? Math.max(...costs) : null,
+    minUsd6: costs.length > 0 ? Math.min(...costs) : null,
+    lastUsd6: charged.length > 0 ? charged[charged.length - 1][2] : null,
+    crossChainSamples: cross.length,
+    crossChainAvgUsd6: mean(cross),
+    sameChainAvgUsd6: mean(same),
+  };
 }
 
 /** The gas-units figure for one chain, measured where possible and seeded until then. */
 export function getGasProfile(chainId: number): GasProfileEntry {
   load();
   const entry = state[String(chainId)];
-  if (entry && entry.samples.length > 0) {
-    return {
-      chainId,
-      gasUnitsPerRun: median(entry.samples),
-      samples: entry.samples.length,
-      source: 'measured',
-      updatedAt: entry.updatedAt,
-    };
-  }
+  const runs = entry?.runs ?? [];
+  const totals = runs.map((r) => r[0]).filter((n) => n > 0);
+  const recordGas = runs.map((r) => r[1]).filter((n) => n > 0);
+
   return {
     chainId,
-    gasUnitsPerRun: SEED_GAS_UNITS[chainId] ?? DEFAULT_SEED_GAS_UNITS,
-    samples: 0,
-    source: 'seed',
-    updatedAt: null,
+    gasUnitsPerRun:
+      totals.length > 0
+        ? median(totals)
+        : (SEED_GAS_UNITS[chainId] ?? DEFAULT_SEED_GAS_UNITS),
+    recordGasUnits: recordGas.length > 0 ? median(recordGas) : SEED_RECORD_GAS_UNITS,
+    samples: totals.length,
+    source: totals.length > 0 ? 'measured' : 'seed',
+    cost: costStats(runs),
+    updatedAt: entry?.updatedAt ?? null,
   };
 }
 
