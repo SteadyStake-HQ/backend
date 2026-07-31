@@ -141,6 +141,60 @@ a network appears in — presentation only, not a claim about the chain. The fro
 `SCHEDULER_API_URL` pointing here to read allocation at all; without it, it shows its build-time
 list and treats every network as live, and this executor still enforces pauses on its own side.
 
+## Token list
+
+Which tokens a plan can buy on each network is operator state, edited on the **Tokens** dashboard
+page (`/tokens.html`). It replaced a JSON file compiled into the frontend bundle, so adding or
+removing a token no longer needs a redeploy of either side.
+
+The list lives in `token_list` (or `token-list.json` when `SUPABASE_DB_URL` is unset), one row per
+`(chain_id, address)`, and is served to the app by `GET /api/tokens?chainId=…`. The frontend reads
+it through its own `/api/tokens` route and falls back to its build-time list if this backend cannot
+be reached — a token list is a menu, not a permission, so a stale menu beats no menu. Every token is
+still verified on-chain at plan-creation time.
+
+An initial list is **imported** from four providers, merged by address with the best rank winning:
+
+| Provider | Needs a key | What it contributes |
+| --- | --- | --- |
+| CoinGecko | no | identity (symbol, name, decimals, logo) and market-cap rank |
+| GeckoTerminal | no | the chain's highest-volume pools — i.e. what can actually be swapped |
+| CoinMarketCap | `CMC_API_KEY` | a second market-cap opinion; skipped silently without the key |
+| DEX list | no | the chain's own router list (PancakeSwap on BNB, QuickSwap on Polygon) |
+
+No single provider answers the question on its own: market cap alone offers tokens with no pool on
+the chain, which is a plan that fails every run. Each provider fails soft — a rate-limited one costs
+tokens, never the import — and the response reports what each one returned and why.
+
+Two rules survive an import, both so a re-import cannot undo an operator's decision:
+
+- a **removed** token stays removed (the row is flagged, not deleted);
+- a **manually added** token keeps its source and its place at the top of the list.
+
+`replace: true` empties the chain first and therefore discards both — that is what it is for, and
+why it is not the default. The chain's settlement stablecoin is never imported: plans spend it, so
+they cannot buy it.
+
+Endpoints — `GET /api/tokens` is open; everything under `/api/admin/tokens` needs `ADMIN_API_TOKEN`:
+
+```
+GET  /api/tokens?chainId=56             # live tokens, in display order — what the app asks for
+GET  /api/admin/tokens/summary          # every network: counts and the providers available for it
+GET  /api/admin/tokens?chainId=56       # one chain, removed tokens included
+POST /api/admin/tokens/import           # { chainId, sources?, limit?, replace?, updatedBy? }
+POST /api/admin/tokens/add              # { chainId, address, symbol?, name?, decimals?, logoUrl? }
+POST /api/admin/tokens/remove           # { chainId, address, purge? }  purge deletes the row
+POST /api/admin/tokens/restore          # { chainId, address }
+```
+
+`add` reads symbol, name and decimals off the chain rather than trusting the request: decimals
+decide what a plan spends, and a token stored at 18 that is really 6 misprices every buy by a
+factor of a trillion. The optional fields are overrides for a contract that answers badly, and a
+decimals override is logged.
+
+Removing a token only takes it out of the picker. Plans already buying it keep running, keep their
+holdings, and can still be cancelled and withdrawn — nothing here touches a balance.
+
 ## DCA plans
 
 `dca_plans` is the system of record for plans, and nothing on the read or execute path scans block

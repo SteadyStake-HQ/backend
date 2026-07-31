@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { NETWORK_ALLOCATIONS_DDL } from './network-allocations';
 import { PLAN_ADMIN_CONTROLS_DDL } from './plan-admin-controls';
 import { PLAN_EXECUTION_GATES_DDL } from './plan-execution-gates';
+import { TOKEN_LIST_DDL } from './token-list';
 
 export interface RuntimeSessionRecord {
   sessionKey?: string;
@@ -228,6 +229,12 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
       -- override of their mainnet-vs-testnet classification. A row exists only where an operator
       -- has overridden the registry default; DDL shared with network-allocations.ts.
       ${NETWORK_ALLOCATIONS_DDL}
+
+      -- Which tokens each network offers in the "new plan" list, where each one came from, and
+      -- which ones an operator has removed; DDL shared with token-list.ts. This replaced a JSON
+      -- file baked into the frontend bundle, so an empty table means the app has no tokens to
+      -- offer until an operator imports them.
+      ${TOKEN_LIST_DDL}
     `);
   }
 

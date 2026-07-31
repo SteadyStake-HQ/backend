@@ -7,6 +7,7 @@ import { HistoryModule } from './history/history.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { PlansModule } from './plans/plans.module';
 import { NetworksModule } from './networks/networks.module';
+import { TokensModule } from './tokens/tokens.module';
 import { TreasuryModule } from './treasury/treasury.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { TreasuryModule } from './treasury/treasury.module';
     HistoryModule,
     SchedulerModule,
     PlansModule,
+    TokensModule,
     TreasuryModule,
   ],
 })

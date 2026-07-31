@@ -57,6 +57,17 @@ export function getStableSymbol(chainId: number): string {
 }
 
 /**
+ * Address of the settlement stablecoin, or null on a chain with none recorded.
+ *
+ * Unlike `getVaultUsdcGasTank` this answers for a chain whose GasTank is not deployed yet: callers
+ * that only need to know "which token is the one plans spend" — the token list, above all, since a
+ * plan can never buy what it pays with — must not be told "nothing" just because a tank is missing.
+ */
+export function getStableAddress(chainId: number): string | null {
+  return resolveStable(chainId)?.address ?? null;
+}
+
+/**
  * Decimals of the chain's settlement stablecoin.
  *
  * Every amount the protocol moves — schedule deposits, GasTank balances, per-run prices — is
