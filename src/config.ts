@@ -91,6 +91,18 @@ export function getStableDecimals(chainId: number): number {
   return STABLE_DECIMALS_BY_CHAIN[chainId] ?? 6;
 }
 
+/**
+ * Every chain whose settlement token is *not* 6-decimal, as chainId -> decimals.
+ *
+ * For readers that have to restate a stored amount without the chain in hand — the SQL that rolls
+ * up run history per chain, above all, which cannot call a function per row. Chains absent from
+ * this map are 6-decimal, so a caller may default anything it does not find rather than needing
+ * the full list of deployments.
+ */
+export function getNonStandardStableDecimals(): Record<number, number> {
+  return { ...STABLE_DECIMALS_BY_CHAIN };
+}
+
 /** One whole settlement token in base units, e.g. 1_000_000n on Base, 10n**18n on BSC. */
 export function getStableOne(chainId: number): bigint {
   return 10n ** BigInt(getStableDecimals(chainId));

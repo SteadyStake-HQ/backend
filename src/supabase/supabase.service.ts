@@ -18,6 +18,195 @@ export interface RuntimeSessionRecord {
 const RUNTIME_SESSION_KEY = 'runtime_session';
 
 /**
+ * One chain's execution economics over the whole run history. Costs in dollars, gas in units.
+ * Every `*Samples` count says how many records the figure beside it is drawn from, so a caller can
+ * tell a one-run chain from a thousand-run one without inferring it.
+ */
+export interface RunCostAggregateRow {
+  chainId: number;
+  /** Runs on this chain whose GasTank deduction actually landed — the ones with a real charge. */
+  costSamples: number;
+  costAvgUsd: number | null;
+  costMaxUsd: number | null;
+  costMinUsd: number | null;
+  /** The most recent charge, by run time. */
+  costLastUsd: number | null;
+  /** Of those, the ones paid out of another network's tank, and what they averaged. */
+  crossChainSamples: number;
+  crossChainAvgUsd: number | null;
+  sameChainSamples: number;
+  sameChainAvgUsd: number | null;
+  /** Runs whose two legs both ran here, so their gas totals are a fact about this chain. */
+  gasSamples: number;
+  gasUnitsMedian: number | null;
+  /** The busy-day figure: nine runs in ten burned no more than this. */
+  gasUnitsP90: number | null;
+  gasUnitsMax: number | null;
+  swapGasSamples: number;
+  swapGasMedian: number | null;
+  swapGasP90: number | null;
+  /** The deduction leg on its own — the one the relayer has to price before it can measure it. */
+  recordGasSamples: number;
+  recordGasMedian: number | null;
+  recordGasP90: number | null;
+  firstAt: string | null;
+  lastAt: string | null;
+}
+
+/**
+ * A numeric column as a number, or null.
+ *
+ * pg hands `numeric` and `bigint` back as strings and an empty aggregate back as SQL NULL, so both
+ * have to be handled. The null check is explicit rather than left to `Number()`: `Number(null)` is
+ * `0`, and a `0` where a null belongs is not a harmless difference here — it reads as "this leg
+ * burns no gas", which is a figure the relayer would go on to charge against.
+ */
+function numOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function intOrNull(value: unknown): number | null {
+  const n = numOrNull(value);
+  return n == null ? null : Math.round(n);
+}
+
+/**
+ * One row of RUN_COST_AGGREGATE_SQL as the rest of the app reads it.
+ *
+ * Exported and pure so the aggregation can be exercised end to end against a real Postgres without
+ * a second copy of this mapping being written to do it — and a second copy is exactly where the
+ * `Number(null) === 0` trap gets reintroduced.
+ */
+export function mapRunCostAggregateRow(r: Record<string, unknown>): RunCostAggregateRow {
+  return {
+    chainId: Number(r.chain_id),
+    costSamples: Number(r.cost_samples ?? 0),
+    costAvgUsd: numOrNull(r.cost_avg),
+    costMaxUsd: numOrNull(r.cost_max),
+    costMinUsd: numOrNull(r.cost_min),
+    costLastUsd: numOrNull(r.cost_last),
+    crossChainSamples: Number(r.cross_samples ?? 0),
+    crossChainAvgUsd: numOrNull(r.cross_avg),
+    sameChainSamples: Number(r.same_samples ?? 0),
+    sameChainAvgUsd: numOrNull(r.same_avg),
+    gasSamples: Number(r.gas_samples ?? 0),
+    gasUnitsMedian: intOrNull(r.gas_median),
+    gasUnitsP90: intOrNull(r.gas_p90),
+    gasUnitsMax: intOrNull(r.gas_max),
+    swapGasSamples: Number(r.swap_gas_samples ?? 0),
+    swapGasMedian: intOrNull(r.swap_gas_median),
+    swapGasP90: intOrNull(r.swap_gas_p90),
+    recordGasSamples: Number(r.record_gas_samples ?? 0),
+    recordGasMedian: intOrNull(r.record_gas_median),
+    recordGasP90: intOrNull(r.record_gas_p90),
+    firstAt: r.first_at instanceof Date ? r.first_at.toISOString() : ((r.first_at as string) ?? null),
+    lastAt: r.last_at instanceof Date ? r.last_at.toISOString() : ((r.last_at as string) ?? null),
+  };
+}
+
+/** The aggregation itself, so a caller with a query runner can reuse it. */
+export function runCostAggregateSql(): string {
+  return RUN_COST_AGGREGATE_SQL;
+}
+
+/**
+ * Every execution in `run_history`, unnested and rolled up per chain.
+ *
+ * Three stages, because each one can only be done once the one before it has happened:
+ *
+ *  - `task` flattens `data->'executedTasks'` — one row per executed plan rather than per sweep —
+ *    and pulls the fields out as numbers. Text that is not a plain integer becomes NULL rather
+ *    than erroring the whole query: these are JSON blobs written by several versions of the
+ *    executor, and one malformed row must not cost the chain its statistics.
+ *  - `scaled` turns a charge in the chain's own stablecoin base units into dollars, and decides
+ *    which gas figures this chain may claim (see the method comment on cross-chain runs).
+ *  - `clean` drops the implausible: a charge of thirty dollars is a units mistake and a total of
+ *    nine gas is a mis-attributed receipt, and either one would sit in `max` forever.
+ *
+ * The WHERE clause of `task` is the predicate of `run_history_executed_at_idx` verbatim, so the
+ * planner can walk the ~1% of rows that executed something instead of the whole table.
+ */
+const RUN_COST_AGGREGATE_SQL = `
+WITH task AS (
+  SELECT
+    r.at AS at,
+    (t->>'chainId')::int AS chain_id,
+    CASE WHEN (t->>'gasDeductChainId') ~ '^[0-9]+$'
+         THEN (t->>'gasDeductChainId')::int
+         ELSE (t->>'chainId')::int
+    END AS deduct_chain_id,
+    -- Charged unless the record explicitly says the deduction did not land. Matches the treasury
+    -- ledger's own rule (treasury.service.ts) exactly, so the average quoted in the gas tank is
+    -- the average of the very column the ledger prints. The gasDeducted flag post-dates the
+    -- earliest records, and treating its absence as "not charged" would silently drop them.
+    (t->>'gasDeducted') IS DISTINCT FROM 'false' AS deducted,
+    CASE WHEN (t->>'costUsdc6') ~ '^[0-9]+$' THEN (t->>'costUsdc6')::numeric END AS cost_raw,
+    CASE WHEN (t->>'gasUsed') ~ '^[0-9]+$' THEN (t->>'gasUsed')::numeric END AS swap_gas,
+    CASE WHEN (t->>'recordGasUsed') ~ '^[0-9]+$' THEN (t->>'recordGasUsed')::numeric END AS record_gas
+  FROM run_history r
+  CROSS JOIN LATERAL jsonb_array_elements(r.data->'executedTasks') AS tasks(t)
+  WHERE jsonb_typeof(r.data->'executedTasks') = 'array'
+    AND jsonb_array_length(r.data->'executedTasks') > 0
+    AND jsonb_typeof(t) = 'object'
+    AND (t->>'chainId') ~ '^[0-9]+$'
+),
+scaled AS (
+  SELECT
+    at,
+    chain_id,
+    (deduct_chain_id <> chain_id) AS cross_chain,
+    CASE WHEN deducted AND cost_raw IS NOT NULL
+         THEN cost_raw / power(10::numeric, COALESCE(($1::jsonb ->> chain_id::text)::int, 6))
+    END AS cost_usd,
+    CASE WHEN deduct_chain_id = chain_id AND swap_gas > 0 AND record_gas > 0
+         THEN swap_gas + record_gas
+    END AS total_gas,
+    swap_gas,
+    CASE WHEN deduct_chain_id = chain_id THEN record_gas END AS record_gas
+  FROM task
+),
+clean AS (
+  SELECT
+    at,
+    chain_id,
+    cross_chain,
+    CASE WHEN cost_usd > 0 AND cost_usd <= $2::numeric THEN cost_usd END AS cost_usd,
+    CASE WHEN total_gas BETWEEN $3::numeric AND $4::numeric THEN total_gas END AS total_gas,
+    CASE WHEN swap_gas BETWEEN $3::numeric AND $4::numeric THEN swap_gas END AS swap_gas,
+    CASE WHEN record_gas BETWEEN $3::numeric AND $4::numeric THEN record_gas END AS record_gas
+  FROM scaled
+)
+SELECT
+  chain_id,
+  count(cost_usd) AS cost_samples,
+  avg(cost_usd) AS cost_avg,
+  max(cost_usd) AS cost_max,
+  min(cost_usd) AS cost_min,
+  (array_agg(cost_usd ORDER BY at DESC) FILTER (WHERE cost_usd IS NOT NULL))[1] AS cost_last,
+  count(cost_usd) FILTER (WHERE cross_chain) AS cross_samples,
+  avg(cost_usd) FILTER (WHERE cross_chain) AS cross_avg,
+  count(cost_usd) FILTER (WHERE NOT cross_chain) AS same_samples,
+  avg(cost_usd) FILTER (WHERE NOT cross_chain) AS same_avg,
+  count(total_gas) AS gas_samples,
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY total_gas::double precision) AS gas_median,
+  percentile_cont(0.9) WITHIN GROUP (ORDER BY total_gas::double precision) AS gas_p90,
+  max(total_gas) AS gas_max,
+  count(swap_gas) AS swap_gas_samples,
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY swap_gas::double precision) AS swap_gas_median,
+  percentile_cont(0.9) WITHIN GROUP (ORDER BY swap_gas::double precision) AS swap_gas_p90,
+  count(record_gas) AS record_gas_samples,
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY record_gas::double precision) AS record_gas_median,
+  percentile_cont(0.9) WITHIN GROUP (ORDER BY record_gas::double precision) AS record_gas_p90,
+  min(at) AS first_at,
+  max(at) AS last_at
+FROM clean
+GROUP BY chain_id
+ORDER BY chain_id
+`;
+
+/**
  * Connect/query budgets. pg defaults connectionTimeoutMillis to 0 — wait forever — which turns an
  * unreachable pooler into a boot that never finishes, so the HTTP server never binds its port.
  * Every DB call here has a file or in-memory fallback, so failing fast costs nothing.
@@ -434,6 +623,48 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
     if (!pool) throw new Error('Supabase is not configured or connection failed.');
     const { rows } = await pool.query('SELECT data FROM run_history WHERE run_id = $1', [runId]);
     return rows.length === 0 ? null : rows[0].data;
+  }
+
+  /**
+   * What every recorded execution on each chain burned and was charged — the whole table, not a
+   * window, and every user rather than whoever is looking.
+   *
+   * This exists because the relayer's own sample store (gas-profile.ts) is a process-local file:
+   * it is written to the working directory or /tmp, so on a container that redeploys it starts
+   * empty, and in production it has been empty every time anyone has asked. The consequence was
+   * visible to users — the gas tank's "average run" and "most expensive run" simply never
+   * appeared, and the live estimate beside them multiplied by a seeded gas figure instead of a
+   * measured one. `run_history` has held every execution the whole time, and nothing prunes an
+   * executed run, so this is both durable and complete.
+   *
+   * The aggregation runs in SQL rather than by pulling records into Node because "all records"
+   * means the table, and shipping every execution's JSON across the wire to average one field of
+   * it would put a limit back in by the back door.
+   *
+   * Costs come back in **dollars**, already divided by the settling chain's stablecoin decimals —
+   * `stableDecimalsByChain` maps chainId to decimals (BSC settles in an 18-decimal token, everyone
+   * else in a 6-decimal one), so a raw average across chains would otherwise be out by 10^12.
+   * Gas comes back in units, and only from runs whose two legs ran on the same chain: a
+   * cross-chain settlement burned its gas at two different gas prices, so its total is a fact
+   * about neither chain. Those runs still count toward the *cost* statistics, where the premium
+   * they pay is the whole point of publishing them separately.
+   */
+  async getRunCostAggregatesByChain(options: {
+    stableDecimalsByChain: Record<number, number>;
+    /** A charge above this in dollars is a units mistake, not a run. Excluded from every figure. */
+    maxPlausibleCostUsd: number;
+    minPlausibleGas: number;
+    maxPlausibleGas: number;
+  }): Promise<RunCostAggregateRow[]> {
+    const pool = await this.getPool();
+    if (!pool) throw new Error('Supabase is not configured or connection failed.');
+    const { rows } = await pool.query(RUN_COST_AGGREGATE_SQL, [
+      JSON.stringify(options.stableDecimalsByChain),
+      options.maxPlausibleCostUsd,
+      options.minPlausibleGas,
+      options.maxPlausibleGas,
+    ]);
+    return rows.map(mapRunCostAggregateRow);
   }
 
   async appendGasHistory(

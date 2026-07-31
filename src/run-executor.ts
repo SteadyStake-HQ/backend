@@ -26,7 +26,7 @@ import {
   clearPlanExecuting,
   markPlanExecuting,
 } from "./plans/plan-execution-state";
-import { getGasProfile, recordRun } from "./gas-profile";
+import { getGasProfile, recordRun, RECORD_BUFFER_BPS } from "./gas-profile";
 import { getNativePriceUsd, prefetchNativePrices } from "./native-price";
 import {
   createPublicClient,
@@ -65,16 +65,11 @@ const GAS_LIMIT_EXECUTE_SWAP_MAX = 3_000_000n;
 /** Headroom over eth_estimateGas: routes move between the estimate and the block that mines it. */
 const GAS_LIMIT_BUFFER_BPS = 13000; // 1.3x
 const ESTIMATE_BUFFER_BPS = 15000; // 1.5x for balance check
-/**
- * Headroom on the one leg of a run that has to be priced before it happens.
- *
- * The swap's cost is read from its receipt — exact, no guess involved. The `recordExecution` that
- * debits the tank cannot be: the amount it debits is an argument to it, so it must be chosen
- * before the transaction exists. It is priced from the chain's measured record-leg gas at the
- * current gas price, and widened by this, because that estimate being low is the only way the
- * relayer ends up paying for part of a user's run out of its own pocket.
+/*
+ * RECORD_BUFFER_BPS — the headroom on the deduction leg — now lives in gas-profile.ts, beside the
+ * measured gas it is applied to and where the API can publish it. Every screen that estimates a
+ * charge ahead of a run has to apply the same figure or it quotes under what will be debited.
  */
-const RECORD_BUFFER_BPS = 12000; // 1.2x on the estimated deduction leg
 const relayerNonceByChain = new Map<number, number>();
 
 async function getNextRelayerNonce(

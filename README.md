@@ -51,19 +51,33 @@ Balances are pooled, so a run on one network can be settled from another's tank.
 runs on the *paying* network at its gas price, in its token — so a cross-network run costs more,
 and the app tells users that before it happens rather than after.
 
-Every completed run reports back to `src/gas-profile.ts`, which keeps the last **1,000 per chain**
-— the gas, to price the next run's deduction leg, and the charge, to publish what runs on that
-network actually cost. `GET /api/gas-profile?chainId=<id>` serves both:
+Every completed run is saved to `run_history`, and **every execution ever saved** — all plans, all
+users, no window — is what the per-chain figures are aggregated from. One SQL statement does it
+(`SupabaseService.getRunCostAggregatesByChain`), snapshotted by `src/run-cost-history.ts` and merged
+into the profile by `src/gas-profile.ts`. `GET /api/gas-profile?chainId=<id>` serves the result:
 
 ```
-{ gasUnitsPerRun, recordGasUnits, samples, source,
+{ gasUnitsPerRun, swapGasUnits, recordGasUnits, recordBufferBps, gasUnitsP90,
+  samples, source, basis, firstRunAt, lastRunAt,
   cost: { samples, avgUsd, maxUsd, minUsd, lastUsd,
           crossChainSamples, crossChainAvgUsd, sameChainAvgUsd } }
 ```
 
 `avgUsd` and `maxUsd` are what the gas tank modal shows users: a charge that follows gas has a
 spread, and the average alone would let someone fund a plan for a calm week and have it stall on a
-busy one. Omit `chainId` for every chain at once.
+busy one. `basis` says which record they came from — `history` for the durable one above,
+`relayer` for this process's own samples, `seed` when nothing has run there. Omit `chainId` for
+every chain at once.
+
+The two gas legs are published separately, with `recordBufferBps`, so a caller can reproduce what
+the relayer will actually charge — `swapGasUnits + recordGasUnits × recordBufferBps/10000` — rather
+than multiplying the bare total and quoting under the debit.
+
+`src/gas-profile.ts` still keeps its own samples in a local JSON file, capped at 1,000 per chain,
+but only as the fallback for a deployment with no database. That file lives in the working
+directory or `/tmp`, so a host that redeploys comes back with none: in production it was empty
+every time it was asked, which is why the modal's average and maximum never appeared and why the
+live estimate beside them was multiplying a build-time seed.
 
 The GasTank's `gasCostPerExecutionUsdc6` still exists on chain and nothing reads it —
 `recordExecution` debits the amount the relayer passes, which is the receipt's cost.

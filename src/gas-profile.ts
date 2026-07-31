@@ -9,8 +9,16 @@
  *  - the relayer, which needs the median gas a run burns on a chain to size the charge for the
  *    `recordExecution` leg — the one transaction whose receipt does not exist yet when the amount
  *    to debit has to be chosen;
- *  - users, who are quoted the **average** and the **worst** of the last runs on that network
- *    rather than a flat rate, because a variable charge is only fair if its range is published.
+ *  - users, who are quoted the **average** and the **worst** of the runs on that network rather
+ *    than a flat rate, because a variable charge is only fair if its range is published.
+ *
+ * The figures users see no longer come from the samples below. This file's store is process-local
+ * — a JSON file in the working directory or /tmp — so on a host that redeploys it is empty every
+ * time anyone asks, and in production it always was: the gas tank's average and maximum never
+ * appeared at all, and the estimate beside them multiplied a seed. `getGasProfile` now prefers the
+ * durable record in `run_history`, aggregated per chain over every execution ever saved (see
+ * run-cost-history.ts), and falls back to these samples only where there is no database to read it
+ * from.
  *
  * Measured on BOT Chain mainnet (677) from relayer receipts:
  *   executeSwap      187,631 / 205,666 / 238,931
@@ -29,6 +37,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
+import {
+  getRunCostHistory,
+  getRunCostHistoryChainIds,
+  runCostHistoryLoadedAt,
+} from './run-cost-history';
 
 /**
  * Gas units per run assumed before a chain has measured any of its own runs. Seeded from real
@@ -64,9 +77,28 @@ const DEFAULT_SEED_GAS_UNITS = 320_000;
 const SEED_RECORD_GAS_UNITS = 60_000;
 
 /**
- * Samples kept per chain — the window every published figure is drawn from, and the "last 1000
- * transactions" the app quotes. Wide enough that the average is a real average and the maximum
- * has seen a congested day, bounded so a chain's history cannot grow without limit.
+ * Headroom on the one leg of a run that has to be priced before it happens.
+ *
+ * The swap's cost is read from its receipt — exact, no guess involved. The `recordExecution` that
+ * debits the tank cannot be: the amount it debits is an argument to it, so it must be chosen
+ * before the transaction exists. run-executor.ts prices it from the measured record-leg gas below
+ * and widens it by this, because that estimate being low is the only way the relayer ends up
+ * paying for part of a user's run out of its own pocket.
+ *
+ * It lives here rather than in run-executor.ts because it is part of what a run *costs*, and every
+ * screen that estimates a charge ahead of a run has to apply it or quote under what will be
+ * debited. Published on every profile for exactly that reason.
+ */
+export const RECORD_BUFFER_BPS = 12000; // 1.2x on the estimated deduction leg
+
+/**
+ * Samples this process keeps per chain.
+ *
+ * No longer the window the app quotes from — that is now every execution on record, aggregated
+ * out of `run_history` (see run-cost-history.ts and the merge in getGasProfile). This is the
+ * local cache behind it: what the running relayer has watched happen, which is all there is when
+ * no database is configured, and which is a little fresher than the snapshot in between refreshes.
+ * Bounded so a long-lived process's file cannot grow without limit.
  */
 const MAX_SAMPLES = 1000;
 
@@ -101,19 +133,24 @@ interface ChainSamples {
 
 type GasProfileState = Record<string, ChainSamples>;
 
-/** What the last runs on a chain were charged. Null figures mean nothing has run there yet. */
+/**
+ * What runs on a chain were charged. Null figures mean nothing has run there yet.
+ *
+ * Drawn from every execution on record for that network — every user, no window — whenever the
+ * durable history is reachable, and from this process's own samples when it is not.
+ */
 export interface RunCostStats {
-  /** Runs behind these figures — up to MAX_SAMPLES. */
+  /** Runs behind these figures. */
   samples: number;
-  /** Mean charge over the window, pooled 6-decimal USD. */
+  /** Mean charge, pooled 6-decimal USD. */
   avgUsd6: number | null;
-  /** The worst single charge in the window — what a user should be ready for. */
+  /** The worst single charge on record — what a user should be ready for. */
   maxUsd6: number | null;
   /** The cheapest, for the range. */
   minUsd6: number | null;
   /** The most recent charge. */
   lastUsd6: number | null;
-  /** How many of the window's runs were paid out of another network's tank. */
+  /** How many of those runs were paid out of another network's tank. */
   crossChainSamples: number;
   /** Mean charge of those, which is the premium the app warns users about, measured. */
   crossChainAvgUsd6: number | null;
@@ -125,14 +162,37 @@ export interface GasProfileEntry {
   chainId: number;
   /** Gas units one run burns across both transactions. */
   gasUnitsPerRun: number;
+  /** The swap leg on its own. Null until measured — the seed only covers the two-leg total. */
+  swapGasUnits: number | null;
   /** Gas the deduction leg alone burns — what the relayer prices before it can measure it. */
   recordGasUnits: number;
+  /**
+   * The busy-day gas figure: nine runs in ten burned no more than this. Anything sizing a
+   * commitment rather than describing one should quote it, for the same reason the cost statistics
+   * publish a maximum next to the average.
+   */
+  gasUnitsP90: number | null;
   /** How many same-chain runs those gas figures are drawn from. 0 means the seed is still in use. */
   samples: number;
   /** "measured" once this chain has run at least once; "seed" until then. */
   source: 'measured' | 'seed';
+  /**
+   * Where the measured figures came from. "history" is the durable execution record — every run on
+   * this network, every user, no window. "relayer" is the current process's own samples, used only
+   * when there is no database to read the record from.
+   */
+  basis: 'history' | 'relayer' | 'seed';
+  /**
+   * The headroom the relayer adds to the deduction leg when it charges (RECORD_BUFFER_BPS in
+   * run-executor.ts). Published so anything estimating a charge ahead of a run can reproduce the
+   * relayer's arithmetic exactly instead of quoting the bare gas and coming in under.
+   */
+  recordBufferBps: number;
   /** What those runs were charged. */
   cost: RunCostStats;
+  /** When the earliest and latest run behind these figures ran. Null where nothing has. */
+  firstRunAt: string | null;
+  lastRunAt: string | null;
   updatedAt: string | null;
 }
 
@@ -295,34 +355,108 @@ function costStats(runs: StoredSample[]): RunCostStats {
   };
 }
 
-/** The gas-units figure for one chain, measured where possible and seeded until then. */
+/** Dollars -> the pooled 6-decimal scale the cost statistics are stated on. */
+function toUsd6(usd: number | null | undefined): number | null {
+  return typeof usd === 'number' && Number.isFinite(usd) && usd > 0 ? Math.round(usd * 1e6) : null;
+}
+
+/**
+ * One chain's profile: what a run there burns, and what runs there have been charged.
+ *
+ * Two records can answer that, and they are not equal. The durable one is `run_history` — every
+ * execution ever saved, every user, no window — reached through the snapshot in
+ * run-cost-history.ts. The other is the sample file this module writes, which holds whatever the
+ * current process has watched happen. The first is a superset of the second by construction (the
+ * executor writes both on every run), and it survives a redeploy, which the file does not, so it
+ * wins wherever it has anything to say.
+ *
+ * The file is still read, and still matters: it is all there is when no database is configured,
+ * and it is fresher than the snapshot by up to its refresh interval, so a chain that has just run
+ * for the very first time gets a figure from it rather than waiting.
+ */
 export function getGasProfile(chainId: number): GasProfileEntry {
   load();
   const entry = state[String(chainId)];
   const runs = entry?.runs ?? [];
   const totals = runs.map((r) => r[0]).filter((n) => n > 0);
-  const recordGas = runs.map((r) => r[1]).filter((n) => n > 0);
+  const localRecordGas = runs.map((r) => r[1]).filter((n) => n > 0);
+  const localCost = costStats(runs);
+
+  const durable = getRunCostHistory(chainId);
+  const durableGas = durable && durable.gasSamples > 0 ? durable : null;
+  const durableCost = durable && durable.costSamples > 0 ? durable : null;
+
+  /*
+   * The legs have their own precedence, deliberately, and it is looser than the total's.
+   *
+   * A two-leg *total* only counts when both legs ran on this chain — a cross-chain settlement
+   * burned its two halves at two gas prices, so its sum is a fact about neither. But each half on
+   * its own is still a measurement of the chain it ran on, so a network whose runs have all been
+   * settled from elsewhere has a perfectly good swap-leg figure and no total at all. Reading the
+   * legs from `durable` rather than `durableGas` keeps that measurement instead of falling to a
+   * seed beside it.
+   *
+   * The deduction leg matters most of the three: it is the one the relayer has to charge against
+   * before it can measure it, so reaching for the seed too eagerly there costs real money.
+   */
+  const swapGasUnits = durable?.swapGasMedian ?? null;
+  const recordGasUnits =
+    durable?.recordGasMedian ??
+    (localRecordGas.length > 0 ? median(localRecordGas) : SEED_RECORD_GAS_UNITS);
+
+  const gasUnitsPerRun =
+    durableGas?.gasUnitsMedian ??
+    (totals.length > 0
+      ? median(totals)
+      : // The legs never ran here together, but the swap leg did. Its measurement plus whatever
+        // the deduction leg resolved to beats a seed that knows about neither.
+        (swapGasUnits != null
+          ? swapGasUnits + recordGasUnits
+          : (SEED_GAS_UNITS[chainId] ?? DEFAULT_SEED_GAS_UNITS)));
+  const gasSamples = durableGas?.gasSamples ?? totals.length;
+
+  const cost: RunCostStats = durableCost
+    ? {
+        samples: durableCost.costSamples,
+        avgUsd6: toUsd6(durableCost.costAvgUsd),
+        maxUsd6: toUsd6(durableCost.costMaxUsd),
+        minUsd6: toUsd6(durableCost.costMinUsd),
+        lastUsd6: toUsd6(durableCost.costLastUsd),
+        crossChainSamples: durableCost.crossChainSamples,
+        crossChainAvgUsd6: toUsd6(durableCost.crossChainAvgUsd),
+        sameChainAvgUsd6: toUsd6(durableCost.sameChainAvgUsd),
+      }
+    : localCost;
+
+  const basis: GasProfileEntry['basis'] =
+    durableGas || durableCost ? 'history' : gasSamples > 0 || cost.samples > 0 ? 'relayer' : 'seed';
 
   return {
     chainId,
-    gasUnitsPerRun:
-      totals.length > 0
-        ? median(totals)
-        : (SEED_GAS_UNITS[chainId] ?? DEFAULT_SEED_GAS_UNITS),
-    recordGasUnits: recordGas.length > 0 ? median(recordGas) : SEED_RECORD_GAS_UNITS,
-    samples: totals.length,
-    source: totals.length > 0 ? 'measured' : 'seed',
-    cost: costStats(runs),
-    updatedAt: entry?.updatedAt ?? null,
+    gasUnitsPerRun,
+    swapGasUnits,
+    recordGasUnits,
+    gasUnitsP90: durableGas?.gasUnitsP90 ?? null,
+    samples: gasSamples,
+    // "measured" the moment either record has seen a run here — a chain with charges on file is
+    // not still guessing, whichever half of the profile the samples landed in.
+    source: gasSamples > 0 || cost.samples > 0 ? 'measured' : 'seed',
+    basis,
+    recordBufferBps: RECORD_BUFFER_BPS,
+    cost,
+    firstRunAt: durable?.firstAt ?? null,
+    lastRunAt: durable?.lastAt ?? null,
+    updatedAt: entry?.updatedAt ?? (basis === 'history' ? runCostHistoryLoadedAt() : null),
   };
 }
 
-/** Every chain with a profile: those that have run, plus every chain carrying a seed. */
+/** Every chain with a profile: those on record, those the relayer has watched, and the seeds. */
 export function getAllGasProfiles(): GasProfileEntry[] {
   load();
   const chainIds = new Set<number>([
     ...Object.keys(state).map(Number),
     ...Object.keys(SEED_GAS_UNITS).map(Number),
+    ...getRunCostHistoryChainIds(),
   ]);
   return [...chainIds]
     .filter((id) => Number.isFinite(id))
