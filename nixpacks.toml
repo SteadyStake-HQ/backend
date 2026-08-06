@@ -1,5 +1,16 @@
 [variables]
 NODE_ENV = "production"
+# Corepack 0.29.4 (bundled with nodejs_20 at this nixpkgs pin) hardcodes an npm signing
+# key that expired 2025-01-29, so its unconditional "latest stable" lookup dies with
+# "Cannot find matching keyid" before it ever reads the packageManager field below.
+# "0" makes it skip that signature check.
+#
+# Passing the registry's real current keys as JSON would keep verification on, but the
+# value has to reach corepack intact and Railway's build pipeline strips the quotes out
+# of it, leaving unparseable JSON. This value has no quotes, so nothing can mangle it.
+# To restore verification, set COREPACK_INTEGRITY_KEYS as a Railway service variable
+# (stored literally) to {"npm":[...]} from https://registry.npmjs.org/-/npm/v1/keys
+COREPACK_INTEGRITY_KEYS = "0"
 
 [phases.setup]
 nixPkgs = ["nodejs_20"]
