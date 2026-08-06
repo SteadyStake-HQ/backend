@@ -34,11 +34,15 @@ export interface PassStatus {
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
-  /** chainId => the plan ids that network's checkout will actually sell, and when we last looked. */
-  private readonly planCache = new Map<number, { ids: Set<number>; at: number }>();
+  /** chainId => what that network's checkout will actually honour, and when we last looked. */
+  private readonly checkoutCache = new Map<
+    number,
+    { planIds: Set<number>; treasury: string; at: number }
+  >();
 
   /**
-   * Which PASS_PLANS the network's checkout contract has seeded and enabled.
+   * What the network's checkout contract will actually honour: which PASS_PLANS it has seeded and
+   * enabled, and where it sends payment.
    *
    * PASS_PLANS is the backend's price table; `plans(planId)` on the checkout is what `buyPass` will
    * honour. They drift whenever a plan is added to the table after a contract was deployed, and the
@@ -46,12 +50,17 @@ export class PaymentsService {
    * approve, and only then does `buyPass` revert with PlanDisabled. So the two are reconciled here,
    * before either an offer or an intent is made.
    *
+   * The treasury is read from the same place for the same reason — see `createIntent`, where a buyer
+   * who *is* the treasury has to be turned away.
+   *
    * Returns null when the chain cannot be read — an RPC outage should not close checkout on plans
    * that are seeded, and a plan that is genuinely missing still surfaces as a reverted `buyPass`.
    */
-  private async enabledPlanIds(network: PaymentNetworkRow): Promise<Set<number> | null> {
-    const cached = this.planCache.get(network.chainId);
-    if (cached && Date.now() - cached.at < PLAN_CACHE_TTL_MS) return cached.ids;
+  private async readCheckout(
+    network: PaymentNetworkRow,
+  ): Promise<{ planIds: Set<number>; treasury: string } | null> {
+    const cached = this.checkoutCache.get(network.chainId);
+    if (cached && Date.now() - cached.at < PLAN_CACHE_TTL_MS) return cached;
 
     const chain = getChain(network.chainId);
     const rpc = getRpc(network.chainId);
@@ -59,7 +68,7 @@ export class PaymentsService {
 
     try {
       const client = createPublicClient({ chain, transport: http(rpc) });
-      const ids = new Set<number>();
+      const planIds = new Set<number>();
       for (const plan of PASS_PLANS) {
         const [, , enabled] = await client.readContract({
           address: network.checkoutContract as `0x${string}`,
@@ -67,13 +76,29 @@ export class PaymentsService {
           functionName: 'plans',
           args: [plan.id],
         });
-        if (enabled) ids.add(plan.id);
+        if (enabled) planIds.add(plan.id);
       }
-      this.planCache.set(network.chainId, { ids, at: Date.now() });
-      return ids;
+      const treasury = (
+        await client.readContract({
+          address: network.checkoutContract as `0x${string}`,
+          abi: PASS_CHECKOUT_ABI,
+          functionName: 'treasury',
+        })
+      ).toLowerCase();
+
+      // seed-payment-networks.ts stores the checkout address as treasury_address when no treasury is
+      // configured, so that particular disagreement is a known placeholder rather than drift. The
+      // contract is authoritative either way; only a third value is worth a line in the log.
+      if (treasury !== network.treasuryAddress && network.treasuryAddress !== network.checkoutContract) {
+        this.logger.warn(
+          `payment_networks.treasury_address (${network.treasuryAddress}) disagrees with on-chain treasury (${treasury}) on chain ${network.chainId}; trusting the contract.`,
+        );
+      }
+      this.checkoutCache.set(network.chainId, { planIds, treasury, at: Date.now() });
+      return { planIds, treasury };
     } catch (err) {
       this.logger.warn(
-        `Could not read plan config from ${network.checkoutContract} on ${network.chainId}: ${(err as Error).message}`,
+        `Could not read checkout config from ${network.checkoutContract} on ${network.chainId}: ${(err as Error).message}`,
       );
       return null;
     }
@@ -98,13 +123,13 @@ export class PaymentsService {
     const allIds = PASS_PLANS.map((p) => p.id);
     const withPlans = await Promise.all(
       networks.map(async (n) => {
-        const enabled = await this.enabledPlanIds(n);
+        const checkout = await this.readCheckout(n);
         return {
           chainId: n.chainId,
           stablecoinSymbol: n.stablecoinSymbol,
           stablecoinDecimals: n.stablecoinDecimals,
           checkoutContract: n.checkoutContract,
-          planIds: enabled ? allIds.filter((id) => enabled.has(id)) : allIds,
+          planIds: checkout ? allIds.filter((id) => checkout.planIds.has(id)) : allIds,
         };
       }),
     );
@@ -125,6 +150,7 @@ export class PaymentsService {
     if (!input.wallet || !isAddress(input.wallet)) {
       throw new BadRequestException({ ok: false, error: 'A valid wallet address is required.' });
     }
+    const wallet = input.wallet.toLowerCase();
     const chainId = Number(input.chainId);
     const plan = getPassPlan(Number(input.planId));
     if (!plan) throw new BadRequestException({ ok: false, error: 'Unknown pass plan.' });
@@ -135,9 +161,9 @@ export class PaymentsService {
     }
 
     // Refuse a checkout this network's contract cannot honour, rather than letting the player pay
-    // gas to approve and then watch `buyPass` revert with PlanDisabled.
-    const enabledPlans = await this.enabledPlanIds(network);
-    if (enabledPlans && !enabledPlans.has(plan.id)) {
+    // gas to approve and then watch `buyPass` revert.
+    const checkout = await this.readCheckout(network);
+    if (checkout && !checkout.planIds.has(plan.id)) {
       this.logger.warn(
         `Plan ${plan.id} (${plan.key}) is in PASS_PLANS but not enabled on ${network.checkoutContract} (chain ${chainId}); seed it with setPlan().`,
       );
@@ -147,9 +173,26 @@ export class PaymentsService {
       });
     }
 
+    /*
+     * The treasury cannot buy from itself. `buyPass` asserts that the treasury's balance rose by
+     * exactly the price, and a transfer from the treasury to the treasury moves nothing — so the
+     * payment reverts with UnexpectedAmountReceived(price, 0) after the approve has already cost
+     * gas. Nothing on-chain can fix this for the buyer; the treasury has to be an address that
+     * never plays. Say so here rather than letting the wallet discover it.
+     */
+    if (checkout && wallet === checkout.treasury) {
+      this.logger.warn(
+        `Wallet ${wallet} is the treasury of ${network.checkoutContract} (chain ${chainId}) and cannot buy a pass there; point the treasury at a separate address (§24).`,
+      );
+      throw new BadRequestException({
+        ok: false,
+        error:
+          'This wallet receives Game Pass payments on this network, so it cannot buy a pass here. Use a different wallet, or a different network.',
+      });
+    }
+
     const amount = planAmountAtomic(plan, network.stablecoinDecimals);
     const purchaseId = `0x${randomBytes(32).toString('hex')}`;
-    const wallet = input.wallet.toLowerCase();
     const expiresAt = new Date(Date.now() + INTENT_TTL_SECONDS * 1000);
 
     await createPurchaseIntent({

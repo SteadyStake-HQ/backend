@@ -8,24 +8,24 @@
  */
 export interface PassPlan {
   id: number;
-  key: 'hour' | 'day' | 'week' | 'month';
+  key: 'day' | 'week' | 'month';
   label: string;
   durationSeconds: number;
   priceCents: number;
 }
 
+/**
+ * Listed shortest-to-longest, which is the order the Game Pass screen renders. That does not make
+ * the first one the default — the screen preselects the Week Pass by key.
+ *
+ * Id 4 is retired and must not be reused. It was a $0.01 1-Hour test tier that bought the full pass
+ * entitlement (10 SP-eligible runs a day, the 1.5x SP multiplier, open-verified mode), which made it
+ * unsafe to ship: SP balances gate wallet permissions, so a pass anyone can buy for a cent inflates
+ * entitlements across every wallet that notices. It was never seeded on any deployed checkout, so
+ * dropping it here removes it outright — but a *new* plan given id 4 would silently inherit any
+ * checkout that ever had the test tier seeded.
+ */
 export const PASS_PLANS: readonly PassPlan[] = [
-  /**
-   * TEST PLAN — not a product tier. One cent buys the full pass entitlement (10 SP-eligible runs a
-   * day, the 1.5x SP multiplier, open-verified mode), which is why it exists only to exercise the
-   * purchase flow end to end. Remove it, or reprice it, before this reaches players: SP balances are
-   * meant to gate wallet permissions, so a pass anyone can buy for a cent inflates entitlements
-   * across every wallet that notices.
-   *
-   * It is listed first so it reads shortest-to-longest on the Game Pass screen. That does not make it
-   * the default — the screen preselects the Week Pass by key.
-   */
-  { id: 4, key: 'hour', label: '1-Hour Pass', durationSeconds: 60 * 60, priceCents: 1 },
   { id: 1, key: 'day', label: 'Day Pass', durationSeconds: 24 * 60 * 60, priceCents: 99 },
   { id: 2, key: 'week', label: 'Week Pass', durationSeconds: 7 * 24 * 60 * 60, priceCents: 399 },
   { id: 3, key: 'month', label: 'Month Pass', durationSeconds: 30 * 24 * 60 * 60, priceCents: 999 },
