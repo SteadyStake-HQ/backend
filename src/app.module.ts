@@ -13,6 +13,7 @@ import { BalancesModule } from './balances/balances.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { CapacityModule } from './capacity/capacity.module';
+import { PlayersModule } from './players/players.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { CapacityModule } from './capacity/capacity.module';
     PaymentsModule,
     SeasonsModule,
     CapacityModule,
+    PlayersModule,
   ],
 })
 export class AppModule {}
