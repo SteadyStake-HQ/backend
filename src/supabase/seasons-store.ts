@@ -48,9 +48,13 @@ export interface SeasonRow {
   availableNetworks: number[];
   /** SP multiplier applied to season runs, as a percentage (100 = 1.0x). Stacks with the pass. */
   spMultiplierPct: number;
-  /** Per-wallet season cap on ranked runs. null = uncapped by the season. */
+  /**
+   * Legacy per-wallet season caps on ranked / open-verified runs. No longer set or applied: the
+   * dashboard field was removed and `playBudget` ignores them, so the membership plan budget is the
+   * only ceiling. The columns are kept, and still read, so seasons created while the field existed
+   * keep an honest record of what they were configured with; nothing writes anything but null now.
+   */
   rankedRunLimit: number | null;
-  /** Per-wallet season cap on open-verified runs. null = uncapped by the season. */
   openVerifiedRunLimit: number | null;
   /** Free-form reward description shown on the reward page. */
   rewardDetails: unknown | null;

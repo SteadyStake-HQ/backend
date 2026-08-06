@@ -306,6 +306,7 @@ export async function listSpLedger(
 
 export interface DailyCounterRow {
   utcDate: string;
+  /** Runs that earned SP that day. A tally, not a budget — the game no longer limits the count. */
   spRunsUsed: number;
   spEarned: number;
   rankedUsed: number;

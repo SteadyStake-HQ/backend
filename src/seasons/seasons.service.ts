@@ -105,10 +105,11 @@ export class SeasonsService {
         ? await getLiveSeasonForChain(Number(chainId))
         : await getLiveSeason();
 
-    const seasonLimit = {
-      ranked: season?.rankedRunLimit ?? null,
-      openVerified: season?.openVerifiedRunLimit ?? null,
-    };
+    // A season no longer sets its own per-wallet run cap — the dashboard has no field for one, so a
+    // limit left on an old row would cap play that nobody could see or lift. The plan budget is the
+    // only ceiling now; `seasonLimit` stays in the response, always null, so an older game build's
+    // `min(plan, seasonLimit)` still resolves to the plan budget.
+    const seasonLimit = { ranked: null, openVerified: null };
     const effective = {
       ranked: effectiveBudget(plan.ranked, seasonLimit.ranked),
       openVerified: effectiveBudget(plan.openVerified, seasonLimit.openVerified),
@@ -148,8 +149,6 @@ export class SeasonsService {
     reviewWindowHours?: number;
     availableNetworks?: number[];
     spMultiplierPct?: number;
-    rankedRunLimit?: number | null;
-    openVerifiedRunLimit?: number | null;
     rewardDetails?: unknown | null;
     awardChainId?: number;
     nftContractAddress?: string;
@@ -163,8 +162,6 @@ export class SeasonsService {
     this.assertDuration(durationSeconds);
     const availableNetworks = this.normalizeNetworks(input.availableNetworks);
     const spMultiplierPct = this.normalizeMultiplier(input.spMultiplierPct);
-    const rankedRunLimit = this.normalizeLimit(input.rankedRunLimit, 'rankedRunLimit');
-    const openVerifiedRunLimit = this.normalizeLimit(input.openVerifiedRunLimit, 'openVerifiedRunLimit');
 
     const created: CreateSeasonInput = {
       name: input.name.trim(),
@@ -178,8 +175,6 @@ export class SeasonsService {
       reviewWindowHours: input.reviewWindowHours ?? 48,
       availableNetworks,
       spMultiplierPct,
-      rankedRunLimit,
-      openVerifiedRunLimit,
       rewardDetails: input.rewardDetails ?? null,
       awardChainId: input.awardChainId ?? null,
       nftContractAddress: input.nftContractAddress ?? null,
@@ -215,14 +210,6 @@ export class SeasonsService {
       spMultiplierPct:
         patch.spMultiplierPct !== undefined
           ? this.normalizeMultiplier(patch.spMultiplierPct as number)
-          : undefined,
-      rankedRunLimit:
-        patch.rankedRunLimit !== undefined
-          ? this.normalizeLimit(patch.rankedRunLimit as number | null, 'rankedRunLimit')
-          : undefined,
-      openVerifiedRunLimit:
-        patch.openVerifiedRunLimit !== undefined
-          ? this.normalizeLimit(patch.openVerifiedRunLimit as number | null, 'openVerifiedRunLimit')
           : undefined,
       rewardDetails: patch.rewardDetails !== undefined ? patch.rewardDetails : undefined,
       awardChainId: patch.awardChainId as number | undefined,
@@ -506,16 +493,6 @@ export class SeasonsService {
     return pct;
   }
 
-  /** null/undefined = uncapped; otherwise a non-negative integer run budget. */
-  private normalizeLimit(value: number | null | undefined, field: string): number | null {
-    if (value == null) return null;
-    const n = Math.floor(Number(value));
-    if (!Number.isFinite(n) || n < 0) {
-      throw new BadRequestException({ ok: false, error: `${field} must be a non-negative integer or null.` });
-    }
-    return n;
-  }
-
   private publicView(s: SeasonRow) {
     return {
       seasonId: s.seasonId,
@@ -530,8 +507,6 @@ export class SeasonsService {
       minimumEligibleDays: s.minimumEligibleDays,
       availableNetworks: s.availableNetworks,
       spMultiplierPct: s.spMultiplierPct,
-      rankedRunLimit: s.rankedRunLimit,
-      openVerifiedRunLimit: s.openVerifiedRunLimit,
       rewardDetails: s.rewardDetails,
     };
   }

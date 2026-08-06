@@ -312,7 +312,7 @@
   display: grid;
   grid-template-columns:
     26px minmax(150px, 1.5fr) 108px minmax(150px, 1.15fr) minmax(112px, 0.9fr)
-    minmax(96px, 0.8fr) 62px 96px minmax(120px, 0.9fr);
+    minmax(96px, 0.8fr) 62px minmax(120px, 0.9fr);
   align-items: center;
   gap: 10px;
 }
@@ -486,8 +486,7 @@
   font-size: 10px;
 }
 
-.c-mult b,
-.c-budget {
+.c-mult b {
   font-variant-numeric: tabular-nums;
 }
 
@@ -497,10 +496,6 @@
 
 .c-mult.boosted b {
   color: var(--amber);
-}
-
-.c-budget span {
-  color: var(--muted);
 }
 
 .c-action {
@@ -905,40 +900,6 @@
   background: rgba(110, 140, 255, 0.16);
 }
 
-/* A number and the switch that blanks it. Blank is the API's "uncapped", so the ∞ button is the
-   readable way to say that — and it lights up whenever the box is empty, however it got that way. */
-.split {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.seg-toggle {
-  min-width: 38px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--dim);
-  background: transparent;
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-
-.seg-toggle:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-.seg-toggle.on {
-  color: #dce4ff;
-  border-color: rgba(110, 140, 255, 0.5);
-  background: rgba(110, 140, 255, 0.16);
-}
-
 .netpick {
   display: flex;
   flex-wrap: wrap;
@@ -1090,20 +1051,6 @@
 }
 
 /* ---- Responsive -------------------------------------------------------- */
-@media (max-width: 1240px) {
-  .stable-head .c-budget,
-  .srow .c-budget {
-    display: none;
-  }
-
-  .stable-head,
-  .srow-main {
-    grid-template-columns:
-      26px minmax(150px, 1.5fr) 108px minmax(150px, 1.15fr) minmax(112px, 0.9fr)
-      minmax(96px, 0.8fr) 62px minmax(120px, 0.9fr);
-  }
-}
-
 @media (max-width: 1040px) {
   .stable-head .c-nets,
   .srow .c-nets,
@@ -1165,8 +1112,7 @@
   .srow .c-progress { grid-area: progress; }
   .srow .c-action { grid-area: action; justify-content: flex-start; }
   .srow .c-nets,
-  .srow .c-mult,
-  .srow .c-budget {
+  .srow .c-mult {
     display: none;
   }
 

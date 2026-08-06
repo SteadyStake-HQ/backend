@@ -239,18 +239,6 @@
                   </div>
                   <p class="field-error" hidden></p>
                 </div>
-                <div class="field">
-                  <span class="field-label">Per-wallet run budget <span class="hint">blank = uncapped</span></span>
-                  <div class="split" data-field="f-ranked">
-                    <input id="f-ranked" type="number" min="0" step="1" placeholder="Ranked runs" />
-                    <button type="button" class="seg-toggle on" data-uncap-for="f-ranked">∞</button>
-                  </div>
-                  <div class="split" data-field="f-open">
-                    <input id="f-open" type="number" min="0" step="1" placeholder="Open-verified runs" />
-                    <button type="button" class="seg-toggle on" data-uncap-for="f-open">∞</button>
-                  </div>
-                  <p class="field-error" hidden></p>
-                </div>
               </div>
               <div class="form-row" style="margin-top: 12px;">
                 <div class="field wide">
@@ -320,7 +308,6 @@
               <div class="row"><span class="label">Ends</span><span class="val" id="p-end">—</span></div>
               <div class="row"><span class="label">SP multiplier</span><span class="val" id="p-mult">1.00×</span></div>
               <div class="row"><span class="label">Networks</span><span class="val" id="p-nets">All networks</span></div>
-              <div class="row"><span class="label">Run budget</span><span class="val" id="p-budget">∞ · ∞</span></div>
               <div class="row"><span class="label">Ranks on</span><span class="val" id="p-scoring">best 5 of ≥3 days</span></div>
             </div>
             <p class="preview-utc" id="p-utc">Pick a start time</p>
@@ -487,8 +474,6 @@
       return JSON.stringify(details);
     }
 
-    function limitLabel(value) { return value == null ? "∞" : String(value); }
-
     // ---- Time -------------------------------------------------------------
     function pad(n) { return (n < 10 ? "0" : "") + n; }
     function fmt(iso) { return iso ? new Date(iso).toLocaleString() : "—"; }
@@ -553,7 +538,6 @@
     const ICON = {
       bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5L13 3Z"/></svg>',
       net: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="4" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 6v3M10 14l-3.4 2.5M14 14l3.4 2.5" stroke-linecap="round"/></svg>',
-      runs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 18V9M10 18V5M16 18v-6M22 18h-2"/></svg>',
       hash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 9h13M5 15h13M10 4 8 20M17 4l-2 16"/></svg>',
     };
 
@@ -578,7 +562,6 @@
       document.getElementById("hero-facts").innerHTML =
         fact(ICON.bolt, "SP", multiplier) +
         fact(ICON.net, "", escapeHtml(netLabel(season.availableNetworks))) +
-        fact(ICON.runs, "Runs", limitLabel(season.rankedRunLimit) + " ranked · " + limitLabel(season.openVerifiedRunLimit) + " open") +
         (season.snapshotHash ? fact(ICON.hash, "Snapshot", escapeHtml(season.snapshotHash.slice(0, 10)) + "…") : "");
 
       tickSpotlight();
@@ -691,7 +674,6 @@
         sortHead("progress", "Progress") +
         '<span class="c c-nets">Networks</span>' +
         sortHead("mult", "SP") +
-        '<span class="c c-budget">Run budget</span>' +
         '<span class="c c-action"></span>' +
       "</div>";
     }
@@ -753,7 +735,6 @@
           progressCell(season) +
           netsCell(season) +
           '<span class="c c-mult' + (multiplier > 1 ? " boosted" : "") + '"><b>' + multiplier.toFixed(2) + "×</b></span>" +
-          '<span class="c c-budget"><span>' + limitLabel(season.rankedRunLimit) + " · " + limitLabel(season.openVerifiedRunLimit) + "</span></span>" +
           '<span class="c c-action">' + primaryAction(season) + "</span>" +
         "</div>" +
         '<div class="srow-detail" id="detail-' + season.seasonId + '"' + (expanded ? "" : " hidden") + ">" +
@@ -903,8 +884,6 @@
           detailRow("Review window", (season.reviewWindowHours || 0) + "h") +
           detailRow("Networks", escapeHtml(netLabel(season.availableNetworks))) +
           detailRow("SP multiplier", ((season.spMultiplierPct || 100) / 100).toFixed(2) + "×") +
-          detailRow("Ranked budget", limitLabel(season.rankedRunLimit) + " runs") +
-          detailRow("Open-verified budget", limitLabel(season.openVerifiedRunLimit) + " runs") +
           detailRow("Counted daily results", "best " + season.countedDailyResults) +
           detailRow("Minimum eligible days", String(season.minimumEligibleDays)) +
           detailRow("Snapshot", snapshot) +
@@ -1118,12 +1097,8 @@
     let editingId = null;
     let pickedNets = [];
 
-    const FIELDS = ["f-name", "f-days", "f-mult", "f-ranked", "f-open", "f-counted", "f-mindays", "f-review", "f-reward"];
+    const FIELDS = ["f-name", "f-days", "f-mult", "f-counted", "f-mindays", "f-review", "f-reward"];
     function el(id) { return document.getElementById(id); }
-    function numberOrNull(id) {
-      const raw = el(id).value.trim();
-      return raw === "" ? null : Number(raw);
-    }
 
     function localValue(date) {
       return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) +
@@ -1215,10 +1190,6 @@
       const nets = pickedNetworks();
       el("p-nets").textContent = nets.length ? netLabel(nets) : "All networks";
 
-      const ranked = numberOrNull("f-ranked");
-      const open = numberOrNull("f-open");
-      el("p-budget").textContent = (ranked == null ? "∞" : ranked) + " · " + (open == null ? "∞" : open);
-
       el("p-scoring").textContent = "best " + (el("f-counted").value || "?") + " of ≥" + (el("f-mindays").value || "0") + " days";
 
       // The presets are a shortcut, not a mode: they light up only while they match the box.
@@ -1227,9 +1198,6 @@
         group.querySelectorAll("button").forEach(function (button) {
           button.classList.toggle("on", button.dataset.value === current);
         });
-      });
-      seasonModal.querySelectorAll("[data-uncap-for]").forEach(function (button) {
-        button.classList.toggle("on", el(button.dataset.uncapFor).value.trim() === "");
       });
     }
 
@@ -1250,8 +1218,6 @@
         startPicker.setValue(localValue(new Date(season.startAt)));
         el("f-days").value = String(Math.round((Date.parse(season.endAt) - Date.parse(season.startAt)) / 86400000));
         el("f-mult").value = String(season.spMultiplierPct || 100);
-        el("f-ranked").value = season.rankedRunLimit == null ? "" : String(season.rankedRunLimit);
-        el("f-open").value = season.openVerifiedRunLimit == null ? "" : String(season.openVerifiedRunLimit);
         el("f-counted").value = String(season.countedDailyResults);
         el("f-mindays").value = String(season.minimumEligibleDays);
         el("f-review").value = String(season.reviewWindowHours);
@@ -1266,8 +1232,6 @@
         startPicker.setValue(localValue(start));
         el("f-days").value = "30";
         el("f-mult").value = "100";
-        el("f-ranked").value = "";
-        el("f-open").value = "";
         el("f-counted").value = "5";
         el("f-mindays").value = "3";
         el("f-review").value = "48";
@@ -1304,11 +1268,6 @@
       const multiplier = Number(el("f-mult").value);
       check("f-mult", Number.isFinite(multiplier) && multiplier >= 100 && multiplier <= 1000, "SP multiplier must be between 100% and 1000%.");
 
-      const ranked = numberOrNull("f-ranked");
-      const open = numberOrNull("f-open");
-      check("f-ranked", ranked === null || (Number.isInteger(ranked) && ranked >= 0), "Ranked run budget must be a whole number, or blank for uncapped.");
-      check("f-open", open === null || (Number.isInteger(open) && open >= 0), "Open-verified run budget must be a whole number, or blank for uncapped.");
-
       const counted = Number(el("f-counted").value);
       const minDays = Number(el("f-mindays").value);
       const review = Number(el("f-review").value);
@@ -1327,8 +1286,6 @@
           durationDays: days,
           spMultiplierPct: multiplier,
           availableNetworks: pickedNetworks(),
-          rankedRunLimit: ranked,
-          openVerifiedRunLimit: open,
           countedDailyResults: counted,
           minimumEligibleDays: minDays,
           reviewWindowHours: review,
@@ -1467,14 +1424,6 @@
       if (preset) {
         el(preset.parentNode.dataset.presetFor).value = preset.dataset.value;
         updatePreview();
-        return;
-      }
-      const uncap = event.target.closest("[data-uncap-for]");
-      if (uncap) {
-        const input = el(uncap.dataset.uncapFor);
-        input.value = input.value.trim() === "" ? "0" : "";
-        updatePreview();
-        input.focus();
         return;
       }
       const net = event.target.closest("[data-net]");
