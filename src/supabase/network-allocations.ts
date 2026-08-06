@@ -22,6 +22,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Pool } from 'pg';
+import { getSharedPool } from './pg-pool';
 import {
   getRegistryNetworkTypes,
   isNetworkType,
@@ -69,18 +70,8 @@ export const NETWORK_ALLOCATIONS_DDL = `
   );
 `;
 
-let pool: Pool | null = null;
-
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-    // Same reasoning as plan-admin-controls: the Supabase pooler drops idle connections, and an
-    // unhandled 'error' event on an idle client would take the process down.
-    pool.on('error', () => {});
-  }
-  return pool;
+  return getSharedPool();
 }
 
 export function isAllocationStoreConfigured(): boolean {

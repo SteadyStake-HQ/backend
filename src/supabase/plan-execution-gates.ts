@@ -17,6 +17,7 @@
  * thing and neither can be read as an open-ended stop.
  */
 import { Pool } from 'pg';
+import { getSharedPool } from './pg-pool';
 
 export interface PlanExecutionGate {
   chainId: number;
@@ -29,18 +30,8 @@ export interface PlanExecutionGate {
   createdAt: Date;
 }
 
-let pool: Pool | null = null;
-
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-    // As in plan-admin-controls: the Supabase pooler drops idle connections, and an unhandled
-    // 'error' event on an idle client would take the process down.
-    pool.on('error', () => {});
-  }
-  return pool;
+  return getSharedPool();
 }
 
 function requirePool(): Pool {

@@ -1,0 +1,1225 @@
+/* ---- Seasons page ------------------------------------------------------
+   Page-local styling for /seasons.html. The shell (header, buttons, filters,
+   chips, badges, modal) is dashboard.css; everything here is either the season
+   table, the live-season spotlight, or the create/edit form inside the dialog.
+
+   Every state gets one tone, set once on the row as --tone and reused by the
+   badge, the rail, the progress fill and the ring — so a season reads as the
+   same colour wherever it appears on the page. */
+.tone-draft    { --tone: #7f8db0; --tone-soft: rgba(127, 141, 176, 0.14); }
+.tone-scheduled{ --tone: #f5b55e; --tone-soft: rgba(245, 181, 94, 0.14); }
+.tone-live     { --tone: #48d99a; --tone-soft: rgba(72, 217, 154, 0.14); }
+.tone-paused   { --tone: #f5b55e; --tone-soft: rgba(245, 181, 94, 0.16); }
+.tone-review   { --tone: #41c9f3; --tone-soft: rgba(65, 201, 243, 0.14); }
+.tone-finalized{ --tone: #6e8cff; --tone-soft: rgba(110, 140, 255, 0.14); }
+.tone-awarded  { --tone: #48d99a; --tone-soft: rgba(72, 217, 154, 0.16); }
+.tone-cancelled{ --tone: #f07187; --tone-soft: rgba(240, 113, 135, 0.14); }
+
+.badge.tone-draft,
+.badge.tone-scheduled,
+.badge.tone-live,
+.badge.tone-paused,
+.badge.tone-review,
+.badge.tone-finalized,
+.badge.tone-awarded,
+.badge.tone-cancelled {
+  gap: 5px;
+  color: var(--tone);
+  border-color: color-mix(in srgb, var(--tone) 34%, transparent);
+  background: var(--tone-soft);
+}
+
+/* The live dot only breathes while a season is actually serving; a paused one holds still. */
+.badge .pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge.tone-live .pip {
+  box-shadow: 0 0 0 0 currentColor;
+  animation: pip-pulse 2.4s ease-out infinite;
+}
+
+@keyframes pip-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 70%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ---- Live-season spotlight --------------------------------------------
+   The one season an operator is most likely to be here about, given the whole
+   top of the page: how far through it is, and how long is left, at a glance. */
+.spotlight {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 22px 26px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(120deg, rgba(17, 25, 43, 0.92), rgba(11, 17, 30, 0.92));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+  animation: rise 500ms both;
+}
+
+.spotlight[hidden] {
+  display: none;
+}
+
+/* A slow aurora tinted by the season's own state — motion at the edge of vision, never in the text. */
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: -60% -20%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background:
+    radial-gradient(38% 55% at 18% 40%, color-mix(in srgb, var(--tone, #6e8cff) 26%, transparent), transparent 70%),
+    radial-gradient(34% 46% at 78% 62%, rgba(110, 140, 255, 0.2), transparent 72%);
+  animation: aurora 18s ease-in-out infinite alternate;
+}
+
+@keyframes aurora {
+  from { transform: translate3d(-4%, -2%, 0) scale(1); }
+  to { transform: translate3d(5%, 3%, 0) scale(1.12); }
+}
+
+.spotlight > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ring {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 128px;
+}
+
+.ring svg {
+  grid-area: 1 / 1;
+  width: 128px;
+  height: 128px;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tone, #6e8cff) 45%, transparent));
+}
+
+.ring .ring-track {
+  stroke: rgba(141, 159, 199, 0.14);
+}
+
+.ring .ring-fill {
+  stroke: var(--tone, #6e8cff);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 900ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* A second, dashed ring turning very slowly — the page's "this is running" tell. */
+.ring .ring-orbit {
+  stroke: color-mix(in srgb, var(--tone, #6e8cff) 40%, transparent);
+  stroke-dasharray: 2 10;
+  transform-origin: 50% 50%;
+  animation: orbit 26s linear infinite;
+}
+
+@keyframes orbit {
+  to { transform: rotate(360deg); }
+}
+
+.ring-label {
+  grid-area: 1 / 1;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  text-align: center;
+}
+
+.ring-label b {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring-label span {
+  color: var(--dim);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.spot-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.spot-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.spot-head h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.spot-when {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.spot-when b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.spot-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.fact {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(8, 13, 24, 0.5);
+  font-size: 11px;
+}
+
+.fact svg {
+  width: 13px;
+  height: 13px;
+  color: var(--dim);
+}
+
+.fact b {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.spot-count {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+  text-align: right;
+}
+
+.spot-count .clock {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.spot-count .clock em {
+  color: var(--dim);
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 1px 0 -2px;
+}
+
+.spot-count span {
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- Stat strip -------------------------------------------------------- */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat {
+  position: relative;
+  overflow: hidden;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(150deg, rgba(20, 29, 47, 0.9), rgba(12, 18, 32, 0.9));
+  animation: rise 420ms both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.stat:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone, #6e8cff) 45%, transparent);
+}
+
+.stat::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--tone, #6e8cff), transparent);
+  opacity: 0.7;
+}
+
+.stat b {
+  display: block;
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  color: var(--tone, var(--text));
+}
+
+.stat span {
+  display: block;
+  margin-top: 3px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- Season table ------------------------------------------------------
+   One line per season instead of one card, so a year of them stays scannable.
+   Anything not needed to *find* a season — rules, hashes, the rest of the
+   actions, the ranking — sits behind the row's disclosure. */
+.stable-head,
+.srow-main {
+  display: grid;
+  grid-template-columns:
+    26px minmax(150px, 1.5fr) 108px minmax(150px, 1.15fr) minmax(112px, 0.9fr)
+    minmax(96px, 0.8fr) 62px 96px minmax(120px, 0.9fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.stable-head {
+  padding: 0 12px 8px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.stable-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Header cells that sort are buttons; the rest are plain spans on the same grid. */
+.sort-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.sort-head:hover {
+  color: var(--text);
+}
+
+.sort-head svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0;
+  transition: opacity 140ms ease, transform 160ms ease;
+}
+
+.sort-head[data-dir] {
+  color: var(--text);
+}
+
+.sort-head[data-dir] svg {
+  opacity: 1;
+}
+
+.sort-head[data-dir="asc"] svg {
+  transform: rotate(180deg);
+}
+
+.srow {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(141, 159, 199, 0.12);
+  border-radius: 12px;
+  background: rgba(19, 28, 47, 0.62);
+  animation: rise 380ms both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.srow::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--tone);
+}
+
+.srow:hover {
+  border-color: var(--border-strong);
+  background: rgba(24, 34, 56, 0.84);
+}
+
+.srow[data-expanded="true"] {
+  border-color: color-mix(in srgb, var(--tone) 40%, transparent);
+  background: rgba(24, 34, 56, 0.9);
+}
+
+.srow[data-hidden="true"] {
+  display: none;
+}
+
+.srow-main {
+  padding: 10px 12px 10px 14px;
+  cursor: pointer;
+}
+
+.srow .c {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.srow-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--dim);
+  background: transparent;
+  cursor: pointer;
+}
+
+.srow-toggle svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 180ms ease;
+}
+
+.srow-toggle:hover {
+  color: var(--text);
+  background: rgba(141, 159, 199, 0.14);
+}
+
+.srow[data-expanded="true"] .srow-toggle svg {
+  transform: rotate(90deg);
+}
+
+.c-name {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 1px !important;
+}
+
+.c-name b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.c-name em {
+  color: var(--dim);
+  font-style: normal;
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.c-window {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 1px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-window span {
+  color: var(--muted);
+}
+
+.c-window em {
+  color: var(--dim);
+  font-style: normal;
+  font-size: 10px;
+}
+
+.c-mult b,
+.c-budget {
+  font-variant-numeric: tabular-nums;
+}
+
+.c-mult b {
+  font-weight: 750;
+}
+
+.c-mult.boosted b {
+  color: var(--amber);
+}
+
+.c-budget span {
+  color: var(--muted);
+}
+
+.c-action {
+  justify-content: flex-end;
+}
+
+.c-action .button {
+  min-height: 29px;
+  padding: 5px 10px;
+  font-size: 10.5px;
+}
+
+/* Progress: elapsed fraction of the season window. The live one sweeps so the
+   eye is drawn to the season that is actually moving. */
+.sbar {
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(141, 159, 199, 0.14);
+}
+
+.sbar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone);
+  transition: width 700ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.srow[data-tone="live"] .sbar i::after,
+.spotlight .sbar i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+  animation: sweep 2.6s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(220%); }
+}
+
+.sbar-pct {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.net-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.net-pill {
+  overflow: hidden;
+  max-width: 84px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(8, 13, 24, 0.45);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-pill.all {
+  color: #bdc9f5;
+  border-color: rgba(110, 140, 255, 0.24);
+  background: rgba(110, 140, 255, 0.1);
+}
+
+/* ---- Row disclosure ---------------------------------------------------- */
+.srow-detail {
+  padding: 4px 16px 16px 17px;
+  border-top: 1px solid var(--border);
+  animation: detail-in 240ms ease-out;
+}
+
+.srow-detail[hidden] {
+  display: none;
+}
+
+@keyframes detail-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 3px 22px;
+  margin-top: 12px;
+}
+
+.detail-grid .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(141, 159, 199, 0.09);
+  font-size: 11px;
+}
+
+.detail-grid .row .label {
+  flex: 0 0 auto;
+  color: var(--dim);
+}
+
+.detail-grid .row .val {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-section {
+  margin-top: 14px;
+}
+
+.detail-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.detail-section h3::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.season-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.season-actions .button {
+  min-height: 32px;
+  padding: 6px 11px;
+  font-size: 11px;
+}
+
+/* Destructive action sits apart at the far end so it is never fat-fingered next to a routine one. */
+.season-actions .season-delete {
+  margin-left: auto;
+}
+
+/* ---- Ranking / award tables ------------------------------------------- */
+.rank-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.rank-table th,
+.rank-table td {
+  text-align: left;
+  padding: 6px 9px;
+  border-bottom: 1px solid rgba(141, 159, 199, 0.1);
+}
+
+.rank-table th {
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rank-table tbody tr {
+  animation: rise 320ms both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+}
+
+.rank-table tbody tr:hover td {
+  background: rgba(141, 159, 199, 0.05);
+}
+
+.rank-table td.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-table tr.ineligible td {
+  color: var(--dim);
+}
+
+/* The three places that pay out get a medal instead of a number. */
+.medal {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 7px;
+  color: #0b1020;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.medal.r1 { background: linear-gradient(150deg, #ffd782, #e0a13a); }
+.medal.r2 { background: linear-gradient(150deg, #dfe6f5, #a3aec6); }
+.medal.r3 { background: linear-gradient(150deg, #e0a273, #b4713f); }
+
+.rank-no {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  color: var(--dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.detail-loading .execute-spinner {
+  border-top-color: var(--muted);
+}
+
+/* ---- Create / edit dialog ---------------------------------------------
+   Form on the left, a preview of the season the form describes on the right.
+   The preview is the check an operator would otherwise do in their head:
+   duration bounds, the end date, the multiplier, which networks. */
+.season-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 258px;
+  gap: 22px;
+}
+
+.form-sections {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.form-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.form-section > h3::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.field > label,
+.field > .field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.field .hint {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.field input[type="text"],
+.field input[type="number"],
+.field textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.field textarea {
+  min-height: 62px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--dim);
+  font-weight: 500;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.5);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.12);
+}
+
+.field input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.field.invalid input,
+.field.invalid textarea {
+  border-color: rgba(240, 113, 135, 0.55);
+  box-shadow: 0 0 0 3px rgba(240, 113, 135, 0.1);
+}
+
+.field-error {
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.field-error[hidden] {
+  display: none;
+}
+
+/* Presets do the typing for the values an operator picks 90% of the time; the
+   box beside them stays authoritative for anything else. */
+.seg {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.seg button {
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.seg button:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.seg button.on {
+  color: #dce4ff;
+  border-color: rgba(110, 140, 255, 0.5);
+  background: rgba(110, 140, 255, 0.16);
+}
+
+/* A number and the switch that blanks it. Blank is the API's "uncapped", so the ∞ button is the
+   readable way to say that — and it lights up whenever the box is empty, however it got that way. */
+.split {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.seg-toggle {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--dim);
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.seg-toggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.seg-toggle.on {
+  color: #dce4ff;
+  border-color: rgba(110, 140, 255, 0.5);
+  background: rgba(110, 140, 255, 0.16);
+}
+
+.netpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(8, 13, 24, 0.4);
+}
+
+.netpick .chip-btn {
+  font-size: 10px;
+  padding: 5px 10px;
+}
+
+.netpick .chip-btn .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.netpick .chip-btn .dot.off {
+  background: var(--dim);
+}
+
+.netpick .loading {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+/* ---- Live preview rail ------------------------------------------------- */
+.preview {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(65, 201, 243, 0.1), transparent 14rem),
+    linear-gradient(165deg, rgba(21, 30, 49, 0.95), rgba(12, 18, 32, 0.95));
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.preview-head span {
+  color: var(--dim);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.preview-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  word-break: break-word;
+}
+
+.preview-name.empty {
+  color: var(--dim);
+}
+
+.preview-arc {
+  display: grid;
+  place-items: center;
+  padding: 2px 0 4px;
+}
+
+.preview-arc svg {
+  width: 100%;
+  max-width: 190px;
+  overflow: visible;
+}
+
+.preview-arc .arc-track {
+  stroke: rgba(141, 159, 199, 0.16);
+}
+
+.preview-arc .arc-fill {
+  stroke: url(#arcGrad);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 520ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  filter: drop-shadow(0 0 6px rgba(110, 140, 255, 0.5));
+}
+
+.preview-arc .arc-days {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  fill: var(--text);
+}
+
+.preview-arc .arc-cap {
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  fill: var(--dim);
+}
+
+.preview-rows {
+  display: grid;
+  gap: 2px;
+}
+
+.preview-rows .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(141, 159, 199, 0.09);
+  font-size: 11px;
+}
+
+.preview-rows .row:last-child {
+  border-bottom: 0;
+}
+
+.preview-rows .label {
+  color: var(--dim);
+  flex: 0 0 auto;
+}
+
+.preview-rows .val {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-rows .val.warn {
+  color: var(--amber);
+}
+
+.preview-utc {
+  color: var(--dim);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 1240px) {
+  .stable-head .c-budget,
+  .srow .c-budget {
+    display: none;
+  }
+
+  .stable-head,
+  .srow-main {
+    grid-template-columns:
+      26px minmax(150px, 1.5fr) 108px minmax(150px, 1.15fr) minmax(112px, 0.9fr)
+      minmax(96px, 0.8fr) 62px minmax(120px, 0.9fr);
+  }
+}
+
+@media (max-width: 1040px) {
+  .stable-head .c-nets,
+  .srow .c-nets,
+  .stable-head .c-mult,
+  .srow .c-mult {
+    display: none;
+  }
+
+  .stable-head,
+  .srow-main {
+    grid-template-columns: 26px minmax(150px, 1.6fr) 108px minmax(150px, 1.2fr) minmax(112px, 0.9fr) minmax(120px, 0.9fr);
+  }
+
+  .season-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .spotlight {
+    flex-wrap: wrap;
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .spot-count {
+    align-self: auto;
+    padding: 14px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 820px) {
+  .stable-head {
+    display: none;
+  }
+
+  .srow-main {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "toggle name status"
+      ". window window"
+      ". progress progress"
+      ". action action";
+    row-gap: 8px;
+  }
+
+  .srow .c-toggle { grid-area: toggle; }
+  .srow .c-name { grid-area: name; }
+  .srow .c-status { grid-area: status; justify-content: flex-end; }
+  .srow .c-window { grid-area: window; flex-direction: row; align-items: baseline !important; gap: 7px !important; }
+  .srow .c-progress { grid-area: progress; }
+  .srow .c-action { grid-area: action; justify-content: flex-start; }
+  .srow .c-nets,
+  .srow .c-mult,
+  .srow .c-budget {
+    display: none;
+  }
+
+  .season-actions .season-delete {
+    margin-left: 0;
+  }
+}
+
+/* ---- Toolbar tweaks ----------------------------------------------------
+   The token box moved up into the page actions (it is entered once per browser
+   and then ignored), so it drops the auto margin it uses as a toolbar item. */
+.page-actions .admin-field {
+  margin-left: 0;
+  flex: 0 1 220px;
+}
+
+.page-actions .status {
+  white-space: nowrap;
+}
+
+.page-actions .button.primary {
+  flex: 0 0 auto;
+}
+
+.filters .result-line {
+  margin: 0 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Four controls ride in the page actions here (status, token, refresh, create), which is more than
+   the heading can hold beside its copy on a laptop — so both rows are allowed to wrap. */
+.page-heading {
+  flex-wrap: wrap;
+}
+
+/* The heading copy gives up width first, so the controls keep their single line for as long as the
+   viewport allows; below that they take a row of their own and wrap within it. */
+.page-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1080px) {
+  .page-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .page-actions .admin-field {
+    flex: 1 1 100%;
+    order: 3;
+  }
+}

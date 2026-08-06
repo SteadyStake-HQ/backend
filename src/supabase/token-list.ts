@@ -20,6 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { Pool } from 'pg';
+import { getSharedPool } from './pg-pool';
 
 /** Where a row came from. Free-form apart from `manual`, which has the meaning described above. */
 export type TokenSource = 'manual' | 'coingecko' | 'coinmarketcap' | 'geckoterminal' | 'dex' | string;
@@ -75,18 +76,8 @@ export const TOKEN_LIST_DDL = `
   CREATE INDEX IF NOT EXISTS token_list_chain_idx ON token_list (chain_id, enabled, sort_rank);
 `;
 
-let pool: Pool | null = null;
-
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-    // As in network-allocations: the pooler drops idle connections, and an unhandled 'error' on an
-    // idle client takes the process down.
-    pool.on('error', () => {});
-  }
-  return pool;
+  return getSharedPool();
 }
 
 export function isTokenStoreConfigured(): boolean {

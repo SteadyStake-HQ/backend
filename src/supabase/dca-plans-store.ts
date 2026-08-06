@@ -14,6 +14,7 @@
  * as "Not recorded" rather than guessed at.
  */
 import { Pool } from 'pg';
+import { getSharedPool } from './pg-pool';
 import { NETWORK_ALLOCATIONS_DDL } from './network-allocations';
 import { PLAN_ADMIN_CONTROLS_DDL } from './plan-admin-controls';
 
@@ -38,19 +39,8 @@ export interface DcaPlanRow {
   returnedUsdc6: string | null;
 }
 
-let pool: Pool | null = null;
-
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-    // pg propagates errors on *idle* clients to the pool, and an unhandled 'error' event takes the
-    // process down. The Supabase pooler drops idle connections, so this fires in normal operation;
-    // swallowing it lets pg reconnect on the next query.
-    pool.on('error', () => {});
-  }
-  return pool;
+  return getSharedPool();
 }
 
 export function isSupabaseConfigured(): boolean {

@@ -673,6 +673,70 @@ a.addr:hover {
   text-transform: uppercase;
 }
 
+/* ---- Native <select> controls -----------------------------------------
+   The season picker (rewards) and tier override (capacity) are real native
+   selects — their popup has to stay native, so we can't replace them with a
+   listbox the way the sort menu does. Left unstyled they paint an OS chevron
+   and a system-colored control that reads as a pale box on this dark shell.
+   We strip the native chrome, paint our own chevron, and force a dark option
+   list so the closed control matches every other control on the page. Scoped
+   to selects that opt in with .dash-select (or a data-styled ancestor) so the
+   hidden #plan-sort value store is never touched. */
+.dash-select,
+.reward-controls select,
+.tier-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  min-height: 38px;
+  padding: 8px 34px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background-color: var(--surface-soft);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%238e9bb8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dash-select:hover,
+.reward-controls select:hover,
+.tier-row select:hover {
+  border-color: var(--border-strong);
+  background-color: rgba(19, 28, 47, 0.9);
+}
+
+.dash-select:focus-visible,
+.reward-controls select:focus-visible,
+.tier-row select:focus-visible {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
+}
+
+.dash-select:disabled,
+.reward-controls select:disabled,
+.tier-row select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Dark popup list. Honored by Chromium/Edge on Windows (the operator's browser);
+   Firefox keeps its own popup but still reads these as the fallback colors. */
+.dash-select option,
+.reward-controls select option,
+.tier-row select option {
+  color: var(--text);
+  background: var(--surface);
+}
+
 /* ---- Sort menu ---------------------------------------------------------
    Custom listbox standing in for a native <select> (which paints its popup in
    the OS theme and cannot hold a hint line). #plan-sort still exists, hidden,
@@ -2007,5 +2071,654 @@ a.addr:hover {
   }
   to {
     background-position: 0 50%;
+  }
+}
+
+/* ---- Enhanced controls (dashboard-controls.js) -------------------------
+   A styled listbox and a calendar/time popover that stand in for a native
+   <select> and datetime-local input. The original element stays in the DOM,
+   hidden, as the value store — so page code keeps reading .value and hearing
+   `change` while the operator sees a control that belongs to this shell. */
+.dctl-native {
+  display: none !important;
+}
+
+.dctl-select {
+  position: relative;
+  display: inline-block;
+  min-width: 180px;
+}
+
+.dctl-date {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.dctl-trigger,
+.dctl-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.dctl-trigger:hover,
+.dctl-date-field:hover {
+  border-color: var(--border-strong);
+  background: rgba(19, 28, 47, 0.9);
+}
+
+.dctl-trigger:focus-visible,
+.dctl-date-field:focus-visible {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
+}
+
+.dctl-select[data-open="true"] .dctl-trigger,
+.dctl-date[data-open="true"] .dctl-date-field {
+  border-color: rgba(110, 140, 255, 0.5);
+  background: rgba(21, 30, 49, 0.95);
+}
+
+.dctl-select.is-disabled .dctl-trigger {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dctl-value,
+.dctl-date-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dctl-value.is-placeholder,
+.dctl-date-text.is-placeholder {
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.dctl-cal-icon {
+  flex: 0 0 auto;
+  color: #91a6f3;
+}
+
+.dctl-caret {
+  flex: 0 0 auto;
+  color: var(--dim);
+  transition: transform 180ms ease, color 160ms ease;
+}
+
+.dctl-select[data-open="true"] .dctl-caret,
+.dctl-date[data-open="true"] .dctl-caret {
+  color: var(--text);
+  transform: rotate(180deg);
+}
+
+/* Shared popup surface for both controls. */
+.dctl-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 7px);
+  left: 0;
+  min-width: 100%;
+  padding: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 32, 53, 0.99), rgba(14, 20, 34, 0.99));
+  box-shadow: 0 22px 48px rgba(3, 6, 14, 0.62), 0 0 0 1px rgba(6, 10, 20, 0.6);
+  backdrop-filter: blur(14px);
+  animation: dctl-pop-in 130ms ease-out;
+}
+
+.dctl-pop[hidden] {
+  display: none;
+}
+
+/* Flipped above the trigger when there isn't room below (set by placePopup in dashboard-controls.js). */
+.dctl-pop.is-up {
+  top: auto;
+  bottom: calc(100% + 7px);
+  transform-origin: bottom center;
+  animation-name: dctl-pop-in-up;
+}
+
+@keyframes dctl-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes dctl-pop-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+.dctl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dctl-list:focus {
+  outline: none;
+}
+
+.dctl-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dctl-opt-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dctl-option .dctl-check {
+  flex: 0 0 auto;
+  color: var(--blue);
+  opacity: 0;
+}
+
+.dctl-option:hover,
+.dctl-option[data-cursor="true"] {
+  background: rgba(110, 140, 255, 0.12);
+}
+
+.dctl-option[aria-selected="true"] {
+  background: rgba(110, 140, 255, 0.16);
+  color: #dfe6ff;
+}
+
+.dctl-option[aria-selected="true"] .dctl-check {
+  opacity: 1;
+}
+
+.dctl-option[aria-disabled="true"] {
+  color: var(--dim);
+  cursor: not-allowed;
+}
+
+.dctl-option[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+/* ---- Calendar popover --------------------------------------------------- */
+.dctl-date-pop {
+  width: 288px;
+  padding: 12px;
+}
+
+.dctl-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dctl-cal-title {
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.dctl-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(6, 10, 18, 0.24);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.dctl-nav:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(110, 140, 255, 0.1);
+}
+
+.dctl-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.dctl-weekdays span {
+  text-align: center;
+  padding: 4px 0;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dctl-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.dctl-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
+}
+
+.dctl-day.is-blank {
+  cursor: default;
+}
+
+.dctl-day:not(.is-blank):hover {
+  background: rgba(110, 140, 255, 0.14);
+}
+
+.dctl-day.is-today {
+  border-color: rgba(110, 140, 255, 0.42);
+  color: #bcd0ff;
+}
+
+.dctl-day.is-selected {
+  color: #fff;
+  background: linear-gradient(160deg, var(--blue), #5570e6);
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(85, 112, 230, 0.4);
+}
+
+.dctl-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.dctl-time-label {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dctl-time-fields {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dctl-time-input {
+  width: 42px;
+  min-height: 32px;
+  padding: 5px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface-soft);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.dctl-time-input:focus {
+  outline: none;
+  border-color: rgba(110, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
+}
+
+.dctl-time-colon {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.dctl-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.dctl-foot-btn {
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(6, 10, 18, 0.24);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.dctl-foot-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.dctl-foot-btn.is-primary {
+  color: #dce4ff;
+  border-color: rgba(110, 140, 255, 0.32);
+  background: rgba(110, 140, 255, 0.13);
+}
+
+.dctl-foot-btn.is-primary:hover {
+  border-color: rgba(110, 140, 255, 0.5);
+  background: rgba(110, 140, 255, 0.2);
+}
+
+/* ---- Primary action ----------------------------------------------------
+   The one button in a view (or a dialog) that commits the change. Everything
+   else on the page stays the neutral .button so this reads as the way out. */
+.button.primary {
+  color: #eaf0ff;
+  border-color: rgba(110, 140, 255, 0.42);
+  background: linear-gradient(140deg, rgba(110, 140, 255, 0.34), rgba(65, 201, 243, 0.2));
+  box-shadow: 0 8px 22px rgba(110, 140, 255, 0.16);
+}
+
+.button.primary:not(:disabled):hover {
+  border-color: rgba(110, 140, 255, 0.7);
+  background: linear-gradient(140deg, rgba(110, 140, 255, 0.46), rgba(65, 201, 243, 0.28));
+  box-shadow: 0 12px 28px rgba(110, 140, 255, 0.24);
+}
+
+.button.primary.danger {
+  color: #ffe2e8;
+  border-color: rgba(240, 113, 135, 0.45);
+  background: linear-gradient(140deg, rgba(240, 113, 135, 0.34), rgba(240, 113, 135, 0.16));
+  box-shadow: 0 8px 22px rgba(240, 113, 135, 0.16);
+}
+
+.button.primary.danger:not(:disabled):hover {
+  border-color: rgba(240, 113, 135, 0.7);
+  background: linear-gradient(140deg, rgba(240, 113, 135, 0.46), rgba(240, 113, 135, 0.24));
+}
+
+/* ---- Modal / dialog (DashModal in dashboard-controls.js) ---------------
+   A dialog the operator can only leave deliberately, used wherever the work
+   is a form or a confirmation rather than a page. The scrim — not the card —
+   is the scroll container, so a date/select popover opened inside a tall form
+   is never clipped by the card's own overflow. */
+body.modal-open {
+  overflow: hidden;
+}
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(4, 7, 14, 0.66);
+  backdrop-filter: blur(7px) saturate(120%);
+  animation: modal-scrim-in 180ms ease-out;
+}
+
+.modal-scrim.is-closing {
+  animation: modal-scrim-out 140ms ease-in forwards;
+}
+
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(110, 140, 255, 0.14), transparent 22rem),
+    linear-gradient(165deg, rgba(23, 32, 53, 0.98), rgba(11, 17, 30, 0.99));
+  box-shadow: 0 40px 90px rgba(2, 4, 10, 0.66), 0 0 0 1px rgba(6, 10, 20, 0.5);
+  animation: modal-card-in 260ms cubic-bezier(0.2, 0.9, 0.28, 1.06) both;
+}
+
+.modal-card.is-wide {
+  max-width: 940px;
+}
+
+.modal-scrim.is-closing .modal-card {
+  animation: modal-card-out 140ms ease-in forwards;
+}
+
+/* A hairline of light along the top edge, so the card reads as lifted off the scrim. */
+.modal-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 22px auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(150, 178, 255, 0.55), transparent);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head .modal-titles {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.modal-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.modal-glyph {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(110, 140, 255, 0.24);
+  border-radius: 12px;
+  color: #bdc9f5;
+  background: rgba(110, 140, 255, 0.1);
+}
+
+.modal-glyph svg {
+  width: 19px;
+  height: 19px;
+}
+
+.modal-glyph.danger {
+  color: #ffc3ce;
+  border-color: rgba(240, 113, 135, 0.3);
+  background: rgba(240, 113, 135, 0.12);
+}
+
+.modal-glyph.warn {
+  color: #ffdca8;
+  border-color: rgba(245, 181, 94, 0.3);
+  background: rgba(245, 181, 94, 0.12);
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--dim);
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.modal-close:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: rgba(141, 159, 199, 0.14);
+}
+
+.modal-body {
+  padding: 18px 20px;
+}
+
+.modal-body > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.modal-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--amber);
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  background: rgba(245, 181, 94, 0.06);
+  font-size: 11.5px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-foot .spacer {
+  margin-left: auto;
+}
+
+.modal-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.modal-error[hidden] {
+  display: none;
+}
+
+@keyframes modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-card-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@media (max-width: 700px) {
+  .modal-scrim {
+    padding: 16px 12px;
+  }
+
+  .modal-head,
+  .modal-body,
+  .modal-foot {
+    padding-left: 15px;
+    padding-right: 15px;
   }
 }

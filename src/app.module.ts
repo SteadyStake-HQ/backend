@@ -9,6 +9,9 @@ import { PlansModule } from './plans/plans.module';
 import { NetworksModule } from './networks/networks.module';
 import { TokensModule } from './tokens/tokens.module';
 import { TreasuryModule } from './treasury/treasury.module';
+import { PaymentsModule } from './payments/payments.module';
+import { SeasonsModule } from './seasons/seasons.module';
+import { CapacityModule } from './capacity/capacity.module';
 
 @Module({
   imports: [
@@ -25,6 +28,9 @@ import { TreasuryModule } from './treasury/treasury.module';
     PlansModule,
     TokensModule,
     TreasuryModule,
+    PaymentsModule,
+    SeasonsModule,
+    CapacityModule,
   ],
 })
 export class AppModule {}

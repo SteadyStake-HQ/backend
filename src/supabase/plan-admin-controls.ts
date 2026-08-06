@@ -16,6 +16,7 @@
  * paths, which overwrite whole rows; an admin hold has a different lifecycle and must survive them.
  */
 import { Pool } from 'pg';
+import { getSharedPool } from './pg-pool';
 
 export type PlanAdminStatus = 'paused' | 'cancelled';
 
@@ -41,18 +42,8 @@ export interface PlanAdminControl {
   updatedAt: Date;
 }
 
-let pool: Pool | null = null;
-
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-    // Same reasoning as dca-plans-store: the Supabase pooler drops idle connections, and an
-    // unhandled 'error' event on an idle client would take the process down.
-    pool.on('error', () => {});
-  }
-  return pool;
+  return getSharedPool();
 }
 
 function requirePool(): Pool {

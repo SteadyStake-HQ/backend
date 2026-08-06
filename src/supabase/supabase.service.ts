@@ -4,6 +4,13 @@ import { NETWORK_ALLOCATIONS_DDL } from './network-allocations';
 import { PLAN_ADMIN_CONTROLS_DDL } from './plan-admin-controls';
 import { PLAN_EXECUTION_GATES_DDL } from './plan-execution-gates';
 import { TOKEN_LIST_DDL } from './token-list';
+import { PAYMENT_NETWORKS_DDL } from './payment-networks';
+import { PURCHASE_INTENTS_DDL } from './purchase-intents';
+import { PASS_ENTITLEMENTS_DDL } from './pass-entitlements';
+import { PASS_INDEX_CURSOR_DDL } from '../payments/pass-indexer';
+import { SEASONS_DDL } from './seasons-store';
+import { NFT_AWARDS_DDL } from './nft-awards-store';
+import { CAPACITY_DDL } from './capacity-store';
 
 export interface RuntimeSessionRecord {
   sessionKey?: string;
@@ -424,6 +431,26 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
       -- file baked into the frontend bundle, so an empty table means the app has no tokens to
       -- offer until an operator imports them.
       ${TOKEN_LIST_DDL}
+
+      -- Game Pass payments (blueprint §7 / §20). Networks a pass can be bought on, the trusted
+      -- purchase intents, and account-level pass expiry. DDL shared with the payments/ stores so
+      -- the standalone pass indexer can run without the Nest boot path.
+      ${PAYMENT_NETWORKS_DDL}
+      ${PURCHASE_INTENTS_DDL}
+      ${PASS_ENTITLEMENTS_DDL}
+      ${PASS_INDEX_CURSOR_DDL}
+
+      -- Season configuration, lifecycle, and finalists (blueprint §11–§14). The ranked results the
+      -- season rates come from the game's echo_ranked_daily_bests table in this same database.
+      ${SEASONS_DDL}
+
+      -- On-chain season NFT award records (blueprint §14). Filled when a finalized season's result
+      -- is registered and its cards minted on the SeasonRewardNFT contract.
+      ${NFT_AWARDS_DDL}
+
+      -- Auto Execution Plan capacity: membership tier, and the reservation ledger that makes the
+      -- global NFT bonus race-safe (blueprint §15, §16).
+      ${CAPACITY_DDL}
     `);
   }
 

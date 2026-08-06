@@ -4,16 +4,10 @@
  * Reads SUPABASE_DB_URL directly and reuses a module-level pool.
  */
 import { Pool } from 'pg';
-
-let pool: Pool | null = null;
+import { getSharedPool } from './pg-pool';
 
 function getPool(): Pool | null {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) return null;
-  if (!pool) {
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3 });
-  }
-  return pool;
+  return getSharedPool();
 }
 
 export function isSupabaseConfigured(): boolean {

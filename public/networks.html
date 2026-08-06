@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Network Allocation — SteadyStake</title>
+  <title>Networks — SteadyStake</title>
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -106,6 +106,49 @@
       color: var(--dim);
       font-size: 12px;
     }
+
+    /* Deployed contract addresses, folded away by default so the allocation view a card leads with
+       stays scannable. The addresses came in on the same payload — no second request. */
+    .net-contracts {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .net-contracts summary {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      list-style: none;
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .net-contracts summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .net-contracts summary::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+      transition: transform 0.15s ease;
+    }
+
+    .net-contracts[open] summary::before {
+      transform: rotate(45deg);
+    }
+
+    .contract-rows {
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -121,13 +164,6 @@
             <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
           <span>Plan activity</span>
-        </a>
-        <a class="nav-link" href="/deployments.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9" />
-          </svg>
-          <span>Deployments</span>
         </a>
         <a class="nav-link active" href="/networks.html" aria-current="page">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -151,6 +187,24 @@
           </svg>
           <span>Relayer &amp; fees</span>
         </a>
+        <a class="nav-link" href="/seasons.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seasons</span>
+        </a>
+        <a class="nav-link" href="/rewards.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <span>Rewards</span>
+        </a>
+        <a class="nav-link" href="/capacity.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 20a8 8 0 1 1 16 0" stroke-linecap="round" />
+            <path d="M12 20 15 11" stroke-linecap="round" />
+          </svg>
+          <span>Capacity</span>
+        </a>
       </nav>
       <span class="live-pill">Operations live</span>
     </div>
@@ -160,9 +214,9 @@
     <div class="page-heading">
       <div class="heading-copy">
         <p class="eyebrow">Infrastructure</p>
-        <h1>Network allocation</h1>
+        <h1>Networks</h1>
         <p class="page-description">
-          Which networks the app offers, and how each one is listed.
+          Which networks the app offers, how each one is listed, and the contracts deployed on it.
         </p>
         <ul class="safe-strip" aria-label="What a change here does">
           <li class="safe-chip">
@@ -234,6 +288,28 @@
 
     const STATUS_LABEL = { enabled: "Live", paused: "Paused", disabled: "Removed" };
 
+    // Order the deployed addresses read down a card. "USDC" is the slot name in the payload, not the
+    // token — it is labelled with the network's own stable symbol below.
+    const CONTRACT_ORDER = ["DCAVault", "DCAResolver", "ZeroExAdapter", "GasTank", "USDC"];
+
+    /**
+     * The deployed contract addresses for one network, in a details/summary so a card stays short
+     * until an operator wants them. Nothing renders for a network with no deployment.
+     */
+    function contracts(network) {
+      if (!network.contracts) return "";
+      const rows = CONTRACT_ORDER.map(function (key) {
+        const value = network.contracts[key];
+        if (value === undefined) return "";
+        const label = key === "USDC" ? (network.stableSymbol || "USDC") : key;
+        return '<div class="row"><span class="label">' + escapeHtml(label) + "</span>" +
+          addressElement(value, network.explorerUrl) + "</div>";
+      }).join("");
+      if (!rows) return "";
+      return '<details class="net-contracts"><summary>Deployed contracts</summary>' +
+        '<div class="contract-rows">' + rows + "</div></details>";
+    }
+
     function badge(network) {
       const label = STATUS_LABEL[network.status] || network.status;
       return '<span class="badge status-' + escapeHtml(network.status) + '">' + escapeHtml(label) + "</span>";
@@ -296,6 +372,7 @@
         '<div class="row"><span class="label">Settles in</span><span class="addr">' +
           escapeHtml(network.stableSymbol) + "</span></div>" +
         '<div class="row"><span class="label">Deployment</span>' + deployed + "</div>" +
+        contracts(network) +
         note +
         meta +
         actions(network) +
