@@ -1,0 +1,17 @@
+[variables]
+NODE_ENV = "production"
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["corepack enable", "pnpm install --no-frozen-lockfile"]
+
+# tsc peaks around 700 MB on this source tree. The ceiling is set here rather than
+# in [variables] so it applies to the compile only — carrying a 1.5 GB heap limit
+# into a 512 MB runtime container makes Node defer GC until the kernel OOM-kills it.
+[phases.build]
+cmds = ["corepack enable", "NODE_OPTIONS=--max-old-space-size=1536 pnpm run build"]
+
+[start]
+cmd = "node dist/main.js"
