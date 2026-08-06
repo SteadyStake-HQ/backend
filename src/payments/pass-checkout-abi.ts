@@ -29,6 +29,19 @@ export const PASS_CHECKOUT_ABI = [
   },
   { type: 'function', name: 'treasury', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'stablecoin', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  {
+    // A plan the checkout was never seeded with reads back `enabled = false`, and `buyPass` on it
+    // reverts with PlanDisabled — after the player has already paid gas to approve. Read it first.
+    type: 'function',
+    name: 'plans',
+    stateMutability: 'view',
+    inputs: [{ name: 'planId', type: 'uint8' }],
+    outputs: [
+      { name: 'durationSeconds', type: 'uint32' },
+      { name: 'price', type: 'uint256' },
+      { name: 'enabled', type: 'bool' },
+    ],
+  },
 ] as const;
 
 /** Minimal ERC-20 the client needs to approve the exact pass amount before buyPass (§7.2). */

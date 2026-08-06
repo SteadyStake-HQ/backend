@@ -1,6 +1,8 @@
 import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import { encodeFunctionData, isAddress } from 'viem';
+import { createPublicClient, encodeFunctionData, http, isAddress } from 'viem';
+import { getRpc } from '../config';
+import { getChain } from '../run-executor';
 import {
   getPaymentNetworks,
   getPaymentNetwork,
@@ -19,6 +21,9 @@ import { PASS_CHECKOUT_ABI, ERC20_APPROVE_ABI } from './pass-checkout-abi';
 
 const INTENT_TTL_SECONDS = 10 * 60; // §7.1
 
+/** How long an on-chain plan-enablement read is reused. Plans change by an admin tx, not by traffic. */
+const PLAN_CACHE_TTL_MS = 60_000;
+
 export interface PassStatus {
   active: boolean;
   expiresAt: string | null;
@@ -29,25 +34,84 @@ export interface PassStatus {
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
+  /** chainId => the plan ids that network's checkout will actually sell, and when we last looked. */
+  private readonly planCache = new Map<number, { ids: Set<number>; at: number }>();
+
+  /**
+   * Which PASS_PLANS the network's checkout contract has seeded and enabled.
+   *
+   * PASS_PLANS is the backend's price table; `plans(planId)` on the checkout is what `buyPass` will
+   * honour. They drift whenever a plan is added to the table after a contract was deployed, and the
+   * drift is expensive for the player: the Game Pass screen offers the plan, the wallet pays gas to
+   * approve, and only then does `buyPass` revert with PlanDisabled. So the two are reconciled here,
+   * before either an offer or an intent is made.
+   *
+   * Returns null when the chain cannot be read — an RPC outage should not close checkout on plans
+   * that are seeded, and a plan that is genuinely missing still surfaces as a reverted `buyPass`.
+   */
+  private async enabledPlanIds(network: PaymentNetworkRow): Promise<Set<number> | null> {
+    const cached = this.planCache.get(network.chainId);
+    if (cached && Date.now() - cached.at < PLAN_CACHE_TTL_MS) return cached.ids;
+
+    const chain = getChain(network.chainId);
+    const rpc = getRpc(network.chainId);
+    if (!chain || !rpc) return null;
+
+    try {
+      const client = createPublicClient({ chain, transport: http(rpc) });
+      const ids = new Set<number>();
+      for (const plan of PASS_PLANS) {
+        const [, , enabled] = await client.readContract({
+          address: network.checkoutContract as `0x${string}`,
+          abi: PASS_CHECKOUT_ABI,
+          functionName: 'plans',
+          args: [plan.id],
+        });
+        if (enabled) ids.add(plan.id);
+      }
+      this.planCache.set(network.chainId, { ids, at: Date.now() });
+      return ids;
+    } catch (err) {
+      this.logger.warn(
+        `Could not read plan config from ${network.checkoutContract} on ${network.chainId}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   private ensureDb() {
     if (!isSupabaseConfigured()) {
       throw new ServiceUnavailableException({ ok: false, error: 'Payments are unavailable: the database is not configured.' });
     }
   }
 
-  /** Enabled payment networks with their plan prices, for the game's Game Pass screen. */
+  /**
+   * Enabled payment networks with their plan prices, for the game's Game Pass screen.
+   *
+   * `plans` stays the full price table so a client can label any plan it sees; each network also
+   * carries `planIds` — the subset its checkout will actually sell — so the screen offers a plan
+   * only on the networks where buying it can succeed.
+   */
   async listCheckoutOptions() {
     this.ensureDb();
     const networks = await getPaymentNetworks(true);
+    const allIds = PASS_PLANS.map((p) => p.id);
+    const withPlans = await Promise.all(
+      networks.map(async (n) => {
+        const enabled = await this.enabledPlanIds(n);
+        return {
+          chainId: n.chainId,
+          stablecoinSymbol: n.stablecoinSymbol,
+          stablecoinDecimals: n.stablecoinDecimals,
+          checkoutContract: n.checkoutContract,
+          planIds: enabled ? allIds.filter((id) => enabled.has(id)) : allIds,
+        };
+      }),
+    );
     return {
       ok: true,
       plans: PASS_PLANS.map((p) => ({ id: p.id, key: p.key, label: p.label, durationSeconds: p.durationSeconds, priceCents: p.priceCents })),
-      networks: networks.map((n) => ({
-        chainId: n.chainId,
-        stablecoinSymbol: n.stablecoinSymbol,
-        stablecoinDecimals: n.stablecoinDecimals,
-        checkoutContract: n.checkoutContract,
-      })),
+      networks: withPlans,
     };
   }
 
@@ -68,6 +132,19 @@ export class PaymentsService {
     const network = await getPaymentNetwork(chainId);
     if (!network || !network.enabled) {
       throw new BadRequestException({ ok: false, error: 'That network is not available for pass payment.' });
+    }
+
+    // Refuse a checkout this network's contract cannot honour, rather than letting the player pay
+    // gas to approve and then watch `buyPass` revert with PlanDisabled.
+    const enabledPlans = await this.enabledPlanIds(network);
+    if (enabledPlans && !enabledPlans.has(plan.id)) {
+      this.logger.warn(
+        `Plan ${plan.id} (${plan.key}) is in PASS_PLANS but not enabled on ${network.checkoutContract} (chain ${chainId}); seed it with setPlan().`,
+      );
+      throw new BadRequestException({
+        ok: false,
+        error: `The ${plan.label} is not available on this network. Pick another pass or another network.`,
+      });
     }
 
     const amount = planAmountAtomic(plan, network.stablecoinDecimals);
