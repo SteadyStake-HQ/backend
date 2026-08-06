@@ -8,6 +8,7 @@ import {
   type NetworkStatus,
 } from '../supabase/network-allocations';
 import { getAllNetworks, getStableSymbol, type NetworkContracts } from '../config';
+import { getGameContracts, type GameContractsEntry } from '../game-contracts';
 import {
   getRegistryEntry,
   getRegistryRpc,
@@ -42,6 +43,13 @@ export interface AllocatedNetwork {
   updatedBy: string | null;
   updatedAt: string | null;
   contracts: NetworkContracts['contracts'] | null;
+  /**
+   * The Echo Arena game contracts on this chain (checkout, season reward NFT, capacity verifier),
+   * or null where none are deployed. Separate from `contracts`, which is the DCA stack: the two are
+   * deployed by different scripts and recorded in different files, and an operator checking a fresh
+   * game deployment needs to see which of the three actually landed on this chain.
+   */
+  gameContracts: GameContractsEntry | null;
 }
 
 /**
@@ -176,6 +184,7 @@ export class NetworkAllocationService {
       updatedBy: allocation?.updatedBy ?? null,
       updatedAt: allocation?.updatedAt ? allocation.updatedAt.toISOString() : null,
       contracts: deployed?.contracts ?? null,
+      gameContracts: getGameContracts(entry.chainId),
     };
   }
 

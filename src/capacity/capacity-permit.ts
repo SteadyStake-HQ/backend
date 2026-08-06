@@ -6,9 +6,8 @@
  * Verifier addresses and the EIP-712 domain (name/version) come from the deployed contracts file, so
  * the domain always matches what was deployed — a mismatch would make every permit fail on-chain.
  */
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 import { privateKeyToAccount } from 'viem/accounts';
+import { getGameContracts } from '../game-contracts';
 
 export const PERMIT_TTL_SECONDS = 5 * 60; // §16.2 deadline <= issuedAt + 5 min
 
@@ -18,38 +17,10 @@ export interface VerifierInfo {
   version: string;
 }
 
-interface DeployedEntry {
-  chainId: number;
-  AutoPlanCapacityVerifier?: { address?: string; domain?: string };
-}
-
-let verifierCache: Record<number, VerifierInfo> | null = null;
-
-function loadVerifiers(): Record<number, VerifierInfo> {
-  if (verifierCache) return verifierCache;
-  const candidates = [
-    join(process.cwd(), '..', 'contracts', 'deployed-game-contracts.json'),
-    join(process.cwd(), 'contracts', 'deployed-game-contracts.json'),
-    join(__dirname, '..', '..', '..', 'contracts', 'deployed-game-contracts.json'),
-    process.env.GAME_CONTRACTS_FILE?.trim() ?? '',
-  ].filter(Boolean);
-  const file = candidates.find((c) => existsSync(c));
-  const out: Record<number, VerifierInfo> = {};
-  if (file) {
-    const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, DeployedEntry>;
-    for (const entry of Object.values(data)) {
-      const v = entry.AutoPlanCapacityVerifier;
-      if (!v?.address) continue;
-      const [name, version] = (v.domain ?? 'Echo Arena Capacity/1').split('/');
-      out[entry.chainId] = { address: v.address as `0x${string}`, name: name ?? 'Echo Arena Capacity', version: version ?? '1' };
-    }
-  }
-  verifierCache = out;
-  return out;
-}
-
 export function getVerifier(chainId: number): VerifierInfo | null {
-  return loadVerifiers()[chainId] ?? null;
+  const verifier = getGameContracts(chainId)?.capacityVerifier;
+  if (!verifier) return null;
+  return { address: verifier.address, name: verifier.name, version: verifier.version };
 }
 
 function signerAccount() {

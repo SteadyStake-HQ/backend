@@ -1,0 +1,406 @@
+/**
+ * Contract balances page.
+ *
+ * Built on dashboard.css's tokens and primitives (.card, .badge, .addr, .kpi-row …); only what this
+ * page adds lives here.
+ *
+ * On the two colour sets below. The dashboard's --green/--blue/--amber are tuned to be read as
+ * *text* on a dark surface, which puts them above the lightness band a categorical chart fill wants
+ * — validated against the #101727 surface, they fail it. So the page keeps both: the bright tokens
+ * for chips, values and labels, and a darker step of the same four hues for the bars and stacked
+ * segments behind them. Same hue family, so the page still reads as one system; correct lightness,
+ * so adjacent segments stay separable (worst adjacent pair ΔE 19.4 protan, 22.2 normal vision).
+ */
+
+:root {
+  /* Custody classes. These are status colours, not a series order — each one means one thing
+     everywhere it appears, and none of them is ever reused for "the next category". */
+  --revenue: var(--green);
+  --revenue-fill: #2fa876;
+  --float: var(--blue);
+  --float-fill: #5570d6;
+  --stranded: var(--amber);
+  --stranded-fill: #b8802f;
+  --wallet: var(--cyan);
+  --wallet-fill: #2e9cc2;
+}
+
+/* ---- KPI tiles ---------------------------------------------------------- */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.kpi {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  overflow: hidden;
+}
+
+/* The custody colour as a 3px edge rather than a tinted panel: the tile's job is to be read, and a
+   wash behind six-digit figures costs more legibility than the identity is worth. */
+.kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--kpi-accent, var(--border-strong));
+}
+
+.kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kpi-label svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--kpi-accent, var(--muted));
+}
+
+.kpi-value {
+  margin-top: 10px;
+  font-size: 1.72rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.kpi-value.zero { color: var(--dim); }
+
+.kpi-note {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* ---- Analytics ---------------------------------------------------------- */
+
+/* 380px rather than 340: at 340 a 1600px shell fits four panels, and four columns leaves the bar
+   labels too narrow to spell "DCA Resolver ×6" without an ellipsis. Three wider panels read better
+   than four cramped ones. */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+}
+
+/* The alerts panel runs the full row rather than sitting as a fourth column: there are three charts,
+   so a fourth cell leaves a hole beside it on a wide screen, and alert text wants the width anyway. */
+.panel-wide { grid-column: 1 / -1; }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.panel-sub {
+  margin: 0 0 16px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Stacked custody bar. The 2px surface-coloured gap between segments is what keeps two adjacent
+   fills from reading as one wider band. */
+.stack {
+  display: flex;
+  height: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-soft);
+  gap: 2px;
+}
+
+.stack-seg {
+  min-width: 3px;
+  transition: opacity 0.14s ease;
+}
+
+.stack-seg:first-child { border-radius: 8px 0 0 8px; }
+.stack-seg:last-child { border-radius: 0 8px 8px 0; }
+.stack:hover .stack-seg { opacity: 0.55; }
+.stack .stack-seg:hover { opacity: 1; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* Values wear text tokens, never the series colour — the swatch beside them carries identity. */
+.legend-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.legend-share { color: var(--dim); font-size: 0.76rem; }
+
+/* Horizontal bars — the form for "compare magnitudes across named things". */
+.bars { display: flex; flex-direction: column; gap: 11px; }
+
+.bar-row { display: grid; grid-template-columns: minmax(124px, 42%) 1fr auto; gap: 12px; align-items: center; }
+
+.bar-name {
+  font-size: 0.83rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-name .sub { color: var(--dim); font-size: 0.74rem; margin-left: 6px; }
+
+.bar-track {
+  position: relative;
+  height: 16px;
+  background: var(--surface-soft);
+  border-radius: 5px;
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+}
+
+.bar-fill { height: 100%; border-radius: 0 5px 5px 0; min-width: 2px; }
+.bar-fill:first-child { border-radius: 5px; }
+
+.bar-amount {
+  font-size: 0.83rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.bar-amount.zero { color: var(--dim); font-weight: 500; }
+
+/* ---- Alerts ------------------------------------------------------------- */
+
+.alerts { display: flex; flex-direction: column; gap: 8px; }
+
+.alert {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border-radius: 11px;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.alert svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+.alert.warn { border-color: rgba(245, 181, 94, 0.32); }
+.alert.warn svg { color: var(--amber); }
+.alert.info svg { color: var(--blue); }
+.alert b { color: var(--text); font-weight: 600; }
+
+/* ---- Withdraw bar ------------------------------------------------------- */
+
+.withdraw-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.withdraw-copy { flex: 1 1 260px; min-width: 0; }
+.withdraw-copy h2 { margin: 0 0 4px; font-size: 0.92rem; font-weight: 700; }
+.withdraw-copy p { margin: 0; font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+.withdraw-copy .dest { color: var(--text); font-family: var(--font-mono); font-size: 0.78rem; }
+
+.button.primary {
+  background: var(--revenue-fill);
+  border-color: transparent;
+  color: #04140d;
+  font-weight: 700;
+}
+
+.button.primary:hover:not(:disabled) { background: var(--green); }
+.button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.withdraw-result {
+  flex-basis: 100%;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  padding-top: 4px;
+}
+
+.withdraw-result.ok { color: var(--green); }
+.withdraw-result.err { color: var(--red); }
+
+/* ---- Network cards ------------------------------------------------------ */
+
+.net-list { display: flex; flex-direction: column; gap: 16px; }
+
+.net-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.net-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.net-head h3 { margin: 0; font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+
+.net-figures { margin-left: auto; display: flex; flex-wrap: wrap; gap: 18px; }
+
+.net-figure { text-align: right; }
+.net-figure .lbl { display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.net-figure .val { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.net-figure .val.zero { color: var(--dim); font-weight: 500; }
+
+.badge.testnet { color: var(--amber); border-color: rgba(245, 181, 94, 0.34); }
+.badge.mainnet { color: var(--green); border-color: rgba(72, 217, 154, 0.34); }
+.badge.partial { color: var(--red); border-color: rgba(240, 113, 135, 0.38); }
+
+.contract-list { display: flex; flex-direction: column; }
+
+.contract {
+  display: grid;
+  grid-template-columns: minmax(190px, 250px) 1fr auto;
+  gap: 16px;
+  padding: 15px 20px;
+  border-top: 1px solid var(--border);
+  align-items: start;
+}
+
+.contract:first-child { border-top: none; }
+.contract.is-wallet { background: var(--surface-soft); }
+.contract.hidden-note { grid-template-columns: 1fr; padding: 9px 20px; }
+.contract.hidden-note .no-action { max-width: none; }
+
+.contract-id .name { font-size: 0.88rem; font-weight: 650; color: var(--text); }
+.contract-id .role { margin-top: 3px; font-size: 0.75rem; color: var(--dim); line-height: 1.45; }
+.contract-id .addr-line { margin-top: 6px; }
+
+.holdings { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+.holding { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+
+.holding-amount {
+  font-size: 0.9rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.holding-amount.zero { color: var(--dim); font-weight: 500; }
+.holding-symbol { font-size: 0.78rem; color: var(--muted); }
+
+/* Custody is named in text, not signalled by colour alone — the dot is a second encoding. */
+.custody {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.custody i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.custody.revenue { color: var(--revenue); border-color: rgba(72, 217, 154, 0.34); }
+.custody.revenue i { background: var(--revenue); }
+.custody.float { color: var(--float); border-color: rgba(110, 140, 255, 0.34); }
+.custody.float i { background: var(--float); }
+.custody.stranded { color: var(--stranded); border-color: rgba(245, 181, 94, 0.34); }
+.custody.stranded i { background: var(--stranded); }
+.custody.wallet { color: var(--wallet); border-color: rgba(65, 201, 243, 0.34); }
+.custody.wallet i { background: var(--wallet); }
+
+.locked {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: var(--dim);
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+.notes { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+
+.note { font-size: 0.75rem; color: var(--muted); display: flex; gap: 7px; flex-wrap: wrap; }
+.note .note-label { color: var(--dim); }
+.note.warn { color: var(--amber); }
+
+.contract-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+.no-action { font-size: 0.72rem; color: var(--dim); text-align: right; max-width: 22ch; line-height: 1.4; }
+
+@media (max-width: 900px) {
+  .contract { grid-template-columns: 1fr; }
+  .contract-actions { align-items: flex-start; }
+  .net-figures { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .net-figure { text-align: left; }
+}

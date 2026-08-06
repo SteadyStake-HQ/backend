@@ -9,6 +9,7 @@ import { PlansModule } from './plans/plans.module';
 import { NetworksModule } from './networks/networks.module';
 import { TokensModule } from './tokens/tokens.module';
 import { TreasuryModule } from './treasury/treasury.module';
+import { BalancesModule } from './balances/balances.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { CapacityModule } from './capacity/capacity.module';
@@ -28,6 +29,7 @@ import { CapacityModule } from './capacity/capacity.module';
     PlansModule,
     TokensModule,
     TreasuryModule,
+    BalancesModule,
     PaymentsModule,
     SeasonsModule,
     CapacityModule,
