@@ -8,13 +8,24 @@
  */
 export interface PassPlan {
   id: number;
-  key: 'day' | 'week' | 'month';
+  key: 'hour' | 'day' | 'week' | 'month';
   label: string;
   durationSeconds: number;
   priceCents: number;
 }
 
 export const PASS_PLANS: readonly PassPlan[] = [
+  /**
+   * TEST PLAN — not a product tier. One cent buys the full pass entitlement (10 SP-eligible runs a
+   * day, the 1.5x SP multiplier, open-verified mode), which is why it exists only to exercise the
+   * purchase flow end to end. Remove it, or reprice it, before this reaches players: SP balances are
+   * meant to gate wallet permissions, so a pass anyone can buy for a cent inflates entitlements
+   * across every wallet that notices.
+   *
+   * It is listed first so it reads shortest-to-longest on the Game Pass screen. That does not make it
+   * the default — the screen preselects the Week Pass by key.
+   */
+  { id: 4, key: 'hour', label: '1-Hour Pass', durationSeconds: 60 * 60, priceCents: 1 },
   { id: 1, key: 'day', label: 'Day Pass', durationSeconds: 24 * 60 * 60, priceCents: 99 },
   { id: 2, key: 'week', label: 'Week Pass', durationSeconds: 7 * 24 * 60 * 60, priceCents: 399 },
   { id: 3, key: 'month', label: 'Month Pass', durationSeconds: 30 * 24 * 60 * 60, priceCents: 999 },
