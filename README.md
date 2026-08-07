@@ -18,11 +18,31 @@ Standalone backend that runs DCA execution: reads registered users from Supabase
 ## Run
 
 - **Start (recommended):** `npm start` – starts the HTTP server and runs the DCA executor on a **configurable period** (default: once per day). The backend stays on.
-  - Open **http://localhost:3340** (or your `PORT`) for the **scheduler dashboard**: set run period (1 hour, 6h, 12h, 1 day, 1 week), trigger “Run now”, and see last/next run status. The dashboard also shows **run history** (each DCA run with executed tasks and errors), **gas tank balance history** (per user/chain, recorded after each execution), and **DCA plan history** (schedule IDs per user at each run).
+  - Open **http://localhost:3340** (or your `PORT`) for the **operations dashboard**. The root is a picker; see [Dashboard layout](#dashboard-layout) for what lives where. Its **Plan activity** page (`/steadystake/`) sets the run period (1 hour, 6h, 12h, 1 day, 1 week), triggers “Run now”, and shows last/next run status, plus **run history** (each DCA run with executed tasks and errors), **gas tank balance history** (per user/chain, recorded after each execution), and **DCA plan history** (schedule IDs per user at each run).
 - **One-off run:** `npm run run` – builds and runs the executor once, then exits.
 - **Legacy loop (every 5 min):** `npm run build && npm run loop`.
 
 Use pm2 or systemd in production to keep `npm start` running (the server process runs the executor on the configured interval).
+
+## Dashboard layout
+
+Two products run on this backend, so `public/` is split one folder per product and each page carries
+only its own product's nav. The header's project switcher moves between them; the root `/` is a
+picker.
+
+| | Pages | Serves |
+| --- | --- | --- |
+| **SteadyStake** — `public/steadystake/` | Plan activity (`/steadystake/`), Tokens, Relayer &amp; fees, Balances, Capacity | The DCA scheduler |
+| **Echo Arena** — `public/echo-arena/` | Seasons, Players, Rewards | The game |
+| **Shared** — `public/` | Networks (`/networks.html`) | Both — the chain registry carries the DCA contract addresses and the Echo Arena game contracts per chain |
+
+Capacity sits under SteadyStake because it governs Auto Execution Plan slots, even though the bonus
+it reads comes from Echo Arena reward cards.
+
+The pre-split URLs (`/tokens.html`, `/seasons.html`, …) are kept as redirect stubs so old operator
+bookmarks still land; `/deployments.html` likewise still forwards to Networks. A page added to
+either product needs its nav block copied from a sibling page in the same folder — the nav is inline
+HTML per page, not templated.
 
 ## What a run charges
 
@@ -158,7 +178,7 @@ list and treats every network as live, and this executor still enforces pauses o
 ## Token list
 
 Which tokens a plan can buy on each network is operator state, edited on the **Tokens** dashboard
-page (`/tokens.html`). It replaced a JSON file compiled into the frontend bundle, so adding or
+page (`/steadystake/tokens.html`). It replaced a JSON file compiled into the frontend bundle, so adding or
 removing a token no longer needs a redeploy of either side.
 
 The list lives in `token_list` (or `token-list.json` when `SUPABASE_DB_URL` is unset), one row per

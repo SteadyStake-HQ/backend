@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Capacity — SteadyStake</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <style>
+    .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+    .search-row input { flex: 1 1 320px; min-height: 38px; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel, rgba(255,255,255,0.02)); color: inherit; font: inherit; }
+    .cap-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 4px 0 14px; }
+    .cap-stat { border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+    .cap-stat b { font-size: 22px; display: block; }
+    .cap-stat span { font-size: 11px; color: var(--dim); }
+    .cap-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    .cap-table th, .cap-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .cap-table th { color: var(--dim); font-weight: 600; }
+    .tier-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    /* The native <select> is enhanced into a styled listbox (dashboard-controls.js); size its trigger. */
+    .tier-row .dctl-select { min-width: 160px; }
+    .tier-row .hint { font-size: 11px; color: var(--dim); }
+    .section-title { margin: 16px 0 4px; font-size: 13px; }
+  </style>
+</head>
+<body data-project="steadystake">
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake active" href="/steadystake/" aria-current="true">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena" href="/echo-arena/">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
+      <nav class="main-nav" aria-label="SteadyStake pages">
+        <a class="nav-link" href="/steadystake/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Plan activity</span>
+        </a>
+        <a class="nav-link" href="/steadystake/tokens.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <ellipse cx="12" cy="6.5" rx="7.5" ry="3.2" />
+            <path d="M4.5 6.5v11c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2v-11" stroke-linecap="round" />
+            <path d="M4.5 12c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2" stroke-linecap="round" />
+          </svg>
+          <span>Tokens</span>
+        </a>
+        <a class="nav-link" href="/steadystake/treasury.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M3 8.5 12 4l9 4.5v2H3v-2Z" stroke-linejoin="round" />
+            <path d="M5.5 10.5v7M9.5 10.5v7M14.5 10.5v7M18.5 10.5v7M3 20h18" stroke-linecap="round" />
+          </svg>
+          <span>Relayer &amp; fees</span>
+        </a>
+        <a class="nav-link" href="/steadystake/balances.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <rect x="3" y="6.5" width="18" height="13" rx="2.5" />
+            <path d="M3 11h18M16.5 15.5h2" stroke-linecap="round" />
+            <path d="M6.5 6.5V5a1.5 1.5 0 0 1 1.9-1.45l9.3 2.6" stroke-linecap="round" />
+          </svg>
+          <span>Balances</span>
+        </a>
+        <a class="nav-link active" href="/steadystake/capacity.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 20a8 8 0 1 1 16 0" stroke-linecap="round" />
+            <path d="M12 20 15 11" stroke-linecap="round" />
+          </svg>
+          <span>Capacity</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Portfolio engine</p>
+        <h1>Auto Plan capacity</h1>
+        <p class="page-description">
+          Inspect a wallet's Auto Execution Plan capacity: its membership base limit, reward-card
+          bonus, how many bonus slots are used across networks, and recent reservations. The bonus
+          comes from Echo Arena reward cards, so a wallet's season results show up here. The tier
+          override is audited — use it only with authorization.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Enter a wallet</span>
+      </div>
+    </div>
+
+    <div class="admin-field" style="max-width: 320px; margin: 0 0 14px;">
+      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2" />
+        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+      </svg>
+      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Admin token (required)" aria-label="Admin API token" />
+    </div>
+
+    <div class="search-row">
+      <input id="wallet" type="text" placeholder="Wallet address (0x…)" spellcheck="false" />
+      <button class="button" id="search" type="button">Inspect</button>
+    </div>
+
+    <section class="content-panel" aria-label="Capacity">
+      <div id="content"><div class="empty">Enter a wallet address to inspect its capacity.</div></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script src="/dashboard-controls.js"></script>
+  <script>
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const adminTokenInput = document.getElementById("admin-token");
+    const walletInput = document.getElementById("wallet");
+    const statusEl = document.getElementById("status");
+    const contentEl = document.getElementById("content");
+
+    try { adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch {}
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const v = adminTokenInput.value.trim();
+        if (v) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, v);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {}
+    });
+    function token() { return adminTokenInput.value.trim(); }
+
+    const CHAIN_NAMES = { 8453: "Base", 84532: "Base Sepolia", 677: "BOT Chain", 968: "BOT Testnet", 137: "Polygon", 56: "BNB Chain", 2222: "Kava", 11155111: "Sepolia" };
+    function chainName(id) { return CHAIN_NAMES[id] || ("Chain " + id); }
+
+    function renderCapacity(c) {
+      const base = c.baseLimitPerNetwork === null ? "∞" : c.baseLimitPerNetwork;
+      const perNet = (c.perNetwork || []).map(function (n) {
+        return "<tr><td>" + chainName(n.chainId) + "</td><td>" + n.active + "</td><td>" +
+          (n.baseLimit === null ? "∞" : n.baseLimit) + "</td><td>" + n.excess + "</td></tr>";
+      }).join("") || '<tr><td colspan="4" class="empty">No active plans.</td></tr>';
+
+      const res = (c.reservations || []).map(function (r) {
+        return "<tr><td>" + chainName(r.targetChainId) + "</td><td>#" + r.reservedSlotNumber + "</td><td>" +
+          escapeHtml(r.status) + "</td><td>" + escapeHtml(new Date(r.permitDeadline).toLocaleString()) + "</td></tr>";
+      }).join("") || '<tr><td colspan="4" class="empty">No reservations.</td></tr>';
+
+      const tierOptions = ["starter", "plus", "pro", "institutional"].map(function (t) {
+        return '<option value="' + t + '"' + (t === c.tier ? " selected" : "") + ">" + t + "</option>";
+      }).join("");
+
+      return '<article class="card">' +
+        '<div class="card-head"><span class="network-title"><span class="net-name">' + addressElement(c.wallet) + "</span></span>" +
+          '<span class="badge">' + escapeHtml(c.tier) + "</span></div>" +
+        '<div class="cap-stats">' +
+          '<div class="cap-stat"><b>+' + c.nftBonus + "</b><span>card bonus</span></div>" +
+          '<div class="cap-stat"><b>' + c.availableNftSlots + "</b><span>available</span></div>" +
+          '<div class="cap-stat"><b>' + c.usedNftSlots + "</b><span>used</span></div>" +
+          '<div class="cap-stat"><b>' + base + "</b><span>base / network</span></div>" +
+        "</div>" +
+        '<h3 class="section-title">Active plans per network</h3>' +
+        '<table class="cap-table"><thead><tr><th>Network</th><th>Active</th><th>Base</th><th>Excess (bonus)</th></tr></thead><tbody>' + perNet + "</tbody></table>" +
+        '<h3 class="section-title">Recent reservations</h3>' +
+        '<table class="cap-table"><thead><tr><th>Network</th><th>Slot</th><th>Status</th><th>Permit deadline</th></tr></thead><tbody>' + res + "</tbody></table>" +
+        '<div class="tier-row">' +
+          '<span class="hint">Override membership tier (audited):</span>' +
+          '<select id="tier-select">' + tierOptions + "</select>" +
+          '<button class="button" id="set-tier" data-wallet="' + escapeHtml(c.wallet) + '">Set tier</button>' +
+        "</div>" +
+      "</article>";
+    }
+
+    async function inspect() {
+      const wallet = walletInput.value.trim();
+      if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) { statusEl.textContent = "Enter a valid wallet"; return; }
+      if (!token()) { statusEl.textContent = "Enter the admin token first"; adminTokenInput.focus(); return; }
+      statusEl.textContent = "Loading…";
+      try {
+        const response = await fetch("/api/admin/capacity/" + wallet, { headers: { "x-admin-token": token() } });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+        contentEl.innerHTML = renderCapacity(data);
+        const tierSelect = document.getElementById("tier-select");
+        if (tierSelect) DashControls.enhanceSelect(tierSelect);
+        statusEl.textContent = "Loaded " + new Date().toLocaleTimeString();
+      } catch (error) {
+        contentEl.innerHTML = '<div class="error">Failed: ' + escapeHtml(error.message) + "</div>";
+        statusEl.textContent = "Error";
+      }
+    }
+
+    async function setTier(button) {
+      const wallet = button.dataset.wallet;
+      const tier = document.getElementById("tier-select").value;
+      if (!window.confirm("Set " + shortenAddress(wallet) + " to the " + tier + " tier?\n\nThis is an audited override of their membership capacity.")) return;
+      button.disabled = true;
+      const previous = button.textContent;
+      button.textContent = "Saving…";
+      try {
+        const response = await fetch("/api/admin/capacity/" + wallet + "/membership", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-token": token() },
+          body: JSON.stringify({ tier: tier }),
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+        statusEl.textContent = "Set " + shortenAddress(wallet) + " to " + tier;
+        await inspect();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = previous;
+        statusEl.textContent = "Failed: " + error.message;
+      }
+    }
+
+    contentEl.addEventListener("click", function (event) {
+      const button = event.target.closest("#set-tier");
+      if (button && !button.disabled) setTier(button);
+    });
+    document.getElementById("search").addEventListener("click", inspect);
+    walletInput.addEventListener("keydown", function (e) { if (e.key === "Enter") inspect(); });
+  </script>
+</body>
+</html>

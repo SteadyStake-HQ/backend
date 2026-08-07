@@ -19,6 +19,33 @@
   /* One knob for how wide the dashboard runs. The header and every page shell
      read it, so they stay locked to the same gutters on any monitor. */
   --shell-width: min(1720px, calc(100% - 56px));
+  /* Which dashboard you are in, as a colour. Only the header reads these — the
+     rest of the page keeps the shared palette — so the accent is a wayfinding
+     cue, not a per-project theme. Default is SteadyStake's blue. */
+  --accent: var(--blue);
+  --accent-soft: rgba(110, 140, 255, 0.13);
+  --accent-hover: rgba(110, 140, 255, 0.08);
+  --accent-glow: rgba(110, 140, 255, 0.28);
+  --accent-ink: #dfe6ff;
+  --eyebrow: #91a6f3;
+}
+
+body[data-project="echo-arena"] {
+  --accent: var(--amber);
+  --accent-soft: rgba(245, 181, 94, 0.14);
+  --accent-hover: rgba(245, 181, 94, 0.09);
+  --accent-glow: rgba(245, 181, 94, 0.26);
+  --accent-ink: #ffe6c2;
+  --eyebrow: #f5c98a;
+}
+
+body[data-project="shared"] {
+  --accent: var(--cyan);
+  --accent-soft: rgba(65, 201, 243, 0.14);
+  --accent-hover: rgba(65, 201, 243, 0.09);
+  --accent-glow: rgba(65, 201, 243, 0.24);
+  --accent-ink: #cdf0fd;
+  --eyebrow: #7fdcf6;
 }
 
 * {
@@ -129,17 +156,69 @@ button {
 
 .nav-link:hover {
   color: var(--text);
-  background: rgba(110, 140, 255, 0.08);
+  background: var(--accent-hover);
 }
 
 .nav-link.active {
-  color: #dfe6ff;
-  background: rgba(110, 140, 255, 0.13);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
 }
 
 .nav-link svg {
   width: 15px;
   height: 15px;
+}
+
+/* Two products share this backend, so the header leads with which one you are in.
+   The switcher picks the dashboard; the nav rail beside it lists only that
+   dashboard's pages. "Shared" is the infrastructure both products read — Networks
+   carries the DCA contract addresses and the Echo Arena game contracts together. */
+.project-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(12, 18, 32, 0.75);
+}
+
+.project-tab {
+  padding: 7px 13px;
+  border-radius: 9px;
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.project-tab:hover {
+  color: var(--text);
+  background: rgba(141, 159, 199, 0.1);
+}
+
+/* The active tab wears its own project's colour, not the page accent, so the
+   three tabs stay recognisable from whichever dashboard you are standing in. */
+.project-tab.active {
+  color: #08101f;
+}
+
+.project-tab--steadystake.active {
+  background: linear-gradient(180deg, #8fa6ff, #6e8cff);
+  box-shadow: 0 6px 16px rgba(110, 140, 255, 0.28);
+}
+
+.project-tab--echo-arena.active {
+  background: linear-gradient(180deg, #f7c87c, #f5b55e);
+  box-shadow: 0 6px 16px rgba(245, 181, 94, 0.26);
+}
+
+.project-tab--shared.active {
+  background: linear-gradient(180deg, #6ad8ee, #41c9f3);
+  box-shadow: 0 6px 16px rgba(65, 201, 243, 0.24);
 }
 
 .live-pill {
@@ -183,7 +262,7 @@ button {
 
 .eyebrow {
   margin: 0 0 7px;
-  color: #91a6f3;
+  color: var(--eyebrow);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -1595,9 +1674,28 @@ a.addr:hover {
   }
 }
 
+/* The header now carries a switcher as well as a nav rail, so it sheds weight in
+   stages: first the wordmark, then the nav labels. The switcher keeps its words
+   the whole way down — it is the one control you cannot guess from an icon. */
+@media (max-width: 1360px) {
+  .header-inner {
+    gap: 16px;
+  }
+
+  .brand span {
+    display: none;
+  }
+}
+
 @media (max-width: 1180px) {
   :root {
     --shell-width: calc(100% - 36px);
+  }
+}
+
+@media (max-width: 1040px) {
+  .nav-link span {
+    display: none;
   }
 }
 
@@ -1635,6 +1733,16 @@ a.addr:hover {
 
   .nav-link span {
     display: none;
+  }
+
+  .project-switch {
+    padding: 2px;
+    border-radius: 10px;
+  }
+
+  .project-tab {
+    padding: 6px 9px;
+    font-size: 10px;
   }
 
   .live-pill {

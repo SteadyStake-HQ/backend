@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Players — Echo Arena</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <style>
+    .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; align-items: center; }
+    .search-row input { flex: 1 1 320px; min-height: 38px; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel, rgba(255,255,255,0.02)); color: inherit; font: inherit; }
+    .search-row .dctl-select { min-width: 170px; }
+
+    .play-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 4px 0 18px; }
+    .play-stat { border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+    .play-stat b { font-size: 22px; display: block; }
+    .play-stat span { font-size: 11px; color: var(--dim); }
+
+    .play-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    .play-table th, .play-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .play-table th { color: var(--dim); font-weight: 600; }
+    .play-table td.num, .play-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .play-table tbody tr.pick { cursor: pointer; }
+    .play-table tbody tr.pick:hover { background: rgba(255,255,255,0.035); }
+    .table-scroll { overflow-x: auto; }
+
+    .section-title { margin: 18px 0 4px; font-size: 13px; }
+    .hint { font-size: 11px; color: var(--dim); }
+    .muted { color: var(--dim); }
+
+    /* Mode is the thing an operator scans this table for, so it gets colour rather than plain text. */
+    .mode-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; border: 1px solid transparent; }
+    .mode-normal { background: rgba(96,165,250,0.14); color: #93c5fd; border-color: rgba(96,165,250,0.35); }
+    .mode-ranked { background: rgba(52,211,153,0.14); color: #6ee7b7; border-color: rgba(52,211,153,0.35); }
+    .mode-open_verified { background: rgba(232,178,86,0.14); color: #f0c179; border-color: rgba(232,178,86,0.35); }
+    .mode-legacy { background: rgba(148,163,184,0.12); color: #b7c0cd; border-color: rgba(148,163,184,0.3); }
+
+    .sp-plus { color: #6ee7b7; font-weight: 600; }
+    .sp-zero { color: var(--dim); }
+
+    .tabs { display: flex; gap: 6px; margin: 18px 0 0; border-bottom: 1px solid var(--border); }
+    .tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; padding: 8px 12px; cursor: pointer; }
+    .tab.active { color: inherit; border-bottom-color: var(--accent, #e8b256); }
+    .tab-panel[hidden] { display: none; }
+
+    .pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .back-link { appearance: none; background: none; border: none; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin-bottom: 10px; }
+    .back-link:hover { color: inherit; }
+  </style>
+</head>
+<body data-project="echo-arena">
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake" href="/steadystake/">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena active" href="/echo-arena/" aria-current="true">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
+      <nav class="main-nav" aria-label="Echo Arena pages">
+        <a class="nav-link" href="/echo-arena/seasons.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seasons</span>
+        </a>
+        <a class="nav-link active" href="/echo-arena/players.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.4" />
+            <path d="M3 20a6 6 0 0 1 12 0" stroke-linecap="round" />
+            <path d="M16.5 5.2a3.4 3.4 0 0 1 0 5.6M18 20a6 6 0 0 0-2.2-4.65" stroke-linecap="round" />
+          </svg>
+          <span>Players</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/rewards.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Rewards</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Echo Arena</p>
+        <h1>Players &amp; play records</h1>
+        <p class="page-description">
+          Every wallet that has played, its run history in each mode — Normal, Ranked and
+          Open-verified — and the Steady Points ledger behind its balance, entry by entry. Read-only:
+          SP is credited by the game under its daily caps, so nothing here can mint points.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="admin-field" style="max-width: 320px; margin: 0 0 14px;">
+      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2" />
+        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+      </svg>
+      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Admin token (required)" aria-label="Admin API token" />
+    </div>
+
+    <section class="content-panel" aria-label="Play totals">
+      <div class="play-stats" id="totals"></div>
+    </section>
+
+    <!-- The wallet list. Hidden while one wallet is open so the page reads as one thing at a time. -->
+    <section class="content-panel" id="list-view" aria-label="Players">
+      <div class="search-row">
+        <input id="search" type="text" placeholder="Filter by wallet address (full or partial)" spellcheck="false" />
+        <select id="sort" aria-label="Sort players by">
+          <option value="last_played">Most recently played</option>
+          <option value="sp">Highest SP balance</option>
+          <option value="best_score">Highest best score</option>
+          <option value="runs">Most runs</option>
+        </select>
+        <button class="button" id="find" type="button">Search</button>
+      </div>
+      <div class="table-scroll" id="list"><div class="empty">Enter the admin token to load players.</div></div>
+    </section>
+
+    <section class="content-panel" id="detail-view" hidden aria-label="Player detail">
+      <button class="back-link" id="back" type="button">← All players</button>
+      <div id="detail"></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script src="/dashboard-controls.js"></script>
+  <script>
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const adminTokenInput = document.getElementById("admin-token");
+    const statusEl = document.getElementById("status");
+    const totalsEl = document.getElementById("totals");
+    const listEl = document.getElementById("list");
+    const listView = document.getElementById("list-view");
+    const detailView = document.getElementById("detail-view");
+    const detailEl = document.getElementById("detail");
+    const searchInput = document.getElementById("search");
+    const sortSelect = document.getElementById("sort");
+
+    const RUNS_PAGE = 50;
+
+    // Which wallet is open, and how its run table is currently filtered/paged.
+    let openWallet = null;
+    let runMode = "all";
+    let runOffset = 0;
+
+    try { adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch {}
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const v = adminTokenInput.value.trim();
+        if (v) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, v);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {}
+      void load();
+    });
+    function token() { return adminTokenInput.value.trim(); }
+
+    const CHAIN_NAMES = { 8453: "Base", 84532: "Base Sepolia", 677: "BOT Chain", 968: "BOT Testnet", 137: "Polygon", 56: "BNB Chain", 2222: "Kava", 11155111: "Sepolia" };
+    function chainName(id) { return id == null ? "—" : (CHAIN_NAMES[id] || ("Chain " + id)); }
+
+    const MODE_LABELS = { normal: "Normal", ranked: "Ranked", open_verified: "Open verified" };
+    function modeTag(mode) {
+      const key = mode || "legacy";
+      const label = MODE_LABELS[mode] || "Untagged";
+      return '<span class="mode-tag mode-' + key + '" title="' +
+        (mode ? "" : "Filed before the mode column existed, or via the legacy un-ticketed endpoint") +
+        '">' + label + "</span>";
+    }
+
+    function num(value) { return Number(value || 0).toLocaleString(); }
+    function when(iso) { return iso ? new Date(iso).toLocaleString() : "—"; }
+    function duration(ms) {
+      const total = Math.round((ms || 0) / 1000);
+      return Math.floor(total / 60) + "m " + String(total % 60).padStart(2, "0") + "s";
+    }
+
+    async function api(path) {
+      if (!token()) throw new Error("Enter the admin token first.");
+      const response = await fetch(path, { headers: { "x-admin-token": token() } });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+      return data;
+    }
+
+    function renderTotals(t) {
+      totalsEl.innerHTML =
+        '<div class="play-stat"><b>' + num(t.players) + "</b><span>wallets played</span></div>" +
+        '<div class="play-stat"><b>' + num(t.runs) + "</b><span>runs recorded</span></div>" +
+        '<div class="play-stat"><b>' + num(t.normalRuns) + "</b><span>normal</span></div>" +
+        '<div class="play-stat"><b>' + num(t.rankedRuns) + "</b><span>ranked</span></div>" +
+        '<div class="play-stat"><b>' + num(t.openVerifiedRuns) + "</b><span>open verified</span></div>" +
+        '<div class="play-stat"><b>' + num(t.spIssued) + "</b><span>SP issued</span></div>";
+    }
+
+    function renderList(data) {
+      if (!data.players.length) {
+        listEl.innerHTML = '<div class="empty">No wallets match.</div>';
+        return;
+      }
+      const rows = data.players.map(function (p) {
+        return '<tr class="pick" data-wallet="' + escapeHtml(p.address) + '">' +
+          "<td>" + addressElement(p.address) + "</td>" +
+          '<td class="num">' + num(p.spBalance) + "</td>" +
+          '<td class="num">' + num(p.recordedRuns) + "</td>" +
+          '<td class="num">' + num(p.normalRuns) + "</td>" +
+          '<td class="num">' + num(p.rankedRuns) + "</td>" +
+          '<td class="num">' + num(p.openVerifiedRuns) + "</td>" +
+          '<td class="num">' + num(p.bestScore) + "</td>" +
+          "<td>" + when(p.lastPlayedAt || p.lastSeenAt) + "</td>" +
+        "</tr>";
+      }).join("");
+
+      listEl.innerHTML =
+        '<table class="play-table"><thead><tr>' +
+          "<th>Wallet</th><th class=\"num\">SP</th><th class=\"num\">Runs</th>" +
+          "<th class=\"num\">Normal</th><th class=\"num\">Ranked</th><th class=\"num\">Open v.</th>" +
+          "<th class=\"num\">Best score</th><th>Last played</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table>" +
+        '<p class="hint" style="margin-top:10px;">Showing ' + data.players.length + " of " + num(data.total) +
+        " wallets. Select a row for its play records and SP ledger.</p>";
+    }
+
+    function renderRunsTable(runs, total) {
+      if (!runs.length) {
+        return '<div class="empty">No runs' + (runMode === "all" ? "" : " in this mode") + ".</div>";
+      }
+      const rows = runs.map(function (r) {
+        const sp = r.spAwarded == null
+          ? '<span class="sp-zero">—</span>'
+          : (r.spAwarded > 0 ? '<span class="sp-plus">+' + r.spAwarded + "</span>" : '<span class="sp-zero">0</span>');
+        return "<tr>" +
+          "<td>" + when(r.createdAt) + "</td>" +
+          "<td>" + modeTag(r.mode) + "</td>" +
+          '<td class="num">' + num(r.score) + "</td>" +
+          '<td class="num">' + num(r.cycle) + "</td>" +
+          '<td class="num">' + num(r.echoes) + "</td>" +
+          '<td class="num">' + num(r.echoesDestroyed) + "</td>" +
+          '<td class="num">' + duration(r.survivedMs) + "</td>" +
+          "<td>" + chainName(r.chainId) + "</td>" +
+          '<td class="num">' + sp + "</td>" +
+        "</tr>";
+      }).join("");
+
+      const from = runOffset + 1;
+      const to = runOffset + runs.length;
+      return '<div class="table-scroll"><table class="play-table"><thead><tr>' +
+          "<th>Played</th><th>Mode</th><th class=\"num\">Score</th><th class=\"num\">Cycle</th>" +
+          "<th class=\"num\" title=\"Echo clones that joined the loop — one per completed cycle\">Echoes</th>" +
+          "<th class=\"num\" title=\"Echoes actually destroyed — what Combat Points are paid on\">Destroyed</th>" +
+          "<th class=\"num\">Survived</th><th>Chain</th><th class=\"num\">SP</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div>" +
+        '<div class="pager">' +
+          '<button class="button" id="runs-prev" type="button"' + (runOffset === 0 ? " disabled" : "") + ">Previous</button>" +
+          '<button class="button" id="runs-next" type="button"' + (to >= total ? " disabled" : "") + ">Next</button>" +
+          '<span class="hint">' + from + "–" + to + " of " + num(total) + "</span>" +
+        "</div>";
+    }
+
+    function renderLedgerTable(ledger) {
+      if (!ledger.entries.length) return '<div class="empty">No Steady Points credited yet.</div>';
+      const rows = ledger.entries.map(function (e) {
+        // A `run` credit's source is the ticket the run was filed against; a `quest` credit's is
+        // `YYYY-MM-DD:quest_key`. Both are the idempotency key that stops a retry double-crediting.
+        return "<tr>" +
+          "<td>" + when(e.createdAt) + "</td>" +
+          "<td>" + escapeHtml(e.reason) + "</td>" +
+          '<td class="num sp-plus">+' + e.amount + "</td>" +
+          '<td class="num">' + num(e.balanceAfter) + "</td>" +
+          '<td class="muted"><code>' + escapeHtml(e.sourceId) + "</code></td>" +
+        "</tr>";
+      }).join("");
+      return '<div class="table-scroll"><table class="play-table"><thead><tr>' +
+          "<th>Credited</th><th>Reason</th><th class=\"num\">Amount</th>" +
+          "<th class=\"num\">Balance after</th><th>Source</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div>" +
+        '<p class="hint" style="margin-top:10px;">Showing ' + ledger.entries.length + " of " + num(ledger.total) +
+        " entries. Balance " + num(ledger.balance) + " SP.</p>";
+    }
+
+    function renderDailyTable(daily) {
+      if (!daily.length) return '<div class="empty">No daily counters recorded.</div>';
+      const rows = daily.map(function (d) {
+        return "<tr><td>" + escapeHtml(d.utcDate) + "</td>" +
+          '<td class="num">' + d.spRunsUsed + "</td>" +
+          '<td class="num">' + num(d.spEarned) + "</td>" +
+          '<td class="num">' + d.rankedUsed + "</td></tr>";
+      }).join("");
+      return '<div class="table-scroll"><table class="play-table"><thead><tr>' +
+          "<th>UTC date</th><th class=\"num\">Earning runs</th><th class=\"num\">SP earned</th>" +
+          "<th class=\"num\">Ranked used</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table></div>" +
+        '<p class="hint" style="margin-top:10px;">SP earned is what the daily cap is measured against ' +
+        "(25/day free, 100/day with a Game Pass). It counts both run and quest credits.</p>";
+    }
+
+    function renderDetail(data) {
+      const p = data.player;
+      const modeOptions = [["all", "All modes"], ["normal", "Normal"], ["ranked", "Ranked"], ["open_verified", "Open verified"]]
+        .map(function (m) {
+          return '<option value="' + m[0] + '"' + (m[0] === runMode ? " selected" : "") + ">" + m[1] + "</option>";
+        }).join("");
+
+      return '<div class="card-head"><span class="network-title"><span class="net-name">' +
+          addressElement(p.address) + "</span></span></div>" +
+        '<div class="play-stats">' +
+          '<div class="play-stat"><b>' + num(p.spBalance) + "</b><span>SP balance</span></div>" +
+          '<div class="play-stat"><b>' + num(p.recordedRuns) + "</b><span>runs</span></div>" +
+          '<div class="play-stat"><b>' + num(p.normalRuns) + "</b><span>normal</span></div>" +
+          '<div class="play-stat"><b>' + num(p.rankedRuns) + "</b><span>ranked</span></div>" +
+          '<div class="play-stat"><b>' + num(p.openVerifiedRuns) + "</b><span>open verified</span></div>" +
+          '<div class="play-stat"><b>' + num(p.bestScore) + "</b><span>best score</span></div>" +
+          '<div class="play-stat"><b>' + num(p.bestCycle) + "</b><span>best cycle</span></div>" +
+          '<div class="play-stat"><b>' + when(p.lastPlayedAt || p.lastSeenAt) + "</b><span>last played</span></div>" +
+        "</div>" +
+        '<div class="tabs" role="tablist">' +
+          '<button class="tab active" data-tab="runs" type="button">Play records</button>' +
+          '<button class="tab" data-tab="sp" type="button">SP ledger</button>' +
+          '<button class="tab" data-tab="daily" type="button">Daily caps</button>' +
+        "</div>" +
+        '<div class="tab-panel" data-panel="runs">' +
+          '<div class="search-row" style="margin-top:14px;">' +
+            '<select id="mode-filter" aria-label="Filter runs by mode">' + modeOptions + "</select>" +
+          "</div>" +
+          '<div id="runs-body">' + renderRunsTable(data.runs.runs, data.runs.total) + "</div>" +
+        "</div>" +
+        '<div class="tab-panel" data-panel="sp" hidden>' + renderLedgerTable(data.ledger) + "</div>" +
+        '<div class="tab-panel" data-panel="daily" hidden>' + renderDailyTable(data.daily) + "</div>";
+    }
+
+    async function load() {
+      if (!token()) {
+        statusEl.textContent = "Enter the admin token";
+        listEl.innerHTML = '<div class="empty">Enter the admin token to load players.</div>';
+        totalsEl.innerHTML = "";
+        return;
+      }
+      statusEl.textContent = "Loading…";
+      try {
+        const params = new URLSearchParams({ sort: sortSelect.value, limit: "100" });
+        const search = searchInput.value.trim();
+        if (search) params.set("search", search);
+        const [totals, list] = await Promise.all([
+          api("/api/admin/players/totals"),
+          api("/api/admin/players?" + params.toString()),
+        ]);
+        renderTotals(totals);
+        renderList(list);
+        statusEl.textContent = "Loaded " + new Date().toLocaleTimeString();
+      } catch (error) {
+        listEl.innerHTML = '<div class="error">Failed: ' + escapeHtml(error.message) + "</div>";
+        statusEl.textContent = "Error";
+      }
+    }
+
+    async function openPlayer(wallet) {
+      openWallet = wallet;
+      statusEl.textContent = "Loading…";
+      try {
+        const params = new URLSearchParams({ mode: runMode, limit: String(RUNS_PAGE), offset: String(runOffset) });
+        const data = await api("/api/admin/players/" + wallet + "?" + params.toString());
+        detailEl.innerHTML = renderDetail(data);
+        const modeFilter = document.getElementById("mode-filter");
+        if (modeFilter) DashControls.enhanceSelect(modeFilter);
+        listView.hidden = true;
+        detailView.hidden = false;
+        statusEl.textContent = "Loaded " + new Date().toLocaleTimeString();
+      } catch (error) {
+        detailEl.innerHTML = '<div class="error">Failed: ' + escapeHtml(error.message) + "</div>";
+        detailView.hidden = false;
+        listView.hidden = true;
+        statusEl.textContent = "Error";
+      }
+    }
+
+    /** Re-fetch just the runs table — used by the mode filter and the pager. */
+    async function reloadRuns() {
+      const body = document.getElementById("runs-body");
+      if (!body || !openWallet) return;
+      try {
+        const params = new URLSearchParams({ mode: runMode, limit: String(RUNS_PAGE), offset: String(runOffset) });
+        const data = await api("/api/admin/players/" + openWallet + "/runs?" + params.toString());
+        body.innerHTML = renderRunsTable(data.runs, data.total);
+      } catch (error) {
+        body.innerHTML = '<div class="error">Failed: ' + escapeHtml(error.message) + "</div>";
+      }
+    }
+
+    listEl.addEventListener("click", function (event) {
+      // The address cell carries its own copy button and explorer link; leave those alone.
+      if (event.target.closest(".copy") || event.target.closest("a")) return;
+      const row = event.target.closest("tr.pick");
+      if (!row) return;
+      runMode = "all";
+      runOffset = 0;
+      void openPlayer(row.dataset.wallet);
+    });
+
+    detailEl.addEventListener("click", function (event) {
+      const tab = event.target.closest(".tab");
+      if (tab) {
+        detailEl.querySelectorAll(".tab").forEach(function (t) { t.classList.toggle("active", t === tab); });
+        detailEl.querySelectorAll(".tab-panel").forEach(function (panel) {
+          panel.hidden = panel.dataset.panel !== tab.dataset.tab;
+        });
+        return;
+      }
+      if (event.target.closest("#runs-prev")) {
+        runOffset = Math.max(0, runOffset - RUNS_PAGE);
+        void reloadRuns();
+        return;
+      }
+      if (event.target.closest("#runs-next")) {
+        runOffset += RUNS_PAGE;
+        void reloadRuns();
+      }
+    });
+
+    detailEl.addEventListener("change", function (event) {
+      if (event.target.id !== "mode-filter") return;
+      runMode = event.target.value;
+      runOffset = 0;
+      void reloadRuns();
+    });
+
+    document.getElementById("back").addEventListener("click", function () {
+      openWallet = null;
+      detailView.hidden = true;
+      listView.hidden = false;
+    });
+    document.getElementById("find").addEventListener("click", function () { void load(); });
+    searchInput.addEventListener("keydown", function (e) { if (e.key === "Enter") void load(); });
+    sortSelect.addEventListener("change", function () { void load(); });
+    document.getElementById("refresh").addEventListener("click", function () {
+      if (openWallet) void openPlayer(openWallet);
+      else void load();
+    });
+
+    DashControls.enhanceSelect(sortSelect);
+    void load();
+  </script>
+</body>
+</html>

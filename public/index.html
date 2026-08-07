@@ -3,85 +3,129 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DCA Plan Activity — SteadyStake</title>
+  <title>Backend Dashboard — SteadyStake</title>
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="apple-touch-icon" href="/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/dashboard.css" />
+  <style>
+    /* One card per dashboard. The card is the whole target — the page links inside
+       it are shortcuts, so the card itself carries the hover state and the accent. */
+    .project-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
+      margin-top: 6px;
+    }
+
+    .project-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 24px 20px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, var(--surface), var(--surface-soft));
+      overflow: hidden;
+      transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+    }
+
+    .project-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 3px;
+      background: var(--card-accent);
+    }
+
+    .project-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-strong);
+      box-shadow: 0 18px 40px rgba(4, 8, 18, 0.55);
+    }
+
+    .project-card--steadystake { --card-accent: linear-gradient(90deg, #8fa6ff, #6e8cff); --card-ink: #dfe6ff; --card-tint: rgba(110, 140, 255, 0.1); }
+    .project-card--echo-arena  { --card-accent: linear-gradient(90deg, #f7c87c, #f5b55e); --card-ink: #ffe6c2; --card-tint: rgba(245, 181, 94, 0.11); }
+    .project-card--shared      { --card-accent: linear-gradient(90deg, #6ad8ee, #41c9f3); --card-ink: #cdf0fd; --card-tint: rgba(65, 201, 243, 0.1); }
+
+    .project-card .kicker {
+      margin: 0 0 6px;
+      color: var(--dim);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .project-card h2 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--card-ink);
+    }
+
+    .project-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .card-pages {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 16px 0 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .card-pages a {
+      display: inline-block;
+      padding: 6px 11px;
+      border-radius: 999px;
+      background: var(--card-tint);
+      color: var(--card-ink);
+      text-decoration: none;
+      font-size: 11.5px;
+      font-weight: 700;
+      transition: background 160ms ease;
+    }
+
+    .card-pages a:hover { background: rgba(255, 255, 255, 0.11); }
+
+    .card-open {
+      margin-top: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--card-ink);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .card-open svg { width: 15px; height: 15px; }
+    .project-card:hover .card-open svg { transform: translateX(3px); }
+    .card-open svg { transition: transform 180ms ease; }
+  </style>
 </head>
 <body>
   <header class="app-header">
     <div class="header-inner">
-      <a class="brand" href="/" aria-label="SteadyStake plan activity">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
         <img src="/logo.png" alt="" width="38" height="38" />
         <span>SteadyStake</span>
       </a>
-      <nav class="main-nav" aria-label="Backend dashboard">
-        <a class="nav-link active" href="/" aria-current="page">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M4 19V9m6 10V5m6 14v-7m4 7H2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>Plan activity</span>
-        </a>
-        <a class="nav-link" href="/networks.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M12 3v4M12 17v4M5 12H3m18 0h-2M6.3 6.3 4.9 4.9m14.2 14.2-1.4-1.4M6.3 17.7 4.9 19.1M19.1 4.9l-1.4 1.4" stroke-linecap="round" />
-            <circle cx="12" cy="12" r="3.4" />
-          </svg>
-          <span>Networks</span>
-        </a>
-        <a class="nav-link" href="/tokens.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <ellipse cx="12" cy="6.5" rx="7.5" ry="3.2" />
-            <path d="M4.5 6.5v11c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2v-11" stroke-linecap="round" />
-            <path d="M4.5 12c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2" stroke-linecap="round" />
-          </svg>
-          <span>Tokens</span>
-        </a>
-        <a class="nav-link" href="/treasury.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M3 8.5 12 4l9 4.5v2H3v-2Z" stroke-linejoin="round" />
-            <path d="M5.5 10.5v7M9.5 10.5v7M14.5 10.5v7M18.5 10.5v7M3 20h18" stroke-linecap="round" />
-          </svg>
-          <span>Relayer &amp; fees</span>
-        </a>
-        <a class="nav-link" href="/balances.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <rect x="3" y="6.5" width="18" height="13" rx="2.5" />
-            <path d="M3 11h18M16.5 15.5h2" stroke-linecap="round" />
-            <path d="M6.5 6.5V5a1.5 1.5 0 0 1 1.9-1.45l9.3 2.6" stroke-linecap="round" />
-          </svg>
-          <span>Balances</span>
-        </a>
-        <a class="nav-link" href="/seasons.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
-            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>Seasons</span>
-        </a>
-        <a class="nav-link" href="/players.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <circle cx="9" cy="8" r="3.4" />
-            <path d="M3 20a6 6 0 0 1 12 0" stroke-linecap="round" />
-            <path d="M16.5 5.2a3.4 3.4 0 0 1 0 5.6M18 20a6 6 0 0 0-2.2-4.65" stroke-linecap="round" />
-          </svg>
-          <span>Players</span>
-        </a>
-        <a class="nav-link" href="/rewards.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          <span>Rewards</span>
-        </a>
-        <a class="nav-link" href="/capacity.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M4 20a8 8 0 1 1 16 0" stroke-linecap="round" />
-            <path d="M12 20 15 11" stroke-linecap="round" />
-          </svg>
-          <span>Capacity</span>
-        </a>
-      </nav>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake" href="/steadystake/">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena" href="/echo-arena/">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
       <span class="live-pill">Operations live</span>
     </div>
   </header>
@@ -89,1780 +133,76 @@
   <main class="page-shell">
     <div class="page-heading">
       <div class="heading-copy">
-        <p class="eyebrow">Portfolio engine</p>
-        <h1>DCA plan activity</h1>
-        <p class="page-description">Live contract state and historical plan progress across every registered wallet.</p>
-      </div>
-      <div class="page-actions">
-        <span class="status" id="plans-status">Loading…</span>
-        <button class="button refresh" id="refresh-plans" type="button">Refresh</button>
+        <p class="eyebrow">Backend</p>
+        <h1>Operations dashboard</h1>
+        <p class="page-description">
+          Two products run on this backend and each keeps its own dashboard. Pick one below, or
+          switch between them any time from the header.
+        </p>
       </div>
     </div>
 
-    <section class="content-panel" aria-label="DCA plans">
-      <div class="execution-notice" id="execution-notice" hidden></div>
-      <div class="log-panel" id="log-panel" hidden>
-        <div class="log-head">
-          <span class="dot" id="log-dot"></span>
-          <span class="step" id="log-step">Starting…</span>
-          <span class="elapsed" id="log-elapsed">0s</span>
-          <button class="button toggle" id="log-toggle" type="button">Hide log</button>
-        </div>
-        <div class="log-body" id="log-body"></div>
-      </div>
+    <div class="project-grid">
+      <article class="project-card project-card--steadystake">
+        <p class="kicker">Portfolio engine</p>
+        <h2>SteadyStake</h2>
+        <p>
+          The DCA scheduler: plan runs and their history, the curated token catalogue, relayer gas
+          and protocol fees, contract balances, and per-wallet Auto Execution Plan capacity.
+        </p>
+        <ul class="card-pages">
+          <li><a href="/steadystake/">Plan activity</a></li>
+          <li><a href="/steadystake/tokens.html">Tokens</a></li>
+          <li><a href="/steadystake/treasury.html">Relayer &amp; fees</a></li>
+          <li><a href="/steadystake/balances.html">Balances</a></li>
+          <li><a href="/steadystake/capacity.html">Capacity</a></li>
+        </ul>
+        <a class="card-open" href="/steadystake/">
+          Open SteadyStake
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </a>
+      </article>
 
-      <!-- Everything from here down to #plans is static markup. #plans is re-rendered wholesale
-           every few seconds by the background poll, which would wipe field values, focus and the
-           operator's filter selection mid-keystroke if any of it lived inside. -->
-      <div class="plan-summary" id="plan-summary" aria-label="Plan totals" hidden></div>
+      <article class="project-card project-card--echo-arena">
+        <p class="kicker">Game</p>
+        <h2>Echo Arena</h2>
+        <p>
+          Season lifecycle and rating, player records and SP totals, and end-of-season reward-card
+          distribution to the frozen leaderboard's top three.
+        </p>
+        <ul class="card-pages">
+          <li><a href="/echo-arena/seasons.html">Seasons</a></li>
+          <li><a href="/echo-arena/players.html">Players</a></li>
+          <li><a href="/echo-arena/rewards.html">Rewards</a></li>
+        </ul>
+        <a class="card-open" href="/echo-arena/">
+          Open Echo Arena
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </a>
+      </article>
 
-      <div class="filters" id="filters">
-        <div class="filter-row filter-row-primary">
-          <div class="search-field">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20.5 20.5 17 17" stroke-linecap="round" />
-            </svg>
-            <input id="wallet-search" type="search" autocomplete="off" spellcheck="false"
-              placeholder="Wallet, #plan, token, network…" aria-label="Search plans" />
-            <button class="search-clear" id="wallet-search-clear" type="button" aria-label="Clear search" hidden>×</button>
-          </div>
-
-          <!-- The sort control is a custom listbox: a native <select> renders its popup with the
-               OS theme (a white list on this dark dashboard) and cannot carry the one-line hint
-               that says what each order is actually good for. The <select> itself stays in the
-               DOM, hidden, as the value store — every reader below still talks to #plan-sort. -->
-          <div class="select-field">
-            <span class="select-caption" id="plan-sort-caption">Sort</span>
-            <div class="sortmenu" id="sortmenu">
-              <button class="sortmenu-trigger" id="sortmenu-trigger" type="button"
-                aria-haspopup="listbox" aria-expanded="false" aria-controls="sortmenu-list"
-                aria-labelledby="plan-sort-caption sortmenu-value">
-                <svg class="sortmenu-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M4 7h11M4 12h8M4 17h5M17.5 5.5v13M17.5 18.5 20.5 15M17.5 18.5 14.5 15" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span class="sortmenu-value" id="sortmenu-value">Next buy — soonest</span>
-                <svg class="sortmenu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                  <path d="m6 9.5 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
-              <div class="sortmenu-pop" id="sortmenu-pop" hidden>
-                <ul class="sortmenu-list" id="sortmenu-list" role="listbox" tabindex="-1"
-                  aria-label="Sort plans"></ul>
-              </div>
-            </div>
-            <select id="plan-sort" aria-hidden="true" tabindex="-1" hidden>
-              <option value="due">Next buy — soonest</option>
-              <option value="progress-desc">Progress — highest</option>
-              <option value="progress-asc">Progress — lowest</option>
-              <option value="amount-desc">Buy size — largest</option>
-              <option value="recent">Last swap — newest</option>
-              <option value="created">Created — newest</option>
-              <option value="wallet">Wallet — A→Z</option>
-            </select>
-          </div>
-
-          <div class="view-toggle" role="group" aria-label="Layout">
-            <button type="button" data-view="rows" title="One row per plan — dense and sortable">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
-              </svg><span>Rows</span>
-            </button>
-            <button type="button" data-view="cards" title="Grouped by wallet">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" />
-                <rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" />
-              </svg><span>Cards</span>
-            </button>
-          </div>
-
-          <!-- Pausing a plan acts on someone else's automation, so it is the one thing here behind a
-               token (ADMIN_API_TOKEN on the backend). Kept in localStorage so an operator enters it
-               once per browser; it is a shared operator secret, not a per-user credential. -->
-          <div class="admin-field">
-            <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <rect x="4" y="10.5" width="16" height="10" rx="2" />
-              <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
-            </svg>
-            <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-              placeholder="Admin token (to pause plans)" aria-label="Admin API token" />
-          </div>
-        </div>
-
-        <div class="filter-row">
-          <div class="filter-group">
-            <span class="filter-label">Network</span>
-            <div class="chips" id="network-chips" role="group" aria-label="Filter by network"></div>
-          </div>
-        </div>
-
-        <div class="filter-row">
-          <div class="filter-group">
-            <span class="filter-label">Status</span>
-            <div class="chips" id="status-chips" role="group" aria-label="Filter by plan status"></div>
-          </div>
-          <div class="filter-group">
-            <span class="filter-label">Needs attention</span>
-            <div class="chips" id="flag-chips" role="group" aria-label="Filter by operational flag"></div>
-          </div>
-          <button class="clear-filters" id="clear-filters" type="button" hidden>Clear all filters</button>
-        </div>
-      </div>
-
-      <div class="result-line" id="result-line" role="status" hidden></div>
-      <div id="plans"><div class="empty">Loading plan activity…</div></div>
-      <div class="empty search-empty" id="search-empty" hidden></div>
-    </section>
+      <article class="project-card project-card--shared">
+        <p class="kicker">Infrastructure</p>
+        <h2>Shared</h2>
+        <p>
+          Pages both products read. Networks holds the chain registry with the DCA contract
+          addresses and the Echo Arena game contracts recorded side by side per chain.
+        </p>
+        <ul class="card-pages">
+          <li><a href="/networks.html">Networks</a></li>
+        </ul>
+        <a class="card-open" href="/networks.html">
+          Open Shared
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </a>
+      </article>
+    </div>
   </main>
-
-  <script src="/dashboard-shared.js"></script>
-  <script>
-    let explorerByChain = {};
-    // Settlement stablecoin symbol per chain, from /api/config/networks. BOT Chain settles in
-    // USDT, so every amount on this page has to be labelled from the chain it belongs to.
-    let stableByChain = {};
-    let chainNames = {};
-    let latestMembers = [];
-    let lastPlansSignature = "";
-    const NOT_RECORDED = '<i class="nr">Not recorded</i>';
-    const STALL_AFTER_MS = 20000;
-
-    /* ---- Filter state ------------------------------------------------------
-       One object owns every way the list can be narrowed, so a single pass
-       decides visibility. Mirrored into the URL (shareable/bookmarkable) and
-       localStorage (survives a reload with a bare URL). Empty set = "no
-       constraint from this group", which is what makes the facet counts and
-       the "Clear all" affordance easy to reason about. */
-    const STORAGE_KEY = "steadystake.planFilters";
-    const filters = {
-      networks: new Set(),
-      statuses: new Set(),
-      flags: new Set(),
-      query: "",
-      sort: "due",
-      view: "rows",
-    };
-
-    const STATUS_OPTIONS = [
-      { id: "active", label: "Active" },
-      { id: "completed", label: "Completed" },
-      { id: "cancelled", label: "Cancelled" },
-    ];
-
-    /* The operational flags — the things an operator actually opens this page to find. Each is a
-       predicate over one plan, evaluated from the row's data attributes. */
-    const FLAG_OPTIONS = [
-      { id: "ready", label: "Ready now", test: function (p) { return p.ready; } },
-      { id: "hold", label: "On hold", test: function (p) { return p.hold !== ""; } },
-      { id: "resuming", label: "Resuming", test: function (p) { return p.gated; } },
-      { id: "auto", label: "Auto-enrolled", test: function (p) { return p.enrolled; } },
-      { id: "executing", label: "Executing", test: function (p) { return p.executing; } },
-      { id: "idle", label: "Never run", test: function (p) { return p.executed === 0; } },
-    ];
-
-    function badges(plan) {
-      const output = [];
-      const status = plan.status || (plan.active ? "active" : "inactive");
-      const hold = planHold(plan);
-      output.push('<span class="badge ' + status + '">' + status + "</span>");
-      if (plan.enrolled) output.push('<span class="badge enrolled">auto</span>');
-      if (hold) {
-        // The reason lives in the tooltip: it is the operator's own text and can be long.
-        output.push(
-          '<span class="badge held"' +
-          (hold.reason ? ' title="' + escapeHtml(hold.reason) + '"' : "") +
-          ">admin " + escapeHtml(hold.status) + "</span>",
-        );
-      }
-      // A resumed plan that has not served out its paused countdown yet. Worth its own badge: the
-      // plan is active, unheld and past its on-chain cooldown, so without it the row looks like one
-      // the relayer is simply failing to execute.
-      const gate = planGate(plan);
-      if (gate && !hold) {
-        output.push(
-          '<span class="badge resuming" title="Resumed with ' +
-          escapeHtml(formatCountdown(gate.remainingSeconds)) +
-          ' left on the countdown it was paused with">resuming</span>',
-        );
-      }
-      if (plan.executionMode === "auto" && !hold) {
-        output.push('<span class="badge executing">auto executing</span>');
-      }
-      if (status === "active") {
-        // A held plan may well be past its cooldown, but it is not going to run, so the ready
-        // badge stays down — it would otherwise sit next to "admin paused" contradicting it.
-        output.push(
-          '<span class="badge ready live-ready"' +
-          (plan.ready && plan.executionMode !== "auto" && !hold ? "" : " hidden") +
-          ">ready</span>",
-        );
-      }
-      return output.join("");
-    }
-
-    /** The admin hold on a plan, or null. Only meaningful while the plan can still run. */
-    function planHold(plan) {
-      const status = plan.status || (plan.active ? "active" : "inactive");
-      if (status !== "active") return null;
-      return plan.adminControl || null;
-    }
-
-    function formatCountdown(secondsTotal) {
-      const total = Math.max(0, Math.floor(Number(secondsTotal) || 0));
-      if (total <= 0) return "now";
-      const days = Math.floor(total / 86400);
-      const hours = Math.floor((total % 86400) / 3600);
-      const minutes = Math.floor((total % 3600) / 60);
-      const seconds = total % 60;
-      const parts = [];
-      if (days) parts.push(days + "d");
-      if (hours) parts.push(hours + "h");
-      if (minutes) parts.push(minutes + "m");
-      if (seconds || parts.length === 0) parts.push(seconds + "s");
-      return parts.join(" ");
-    }
-
-    /** The wait a resumed plan is still serving, or null. */
-    function planGate(plan) {
-      if (plan.status !== "active") return null;
-      const gate = plan.executionGate || null;
-      return gate && Number(gate.remainingSeconds) > 0 ? gate : null;
-    }
-
-    /**
-     * The live countdown element for a plan, or a static dash when there is nothing to count to.
-     *
-     * A held plan does not count. Its clock stopped when the admin paused it, and what stands in
-     * its place is that clock as it was — the wait the plan resumes with, not a countdown to a buy
-     * that is not going to happen. Rendering it without `data-target` is also what keeps the
-     * per-second loop from ticking it down (and from re-enabling the Execute button behind it).
-     */
-    function countdownElement(member, plan) {
-      if (plan.status !== "active") return '<span class="dash">—</span>';
-
-      const hold = planHold(plan);
-      if (hold) {
-        const frozen = hold.cooldownRemainingSeconds;
-        const label = frozen == null ? "paused" : frozen > 0 ? formatCountdown(frozen) : "was due";
-        const title = frozen == null
-          ? "Countdown stopped — this plan is " + hold.status + " by an admin"
-          : frozen > 0
-            ? "Countdown stopped with " + formatCountdown(frozen) +
-              " left; resuming gives the plan that time back"
-            : "Countdown stopped — the plan was already due when it was paused, so resuming " +
-              "executes it on the next run";
-        return '<b class="plan-countdown paused" title="' + escapeHtml(title) + '">' +
-          '<span class="countdown-pause-icon" aria-hidden>❚❚</span>' + escapeHtml(label) + "</b>";
-      }
-
-      const dueTimestamp = plan.effectiveDueTimestamp || plan.dueTimestamp;
-      if (!dueTimestamp || !member.chainTime) {
-        return '<b class="plan-countdown now">now</b>';
-      }
-      const gate = planGate(plan);
-      const offset = Number(member.chainTime) - Math.floor(Date.now() / 1000);
-      const remaining = Number(dueTimestamp) - (Math.floor(Date.now() / 1000) + offset);
-      return '<b class="plan-countdown' + (gate ? " resuming" : "") + '"' +
-        (gate
-          ? ' title="Resumed — finishing the ' + escapeHtml(formatCountdown(gate.remainingSeconds)) +
-            ' it had left when it was paused"'
-          : "") +
-        ' data-target="' + dueTimestamp +
-        '" data-clock-offset="' + offset + '">' + formatCountdown(remaining) + "</b>";
-    }
-
-    function planTiming(member, plan) {
-      if (plan.status !== "active" || !plan.dueTimestamp || !member.chainTime) return "";
-      const hold = planHold(plan);
-      return '<div class="plan-timing' + (hold ? " is-paused" : "") + '"><span>' +
-        (hold ? "Countdown stopped" : "Next buy") + "</span>" +
-        countdownElement(member, plan) + "</div>";
-    }
-
-    function formatDate(iso) {
-      if (!iso) return null;
-      const date = new Date(iso);
-      if (Number.isNaN(date.getTime())) return null;
-      return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) +
-        " " + date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-    }
-
-    function formatNumber(value) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return value;
-      return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-
-    function stableSymbol(chainId) {
-      return stableByChain[chainId] || "USDC";
-    }
-
-    function usdc(value, chainId) {
-      return value == null
-        ? NOT_RECORDED
-        : "<b>" + formatNumber(value) + " " + stableSymbol(chainId) + "</b>";
-    }
-
-    function progressBar(plan) {
-      if (plan.progressPct == null) {
-        return '<div class="progress unknown"><span style="width:0%"></span></div>' +
-          '<div class="progress-label"><i class="nr">Progress not recorded</i></div>';
-      }
-
-      const percentage = Math.max(0, Math.min(100, Number(plan.progressPct)));
-      const className = plan.status === "completed"
-        ? " done"
-        : plan.status === "cancelled"
-          ? " cancelled"
-          : "";
-
-      return '<div class="progress' + className + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' +
-        percentage + '"><span style="width:' + percentage + '%"></span></div>' +
-        '<div class="progress-label">' + percentage + "% swapped</div>";
-    }
-
-    /** Compact progress used in the row layout: bar + number on one line. */
-    function progressCell(plan) {
-      if (plan.progressPct == null) {
-        return '<div class="progress mini unknown"><span style="width:0%"></span></div><i class="nr">—</i>';
-      }
-      const percentage = Math.max(0, Math.min(100, Number(plan.progressPct)));
-      const className = plan.status === "completed"
-        ? " done"
-        : plan.status === "cancelled"
-          ? " cancelled"
-          : "";
-      return '<div class="progress mini' + className + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' +
-        percentage + '"><span style="width:' + percentage + '%"></span></div>' +
-        "<i>" + percentage + "%</i>";
-    }
-
-    function detailGrid(plan, chainId) {
-      const executionLabel = plan.totalExecutions == null
-        ? plan.executedCount + " / ?"
-        : plan.executedCount + " / " + plan.totalExecutions +
-          (plan.executionsRemaining > 0 ? " · " + plan.executionsRemaining + " left" : "");
-
-      return '<div class="plan-detail">' +
-        '<div class="d"><span>Committed</span>' + usdc(plan.committed, chainId) + "</div>" +
-        '<div class="d"><span>Swapped</span>' + usdc(plan.swapped, chainId) + "</div>" +
-        '<div class="d"><span>Remaining</span>' + usdc(plan.remaining, chainId) + "</div>" +
-        '<div class="d"><span>Executions</span><b>' + executionLabel + "</b></div>" +
-      "</div>";
-    }
-
-    function datesLine(plan) {
-      const parts = [];
-      const started = formatDate(plan.createdAt);
-      const last = formatDate(plan.lastExecutionAt);
-      const ended = formatDate(plan.endedAt);
-
-      parts.push("Started " + (started ? "<b>" + started + "</b>" : NOT_RECORDED));
-      if (last && !ended) parts.push("Last swap <b>" + last + "</b>");
-      if (plan.status !== "active") {
-        const verb = plan.status === "cancelled" ? "Cancelled" : "Completed";
-        parts.push(verb + " " + (ended ? "<b>" + ended + "</b>" : NOT_RECORDED));
-      }
-      return '<div class="plan-dates">' + parts.join("") + "</div>";
-    }
-
-    function planDataAttrs(member, plan) {
-      return ' data-chain-id="' + member.chainId + '"' +
-        ' data-user="' + escapeHtml(member.user) + '"' +
-        ' data-schedule-id="' + escapeHtml(plan.scheduleId) + '"';
-    }
-
-    /** The Execute button. Kept out of the collapsible detail: it is the action operators come for. */
-    function executeButton(member, plan) {
-      const autoExecuting = plan.executionMode === "auto";
-      const executing = plan.executionMode != null;
-      const hold = planHold(plan);
-      const gate = planGate(plan);
-      const due = plan.effectiveDueTimestamp || plan.dueTimestamp;
-      const ready = Boolean(
-        !gate && (plan.ready || (due && member.chainTime && due <= member.chainTime))
-      );
-
-      // The executor refuses a held plan outright, so the Execute button is disabled here rather
-      // than left live to produce a confusing "paused by an admin" error on click. It refuses a
-      // resumed plan mid-countdown for the same reason — executing one by hand would take back the
-      // wait the resume just gave the user.
-      const title = hold
-        ? "Resume this plan before executing it — an admin has " + hold.status + " it"
-        : autoExecuting
-          ? "The backend is executing this plan now"
-          : executing
-            ? "This plan is already executing"
-            : gate
-              ? "Resumed from a pause — finishing the " + formatCountdown(gate.remainingSeconds) +
-                " it had left"
-              : ready
-                ? "Execute this plan now using the backend relayer"
-                : "This plan is still in cooldown";
-
-      // `is-held` is what keeps the per-second countdown loop from re-enabling this button when
-      // the cooldown elapses — readiness is irrelevant while a hold is in force.
-      return '<button class="button execute-plan' +
-          (hold ? " is-held" : "") +
-          (executing && !hold ? " auto-executing running" : "") +
-          '" type="button"' + planDataAttrs(member, plan) +
-          ' title="' + escapeHtml(title) + '"' +
-          (ready && !executing && !hold ? "" : " disabled") +
-        '>' +
-          (executing && !hold
-            ? '<span class="execute-spinner"></span>'
-            : '<span class="execute-icon">▶</span>') +
-          '<span>' +
-          (hold
-            ? "On hold"
-            : autoExecuting ? "Auto Executing..." : executing ? "Executing…" : ready ? "Execute now" : "Cooldown") +
-        "</span></button>";
-    }
-
-    /** Pause / stop / resume. Secondary to Execute, so the row layout keeps these in the detail. */
-    function holdButtons(member, plan) {
-      const hold = planHold(plan);
-      const dataAttrs = planDataAttrs(member, plan);
-      let output = "";
-
-      if (hold) {
-        output +=
-          '<button class="button resume-plan" type="button"' + dataAttrs +
-            ' title="Let the relayer auto-execute this plan again">' +
-            '<span class="execute-icon">▶</span><span>Resume</span>' +
-          "</button>";
-        // Escalating a pause to a permanent stop stays available; the reverse is Resume.
-        if (hold.status === "paused") {
-          output +=
-            '<button class="button hold-plan danger" type="button" data-hold-status="cancelled"' +
-              dataAttrs + ' title="Stop automation for this plan for good (off-chain; funds are untouched)">' +
-              '<span class="execute-icon">■</span><span>Stop auto-exec</span>' +
-            "</button>";
-        }
-      } else {
-        output +=
-          '<button class="button hold-plan" type="button" data-hold-status="paused"' + dataAttrs +
-            ' title="Pause auto-execution of this plan (off-chain; funds are untouched)">' +
-            '<span class="execute-icon">❚❚</span><span>Pause</span>' +
-          "</button>" +
-          '<button class="button hold-plan danger" type="button" data-hold-status="cancelled"' + dataAttrs +
-            ' title="Stop automation for this plan for good (off-chain; funds are untouched)">' +
-            '<span class="execute-icon">■</span><span>Stop auto-exec</span>' +
-          "</button>";
-      }
-      return output;
-    }
-
-    function planActions(member, plan) {
-      if (plan.status !== "active" && !plan.active) return "";
-      return '<div class="plan-actions">' + executeButton(member, plan) + holdButtons(member, plan) + "</div>";
-    }
-
-    function refreshPlanButton(member, plan) {
-      return '<button class="refresh-plan" type="button"' + planDataAttrs(member, plan) +
-        ' title="Refresh only this plan" aria-label="Refresh plan #' +
-          escapeHtml(plan.scheduleId) + '"><span aria-hidden>↻</span></button>';
-    }
-
-    function plansSignature(members) {
-      return JSON.stringify((members || []).map(function (member) {
-        return {
-          chainId: member.chainId,
-          chainName: member.chainName,
-          user: member.user,
-          // A resume gate counts down between polls, so its remaining seconds are dropped from the
-          // signature: they are not a change in the plan, and letting them count as one would
-          // re-render the list — collapsing whatever row the operator has open — every few seconds
-          // for as long as any plan is finishing a paused countdown. `notBefore` is the fact, and
-          // it is stable.
-          plans: (member.plans || []).map(function (plan) {
-            if (!plan.executionGate) return plan;
-            return Object.assign({}, plan, {
-              executionGate: { notBefore: plan.executionGate.notBefore },
-              effectiveDueTimestamp: null,
-            });
-          }),
-        };
-      }));
-    }
-
-    /* The token the plan buys. The symbol is read from the chain and can be missing (or arbitrary
-       user-chosen text), so it is escaped, kept short, and the address stays alongside it as the
-       thing that actually identifies the token. */
-    function targetTokenElement(plan, explorer) {
-      if (!plan.targetToken) return NOT_RECORDED;
-      const symbol = plan.targetTokenSymbol;
-      if (!symbol) return addressElement(plan.targetToken, explorer);
-
-      const label = symbol.length > 14 ? symbol.slice(0, 13) + "…" : symbol;
-      return '<span class="target-token">' +
-        '<b class="token-symbol" title="' + escapeHtml(symbol) + '">' + escapeHtml(label) + "</b>" +
-        addressElement(plan.targetToken, explorer) +
-      "</span>";
-    }
-
-    /* ---- Filterable attributes ---------------------------------------------
-       Every plan element in both layouts carries the same attribute set, so
-       filtering, sorting and the facet counts are written once and work
-       regardless of which layout is on screen. */
-    function filterAttrs(member, plan) {
-      const status = plan.status || (plan.active ? "active" : "completed");
-      const hold = planHold(plan);
-      // One lowercase haystack per plan: wallet, network, plan id, token symbol and address,
-      // and the cadence. Typing "bot weekly" or "#3" or "wbot" all land somewhere useful.
-      const haystack = [
-        member.user,
-        member.chainName,
-        "#" + plan.scheduleId,
-        plan.scheduleId,
-        plan.targetTokenSymbol || "",
-        plan.targetToken || "",
-        plan.frequencyLabel || "",
-        status,
-      ].join(" ").toLowerCase();
-
-      return ' data-status="' + status + '"' +
-        ' data-chain-id="' + member.chainId + '"' +
-        ' data-chain-name="' + escapeHtml(member.chainName || "") + '"' +
-        ' data-user="' + escapeHtml(member.user) + '"' +
-        ' data-schedule-id="' + escapeHtml(plan.scheduleId) + '"' +
-        ' data-ready="' + (plan.ready && !hold ? "1" : "0") + '"' +
-        ' data-gated="' + (planGate(plan) ? "1" : "0") + '"' +
-        ' data-hold="' + (hold ? escapeHtml(hold.status) : "") + '"' +
-        ' data-enrolled="' + (plan.enrolled ? "1" : "0") + '"' +
-        ' data-executing="' + (plan.executionMode != null ? "1" : "0") + '"' +
-        ' data-executed="' + (plan.executedCount || 0) + '"' +
-        ' data-due="' + (plan.effectiveDueTimestamp || plan.dueTimestamp || "") + '"' +
-        ' data-progress="' + (plan.progressPct == null ? "" : plan.progressPct) + '"' +
-        ' data-amount="' + (plan.amountPerInterval == null ? "" : plan.amountPerInterval) + '"' +
-        ' data-last="' + (plan.lastExecutionTime || 0) + '"' +
-        ' data-created="' + (plan.createdAt ? Date.parse(plan.createdAt) || 0 : 0) + '"' +
-        ' data-search="' + escapeHtml(haystack) + '"';
-    }
-
-    /* ---- Row layout (default) ----------------------------------------------
-       One line per plan, so a wallet with twenty plans costs twenty lines
-       rather than twenty full cards. Everything that is not needed to *find*
-       the plan lives behind the row's disclosure. */
-    function renderRow(member, plan, explorer) {
-      const initial = String(member.chainName || "N").slice(0, 1);
-      return '<div class="prow"' + filterAttrs(member, plan) + '>' +
-        '<div class="prow-main">' +
-          '<button class="prow-toggle" type="button" aria-expanded="false" aria-label="Show plan detail">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">' +
-              '<path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" /></svg>' +
-          "</button>" +
-          '<span class="c c-net" title="' + escapeHtml(member.chainName || "") + '">' +
-            '<span class="network-icon">' + escapeHtml(initial) + "</span>" +
-            '<span class="net-name">' + escapeHtml(member.chainName || "") + "</span>" +
-          "</span>" +
-          '<span class="c c-id"><b>#' + escapeHtml(plan.scheduleId) + "</b>" +
-            '<em>' + escapeHtml(plan.frequencyLabel || "") + "</em></span>" +
-          '<span class="c c-wallet">' + addressElement(member.user, explorer) + "</span>" +
-          '<span class="c c-pair">' +
-            '<span class="amount">' +
-              (plan.amountPerInterval == null
-                ? NOT_RECORDED
-                : escapeHtml(plan.amountPerInterval) + " " + stableSymbol(member.chainId)) +
-            "</span>" +
-            '<span class="arrow">→</span>' +
-            targetTokenElement(plan, explorer) +
-          "</span>" +
-          '<span class="c c-progress">' + progressCell(plan) + "</span>" +
-          '<span class="c c-due">' + countdownElement(member, plan) + "</span>" +
-          '<span class="c c-badges">' + badges(plan) + "</span>" +
-          '<span class="c c-action">' +
-            (plan.status === "active" || plan.active ? executeButton(member, plan) : "") +
-          "</span>" +
-        "</div>" +
-        '<div class="prow-detail" hidden>' +
-          detailGrid(plan, member.chainId) +
-          datesLine(plan) +
-          '<div class="plan-actions">' +
-            (plan.status === "active" || plan.active ? holdButtons(member, plan) : "") +
-            refreshPlanButton(member, plan) +
-          "</div>" +
-        "</div>" +
-      "</div>";
-    }
-
-    function renderRows(members) {
-      const rows = [];
-      members.forEach(function (member) {
-        const explorer = explorerByChain[member.chainId] || null;
-        (member.plans || []).forEach(function (plan) {
-          rows.push(renderRow(member, plan, explorer));
-        });
-      });
-      return '<div class="plan-rows">' +
-        '<div class="prow-head" aria-hidden="true">' +
-          '<span class="c c-toggle"></span>' +
-          '<span class="c c-net">Network</span>' +
-          '<span class="c c-id">Plan</span>' +
-          '<span class="c c-wallet">Wallet</span>' +
-          '<span class="c c-pair">Buys</span>' +
-          '<span class="c c-progress">Progress</span>' +
-          '<span class="c c-due">Next buy</span>' +
-          '<span class="c c-badges">Status</span>' +
-          '<span class="c c-action"></span>' +
-        "</div>" +
-        rows.join("") +
-      "</div>";
-    }
-
-    /* ---- Card layout (grouped by wallet) ----------------------------------- */
-    function renderPlan(member, plan, explorer) {
-      return '<div class="plan"' + filterAttrs(member, plan) + '>' +
-        '<div class="plan-top">' +
-          '<span class="pid">#' + plan.scheduleId + "</span>" +
-          '<span class="freq">' + plan.frequencyLabel + "</span>" +
-          badges(plan) +
-          refreshPlanButton(member, plan) +
-        "</div>" +
-        '<div class="plan-body">' +
-          '<span class="amount">' +
-            (plan.amountPerInterval == null
-              ? NOT_RECORDED
-              : plan.amountPerInterval + " " + stableSymbol(member.chainId)) +
-          "</span>" +
-          '<span class="arrow">→</span>' +
-          targetTokenElement(plan, explorer) +
-        "</div>" +
-        planTiming(member, plan) +
-        progressBar(plan) +
-        detailGrid(plan, member.chainId) +
-        datesLine(plan) +
-        planActions(member, plan) +
-      "</div>";
-    }
-
-    function renderMember(member, index) {
-      const explorer = explorerByChain[member.chainId] || null;
-      const activeCount = member.plans.filter(function (plan) {
-        return plan.status === "active" || (plan.active && !plan.status);
-      }).length;
-
-      const plans = member.plans.map(function (plan) {
-        return renderPlan(member, plan, explorer);
-      }).join("");
-
-      return '<article class="card member-card" style="--i:' + index + '"' +
-        ' data-chain-id="' + member.chainId + '"' +
-        ' data-user="' + escapeHtml(String(member.user || "").toLowerCase()) + '">' +
-        '<div class="card-head">' +
-          '<span class="network-title"><span class="network-icon">' +
-            String(member.chainName || "N").slice(0, 1) +
-          '</span><span class="net-name">' + member.chainName + "</span></span>" +
-          '<span class="chip">' + activeCount + " active · " + member.plans.length + " total</span>" +
-        "</div>" +
-        '<div class="member-meta"><div class="row"><span class="label">Wallet</span>' +
-          addressElement(member.user, explorer) +
-        "</div></div>" +
-        plans +
-      "</article>";
-    }
-
-    function renderPlans(members) {
-      if (!members.length) {
-        return '<div class="empty">No registered wallets with DCA plans.</div>';
-      }
-      return filters.view === "cards"
-        ? '<div class="grid">' + members.map(renderMember).join("") + "</div>"
-        : renderRows(members);
-    }
-
-    /** Re-render one plan in whichever layout is active (used by the per-plan refresh button). */
-    function renderPlanElement(member, plan, explorer) {
-      return filters.view === "cards"
-        ? renderPlan(member, plan, explorer)
-        : renderRow(member, plan, explorer);
-    }
-
-    /* ---- Filtering, sorting, facet counts ----------------------------------
-       The index is read back off the DOM rather than kept alongside it: the
-       plan list is replaced wholesale by the poll and piecemeal by the
-       per-plan refresh, and deriving from what is actually rendered is the
-       only version that cannot drift out of sync with the screen. */
-    const searchInput = document.getElementById("wallet-search");
-    const searchClear = document.getElementById("wallet-search-clear");
-    const searchEmpty = document.getElementById("search-empty");
-    const resultLine = document.getElementById("result-line");
-    const summaryElement = document.getElementById("plan-summary");
-    const networkChips = document.getElementById("network-chips");
-    const statusChips = document.getElementById("status-chips");
-    const flagChips = document.getElementById("flag-chips");
-    const clearFiltersButton = document.getElementById("clear-filters");
-    const sortSelect = document.getElementById("plan-sort");
-
-    let planIndex = [];
-
-    function buildIndex() {
-      planIndex = Array.prototype.map.call(
-        document.querySelectorAll(".prow, .plan"),
-        function (element) {
-          const data = element.dataset;
-          return {
-            element: element,
-            card: element.closest(".member-card"),
-            chainId: data.chainId || "",
-            chainName: data.chainName || "",
-            status: data.status || "",
-            user: String(data.user || "").toLowerCase(),
-            ready: data.ready === "1",
-            hold: data.hold || "",
-            gated: data.gated === "1",
-            enrolled: data.enrolled === "1",
-            executing: data.executing === "1",
-            executed: Number(data.executed || 0),
-            due: Number(data.due || 0),
-            progress: data.progress === "" ? null : Number(data.progress),
-            amount: data.amount === "" ? null : Number(data.amount),
-            last: Number(data.last || 0),
-            created: Number(data.created || 0),
-            search: data.search || "",
-          };
-        },
-      );
-    }
-
-    /** Whether a plan passes every filter group except `skip` (used for facet counts). */
-    function matches(plan, skip) {
-      if (skip !== "network" && filters.networks.size && !filters.networks.has(plan.chainId)) return false;
-      if (skip !== "status" && filters.statuses.size && !filters.statuses.has(plan.status)) return false;
-      if (skip !== "flag" && filters.flags.size) {
-        // Flags are OR'd: "ready or on hold" is the question an operator actually asks.
-        const anyFlag = FLAG_OPTIONS.some(function (option) {
-          return filters.flags.has(option.id) && option.test(plan);
-        });
-        if (!anyFlag) return false;
-      }
-      if (skip !== "query" && filters.query) {
-        // Every whitespace-separated term must appear, so "bot wbot" narrows rather than widens.
-        const terms = filters.query.split(/\s+/);
-        for (let i = 0; i < terms.length; i += 1) {
-          if (plan.search.indexOf(terms[i]) === -1) return false;
-        }
-      }
-      return true;
-    }
-
-    const SORTERS = {
-      // Plans with no due time (ended, or never run) sort after the scheduled ones.
-      due: function (a, b) { return (a.due || Infinity) - (b.due || Infinity); },
-      "progress-desc": function (a, b) { return (b.progress ?? -1) - (a.progress ?? -1); },
-      "progress-asc": function (a, b) { return (a.progress ?? Infinity) - (b.progress ?? Infinity); },
-      "amount-desc": function (a, b) { return (b.amount ?? -1) - (a.amount ?? -1); },
-      recent: function (a, b) { return b.last - a.last; },
-      created: function (a, b) { return b.created - a.created; },
-      wallet: function (a, b) { return a.user.localeCompare(b.user) || a.due - b.due; },
-    };
-
-    function applyFilters() {
-      const visible = [];
-      planIndex.forEach(function (plan) {
-        const ok = matches(plan, null);
-        plan.element.dataset.hidden = ok ? "false" : "true";
-        if (ok) visible.push(plan);
-      });
-
-      // Sorting is done with CSS `order` so the list never has to be re-rendered — the buttons
-      // inside it keep their in-flight state (a running Execute spinner, an open detail).
-      const sorter = SORTERS[filters.sort] || SORTERS.due;
-      const cardRank = new Map();
-      visible.slice().sort(sorter).forEach(function (plan, index) {
-        plan.element.style.order = String(index);
-        // In the card layout the sort has to reach the cards too, or the plans reorder inside
-        // cards that are themselves still in chain order and the ranking reads as random.
-        if (plan.card && !cardRank.has(plan.card)) cardRank.set(plan.card, index);
-      });
-
-      // A wallet card with nothing left to show is noise, so it goes with its plans.
-      document.querySelectorAll(".member-card").forEach(function (card) {
-        const anyVisible = card.querySelector('.plan[data-hidden="false"]');
-        card.dataset.hidden = anyVisible ? "false" : "true";
-        card.style.order = String(cardRank.has(card) ? cardRank.get(card) : 9999);
-      });
-
-      renderFacets();
-      renderSummary(visible);
-      updateResultLine(visible.length, planIndex.length);
-      syncControls();
-      persistFilters();
-    }
-
-    function chipMarkup(group, id, label, count, isOn) {
-      return '<button class="chip-btn' + (isOn ? " on" : "") + (count === 0 ? " empty" : "") +
-        '" type="button" role="checkbox" aria-checked="' + (isOn ? "true" : "false") +
-        '" data-group="' + group + '" data-value="' + escapeHtml(id) + '">' +
-        "<span>" + escapeHtml(label) + "</span>" +
-        '<span class="chip-count">' + count + "</span>" +
-      "</button>";
-    }
-
-    /** Counts on each chip exclude that chip's own group, so they answer "what would I get?". */
-    function renderFacets() {
-      // The chip rows are rebuilt to refresh their counts, which would drop keyboard focus
-      // mid-selection; the focused chip is identified by group+value and refocused after.
-      const focused = document.activeElement && document.activeElement.closest
-        ? document.activeElement.closest(".chip-btn")
-        : null;
-      const focusKey = focused ? focused.dataset.group + "/" + focused.dataset.value : null;
-
-      const networkPool = planIndex.filter(function (plan) { return matches(plan, "network"); });
-      const statusPool = planIndex.filter(function (plan) { return matches(plan, "status"); });
-      const flagPool = planIndex.filter(function (plan) { return matches(plan, "flag"); });
-
-      const networks = [];
-      const seen = new Set();
-      planIndex.forEach(function (plan) {
-        if (seen.has(plan.chainId)) return;
-        seen.add(plan.chainId);
-        networks.push({ id: plan.chainId, label: plan.chainName || ("Chain " + plan.chainId) });
-      });
-      networks.sort(function (a, b) { return Number(a.id) - Number(b.id); });
-
-      networkChips.innerHTML = networks.map(function (network) {
-        const count = networkPool.filter(function (plan) { return plan.chainId === network.id; }).length;
-        return chipMarkup("network", network.id, network.label, count, filters.networks.has(network.id));
-      }).join("");
-
-      statusChips.innerHTML = STATUS_OPTIONS.map(function (option) {
-        const count = statusPool.filter(function (plan) { return plan.status === option.id; }).length;
-        return chipMarkup("status", option.id, option.label, count, filters.statuses.has(option.id));
-      }).join("");
-
-      flagChips.innerHTML = FLAG_OPTIONS.map(function (option) {
-        const count = flagPool.filter(option.test).length;
-        return chipMarkup("flag", option.id, option.label, count, filters.flags.has(option.id));
-      }).join("");
-
-      if (focusKey) {
-        document.querySelectorAll(".chip-btn").forEach(function (chip) {
-          if (chip.dataset.group + "/" + chip.dataset.value === focusKey) chip.focus();
-        });
-      }
-    }
-
-    function summaryItem(value, label) {
-      return '<div class="summary-item"><b>' + value + "</b><span>" + label + "</span></div>";
-    }
-
-    /** Totals for what is on screen, not for the whole dataset — otherwise they contradict it. */
-    function renderSummary(visible) {
-      if (planIndex.length === 0) {
-        summaryElement.hidden = true;
-        return;
-      }
-      const active = visible.filter(function (plan) { return plan.status === "active"; }).length;
-      const ready = visible.filter(function (plan) { return plan.ready && plan.status === "active"; }).length;
-      const held = visible.filter(function (plan) { return plan.hold !== ""; }).length;
-      const wallets = new Set(visible.map(function (plan) { return plan.chainId + ":" + plan.user; })).size;
-      const chains = new Set(visible.map(function (plan) { return plan.chainId; })).size;
-
-      summaryElement.hidden = false;
-      summaryElement.innerHTML =
-        summaryItem(visible.length, "Plans shown") +
-        summaryItem(active, "Active") +
-        summaryItem('<span class="tone-ready">' + ready + "</span>", "Ready now") +
-        summaryItem(held ? '<span class="tone-held">' + held + "</span>" : held, "On hold") +
-        summaryItem(wallets, "Wallets") +
-        summaryItem(chains, chains === 1 ? "Network" : "Networks");
-    }
-
-    function activeFilterCount() {
-      return filters.networks.size + filters.statuses.size + filters.flags.size +
-        (filters.query ? 1 : 0);
-    }
-
-    function updateResultLine(matched, total) {
-      const filtering = activeFilterCount() > 0;
-      resultLine.hidden = !filtering || total === 0;
-      if (!resultLine.hidden) {
-        resultLine.textContent = "Showing " + matched + " of " + total + " plan" +
-          (total === 1 ? "" : "s");
-      }
-      const noMatches = filtering && total > 0 && matched === 0;
-      searchEmpty.hidden = !noMatches;
-      if (noMatches) {
-        searchEmpty.textContent = "No plan matches the current filters.";
-      }
-    }
-
-    function syncControls() {
-      searchClear.hidden = searchInput.value.length === 0;
-      clearFiltersButton.hidden = activeFilterCount() === 0;
-      sortSelect.value = filters.sort;
-      // Assigning .value fires no event, so the custom trigger is told directly.
-      sortMenu.sync();
-      document.querySelectorAll(".view-toggle button").forEach(function (button) {
-        button.classList.toggle("active", button.dataset.view === filters.view);
-        button.setAttribute("aria-pressed", button.dataset.view === filters.view ? "true" : "false");
-      });
-    }
-
-    /* ---- Filter persistence ------------------------------------------------
-       The URL is the shareable copy ("here is the held plan on BOT"), local
-       storage is the one that survives a reload of a bare URL. */
-    function serializeFilters() {
-      const params = new URLSearchParams();
-      if (filters.networks.size) params.set("net", [...filters.networks].join(","));
-      if (filters.statuses.size) params.set("status", [...filters.statuses].join(","));
-      if (filters.flags.size) params.set("flag", [...filters.flags].join(","));
-      if (filters.query) params.set("q", filters.query);
-      if (filters.sort !== "due") params.set("sort", filters.sort);
-      if (filters.view !== "rows") params.set("view", filters.view);
-      return params;
-    }
-
-    function persistFilters() {
-      const params = serializeFilters();
-      const query = params.toString();
-      window.history.replaceState(null, "", query ? "?" + query : window.location.pathname);
-      try {
-        window.localStorage.setItem(STORAGE_KEY, query);
-      } catch {
-        // Private-mode browsers can refuse localStorage; the URL still carries the state.
-      }
-    }
-
-    function readParams(params) {
-      const setFrom = function (key, target) {
-        const raw = params.get(key);
-        target.clear();
-        if (raw) raw.split(",").filter(Boolean).forEach(function (value) { target.add(value); });
-      };
-      setFrom("net", filters.networks);
-      setFrom("status", filters.statuses);
-      setFrom("flag", filters.flags);
-      filters.query = (params.get("q") || "").trim().toLowerCase();
-      if (SORTERS[params.get("sort")]) filters.sort = params.get("sort");
-      if (params.get("view") === "cards" || params.get("view") === "rows") {
-        filters.view = params.get("view");
-      }
-      searchInput.value = params.get("q") || "";
-    }
-
-    function restoreFilters() {
-      const fromUrl = new URLSearchParams(window.location.search);
-      if ([...fromUrl.keys()].length > 0) {
-        readParams(fromUrl);
-        return;
-      }
-      try {
-        const stored = window.localStorage.getItem(STORAGE_KEY);
-        if (stored) readParams(new URLSearchParams(stored));
-      } catch {
-        // Nothing to restore; the defaults are fine.
-      }
-    }
-
-    /* ---- Filter controls ---------------------------------------------------- */
-    document.getElementById("filters").addEventListener("click", function (event) {
-      const chip = event.target.closest(".chip-btn");
-      if (chip) {
-        const target = chip.dataset.group === "network"
-          ? filters.networks
-          : chip.dataset.group === "status"
-            ? filters.statuses
-            : filters.flags;
-        const value = chip.dataset.value;
-        if (target.has(value)) target.delete(value);
-        else target.add(value);
-        applyFilters();
-        return;
-      }
-
-      const viewButton = event.target.closest(".view-toggle button");
-      if (viewButton && viewButton.dataset.view !== filters.view) {
-        filters.view = viewButton.dataset.view;
-        // The two layouts are different markup, so switching has to re-render — but only here,
-        // never on a filter change. Before the first snapshot lands there is nothing to
-        // re-render, and doing it anyway would replace "Loading…" with "no plans".
-        if (latestMembers.length) paintPlans(latestMembers);
-        else { syncControls(); persistFilters(); }
-        return;
-      }
-
-      if (event.target.closest("#clear-filters")) {
-        filters.networks.clear();
-        filters.statuses.clear();
-        filters.flags.clear();
-        filters.query = "";
-        searchInput.value = "";
-        applyFilters();
-      }
-    });
-
-    sortSelect.addEventListener("change", function () {
-      filters.sort = SORTERS[sortSelect.value] ? sortSelect.value : "due";
-      applyFilters();
-    });
-
-    /* ---- Sort menu ---------------------------------------------------------
-       The listbox behind #sortmenu-trigger. It renders itself from #plan-sort's
-       options and writes back through them, so the hidden <select> stays the
-       single source of truth and every reader above is untouched: choosing an
-       order sets .value and fires the same "change" event a native select would.
-
-       SORT_META adds what a native option list has nowhere to put — the hint
-       line saying what each order is for, plus an icon and the grouping that
-       turns seven near-identical strings into three short scannable blocks. */
-    const SORT_META = {
-      due: {
-        hint: "Closest to their next buy first",
-        icon: '<circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.2l3.4 2" stroke-linecap="round" />',
-      },
-      recent: {
-        hint: "Most recently executed first",
-        icon: '<path d="M3.6 12a8.4 8.4 0 1 0 2.7-6.2" stroke-linecap="round" />' +
-          '<path d="M3.5 4.6V10H9" stroke-linecap="round" stroke-linejoin="round" />',
-      },
-      created: {
-        hint: "Newest plans first",
-        icon: '<rect x="3.5" y="5.2" width="17" height="15.3" rx="2.6" />' +
-          '<path d="M8 3v4M16 3v4M3.5 10h17M12 13.4v4.2M9.9 15.5h4.2" stroke-linecap="round" />',
-      },
-      "progress-desc": {
-        hint: "Nearly finished plans first",
-        icon: '<path d="M4 17.2 9.4 11.8l3.4 3.4L20 8" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<path d="M15.4 8H20v4.6" stroke-linecap="round" stroke-linejoin="round" />',
-      },
-      "progress-asc": {
-        hint: "Barely started plans first",
-        icon: '<path d="M4 8 9.4 13.4l3.4-3.4L20 17.2" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<path d="M15.4 17.2H20v-4.6" stroke-linecap="round" stroke-linejoin="round" />',
-      },
-      "amount-desc": {
-        hint: "Biggest buy amount first",
-        icon: '<ellipse cx="12" cy="6.6" rx="7.6" ry="3.1" />' +
-          '<path d="M4.4 6.6v10.8c0 1.7 3.4 3.1 7.6 3.1s7.6-1.4 7.6-3.1V6.6" stroke-linecap="round" />' +
-          '<path d="M4.4 12c0 1.7 3.4 3.1 7.6 3.1s7.6-1.4 7.6-3.1" />',
-      },
-      wallet: {
-        hint: "Grouped by owner address",
-        icon: '<path d="M3.6 18 7.5 6.4 11.4 18M5.1 14.4h4.8" stroke-linecap="round" stroke-linejoin="round" />' +
-          '<path d="M14.4 6.4h5.9l-5.9 11.6h5.9" stroke-linecap="round" stroke-linejoin="round" />',
-      },
-    };
-
-    // Menu order, which is deliberately not the <select>'s order: the select is
-    // a flat list, the menu reads as three questions an operator actually asks.
-    const SORT_GROUPS = [
-      { label: "Timing", values: ["due", "recent", "created"] },
-      { label: "Progress", values: ["progress-desc", "progress-asc"] },
-      { label: "Size & wallet", values: ["amount-desc", "wallet"] },
-    ];
-
-    const sortMenu = (function () {
-      const root = document.getElementById("sortmenu");
-      const trigger = document.getElementById("sortmenu-trigger");
-      const pop = document.getElementById("sortmenu-pop");
-      const list = document.getElementById("sortmenu-list");
-      const valueLabel = document.getElementById("sortmenu-value");
-      const CHECK = '<svg class="sortmenu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-        'stroke-width="2.6" aria-hidden="true"><path d="m5 12.5 4.8 4.8L19 6.8" stroke-linecap="round" ' +
-        'stroke-linejoin="round" /></svg>';
-
-      const labels = {};
-      Array.prototype.forEach.call(sortSelect.options, function (option) {
-        labels[option.value] = option.textContent.trim();
-      });
-
-      // Anything the groups above forgot still has to reach the menu, or a new
-      // <option> would silently become unreachable.
-      const grouped = new Set();
-      SORT_GROUPS.forEach(function (group) {
-        group.values.forEach(function (value) {
-          if (labels[value]) grouped.add(value);
-        });
-      });
-      const leftovers = Object.keys(labels).filter(function (value) { return !grouped.has(value); });
-      const groups = leftovers.length
-        ? SORT_GROUPS.concat([{ label: "More", values: leftovers }])
-        : SORT_GROUPS;
-
-      list.innerHTML = groups.map(function (group) {
-        const items = group.values.filter(function (value) { return labels[value]; });
-        if (!items.length) return "";
-        return '<li class="sortmenu-group" role="presentation">' + escapeHtml(group.label) + "</li>" +
-          items.map(function (value) {
-            const meta = SORT_META[value] || {};
-            return '<li class="sortmenu-option" role="option" aria-selected="false" ' +
-              'id="sortmenu-opt-' + escapeHtml(value) + '" data-value="' + escapeHtml(value) + '">' +
-              '<span class="sortmenu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-              'stroke-width="1.9" aria-hidden="true">' + (meta.icon || "") + "</svg></span>" +
-              '<span class="sortmenu-text"><b>' + escapeHtml(labels[value]) + "</b>" +
-              (meta.hint ? "<em>" + escapeHtml(meta.hint) + "</em>" : "") + "</span>" +
-              CHECK + "</li>";
-          }).join("");
-      }).join("");
-
-      const items = Array.prototype.slice.call(list.querySelectorAll(".sortmenu-option"));
-      let cursor = -1;
-      let typed = "";
-      let typedAt = 0;
-
-      function indexOfValue(value) {
-        for (let i = 0; i < items.length; i += 1) {
-          if (items[i].dataset.value === value) return i;
-        }
-        return -1;
-      }
-
-      function setCursor(index, scroll) {
-        cursor = Math.max(0, Math.min(index, items.length - 1));
-        items.forEach(function (item, i) {
-          item.dataset.cursor = i === cursor ? "true" : "false";
-        });
-        const current = items[cursor];
-        if (!current) return;
-        list.setAttribute("aria-activedescendant", current.id);
-        if (scroll !== false) current.scrollIntoView({ block: "nearest" });
-      }
-
-      function isOpen() {
-        return root.dataset.open === "true";
-      }
-
-      function open() {
-        if (isOpen()) return;
-        root.dataset.open = "true";
-        pop.hidden = false;
-        trigger.setAttribute("aria-expanded", "true");
-        list.focus({ preventScroll: true });
-        setCursor(Math.max(0, indexOfValue(sortSelect.value)));
-      }
-
-      function close(refocus) {
-        if (!isOpen()) return;
-        root.dataset.open = "false";
-        pop.hidden = true;
-        trigger.setAttribute("aria-expanded", "false");
-        list.removeAttribute("aria-activedescendant");
-        items.forEach(function (item) { item.dataset.cursor = "false"; });
-        if (refocus) trigger.focus();
-      }
-
-      /** Write the choice back through the hidden select so the existing
-          "change" listener — and nothing else — drives the re-sort. */
-      function commit(value) {
-        close(true);
-        if (!value || value === sortSelect.value) return;
-        sortSelect.value = value;
-        sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-
-      /** Pull the trigger label and the ticks back in line with #plan-sort.
-          Called after any programmatic change to the select's value. */
-      function sync() {
-        const value = sortSelect.value;
-        valueLabel.textContent = labels[value] || value;
-        items.forEach(function (item) {
-          item.setAttribute("aria-selected", item.dataset.value === value ? "true" : "false");
-        });
-      }
-
-      trigger.addEventListener("click", function () {
-        if (isOpen()) close(true);
-        else open();
-      });
-
-      trigger.addEventListener("keydown", function (event) {
-        if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          open();
-        }
-      });
-
-      list.addEventListener("keydown", function (event) {
-        switch (event.key) {
-          case "ArrowDown":
-            event.preventDefault();
-            setCursor(cursor + 1);
-            return;
-          case "ArrowUp":
-            event.preventDefault();
-            setCursor(cursor - 1);
-            return;
-          case "Home":
-            event.preventDefault();
-            setCursor(0);
-            return;
-          case "End":
-            event.preventDefault();
-            setCursor(items.length - 1);
-            return;
-          case "Enter":
-          case " ":
-            event.preventDefault();
-            if (items[cursor]) commit(items[cursor].dataset.value);
-            return;
-          case "Escape":
-            event.preventDefault();
-            close(true);
-            return;
-          case "Tab":
-            close(false);
-            return;
-          default:
-            break;
-        }
-        // Type-ahead. stopPropagation keeps a stray "/" here from stealing focus
-        // for the global search shortcut.
-        if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
-        event.stopPropagation();
-        const now = Date.now();
-        typed = now - typedAt > 900 ? event.key : typed + event.key;
-        typedAt = now;
-        const needle = typed.toLowerCase();
-        const hit = items.findIndex(function (item) {
-          return (labels[item.dataset.value] || "").toLowerCase().startsWith(needle);
-        });
-        if (hit >= 0) setCursor(hit);
-      });
-
-      list.addEventListener("click", function (event) {
-        const option = event.target.closest(".sortmenu-option");
-        if (option) commit(option.dataset.value);
-      });
-
-      list.addEventListener("mousemove", function (event) {
-        const option = event.target.closest(".sortmenu-option");
-        if (option) setCursor(items.indexOf(option), false);
-      });
-
-      // Clicking anywhere else — including non-focusable page chrome, which
-      // fires no focusout — dismisses the menu.
-      document.addEventListener("pointerdown", function (event) {
-        if (isOpen() && !root.contains(event.target)) close(false);
-      });
-
-      root.addEventListener("focusout", function (event) {
-        if (isOpen() && !root.contains(event.relatedTarget)) close(false);
-      });
-
-      sync();
-      return { sync: sync, close: close };
-    })();
-
-    searchInput.addEventListener("input", function () {
-      // Addresses are rendered checksummed but pasted in any casing, so both sides are lowered.
-      filters.query = searchInput.value.trim().toLowerCase();
-      applyFilters();
-    });
-
-    searchInput.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      searchInput.value = "";
-      filters.query = "";
-      applyFilters();
-    });
-
-    searchClear.addEventListener("click", function () {
-      searchInput.value = "";
-      filters.query = "";
-      applyFilters();
-      searchInput.focus();
-    });
-
-    // "/" focuses search from anywhere, the way every list tool an operator already uses does.
-    document.addEventListener("keydown", function (event) {
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
-      const tag = (event.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "select" || tag === "textarea") return;
-      event.preventDefault();
-      searchInput.focus();
-      searchInput.select();
-    });
-
-    /* ---- Load log ----------------------------------------------------------- */
-    const logPanel = document.getElementById("log-panel");
-    const logBody = document.getElementById("log-body");
-    const logStep = document.getElementById("log-step");
-    const logDot = document.getElementById("log-dot");
-    const logElapsed = document.getElementById("log-elapsed");
-    const logToggle = document.getElementById("log-toggle");
-    const executionNotice = document.getElementById("execution-notice");
-    let logTimer = null;
-    let lastMessageAt = 0;
-    let stallNoted = false;
-
-    function formatElapsed(milliseconds) {
-      const seconds = Math.floor(milliseconds / 1000);
-      return seconds < 60 ? seconds + "s" : Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
-    }
-
-    function logLine(message, className) {
-      const atBottom = logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight < 40;
-      const element = document.createElement("div");
-      element.className = "log-line" + (className ? " " + className : "");
-      element.innerHTML = '<span class="t">' + new Date().toLocaleTimeString() + "</span><span>" +
-        escapeHtml(message) + "</span>";
-      logBody.appendChild(element);
-      if (atBottom) logBody.scrollTop = logBody.scrollHeight;
-    }
-
-    function startLog() {
-      logPanel.hidden = false;
-      logBody.innerHTML = "";
-      logDot.className = "dot";
-      logStep.textContent = "Starting…";
-      stallNoted = false;
-      const startedAt = Date.now();
-      lastMessageAt = startedAt;
-      window.clearInterval(logTimer);
-      logTimer = window.setInterval(function () {
-        logElapsed.textContent = formatElapsed(Date.now() - startedAt);
-        const quietFor = Date.now() - lastMessageAt;
-        if (quietFor > STALL_AFTER_MS) {
-          logDot.classList.add("stalled");
-          if (!stallNoted) {
-            stallNoted = true;
-            logLine("Still working — the current data source is responding slowly.", "warn");
-          }
-        } else {
-          logDot.classList.remove("stalled");
-        }
-      }, 1000);
-    }
-
-    function stopLog(state) {
-      window.clearInterval(logTimer);
-      logTimer = null;
-      logDot.className = "dot " + state;
-    }
-
-    function showExecutionNotice(message, state) {
-      executionNotice.hidden = false;
-      executionNotice.className = "execution-notice " + state;
-      executionNotice.textContent = message;
-    }
-
-    logToggle.addEventListener("click", function () {
-      const collapsed = logBody.classList.toggle("collapsed");
-      logToggle.textContent = collapsed ? "Show log" : "Hide log";
-    });
-
-    async function loadExplorerUrls() {
-      try {
-        const response = await fetch("/api/config/networks");
-        if (!response.ok) return;
-        const data = await response.json();
-        (data.networks || []).forEach(function (network) {
-          explorerByChain[network.chainId] = network.explorerUrl || null;
-          stableByChain[network.chainId] = network.stableSymbol || "USDC";
-          if (network.name) chainNames[network.chainId] = network.name;
-        });
-      } catch {
-        explorerByChain = {};
-        stableByChain = {};
-      }
-    }
-
-    /** Paint a fresh snapshot: render, re-index, re-apply the operator's filters. */
-    function paintPlans(members) {
-      latestMembers = members;
-      const content = document.getElementById("plans");
-      content.innerHTML = renderPlans(members);
-      buildIndex();
-      applyFilters();
-      updatePlanCountdowns();
-    }
-
-    function loadPlans() {
-      const status = document.getElementById("plans-status");
-      const content = document.getElementById("plans");
-      content.classList.remove("plans-stable");
-      lastPlansSignature = "";
-      status.textContent = "Loading…";
-      content.innerHTML = '<div class="empty">Loading plan activity…</div>';
-      startLog();
-
-      const source = new EventSource("/api/plans/stream");
-      let finished = false;
-
-      source.addEventListener("log", function (event) {
-        const data = JSON.parse(event.data);
-        lastMessageAt = Date.now();
-        stallNoted = false;
-        logStep.textContent = data.message;
-        const warning = /fail|error|empty|unusable|no /i.test(data.message);
-        logLine(data.message, warning ? "warn" : null);
-      });
-
-      source.addEventListener("result", function (event) {
-        finished = true;
-        source.close();
-        const data = JSON.parse(event.data).result || {};
-        const members = data.members || [];
-        lastPlansSignature = plansSignature(members);
-        paintPlans(members);
-        window.requestAnimationFrame(function () {
-          content.classList.add("plans-stable");
-        });
-        const summary = (data.planCount || 0) + " plan" + (data.planCount === 1 ? "" : "s") +
-          " across " + members.length + " wallet" + (members.length === 1 ? "" : "s");
-        status.textContent = summary + " · updated " + new Date().toLocaleTimeString();
-        (data.errors || []).forEach(function (message) { logLine("warning: " + message, "warn"); });
-        logLine("Done — " + summary + ".", "ok");
-        logStep.textContent = "Done · " + summary;
-        stopLog("done");
-      });
-
-      source.addEventListener("error", function (event) {
-        if (!event.data) return;
-        finished = true;
-        source.close();
-        const data = JSON.parse(event.data);
-        content.innerHTML = '<div class="error">Failed to load plans: ' + escapeHtml(data.message) + "</div>";
-        status.textContent = "Error";
-        logLine("Failed: " + data.message, "warn");
-        logStep.textContent = "Failed";
-        stopLog("err");
-      });
-
-      source.onerror = function () {
-        if (finished) return;
-        if (source.readyState === EventSource.CONNECTING) {
-          logLine("Connection interrupted — reconnecting.", "warn");
-          logStep.textContent = "Reconnecting…";
-          lastMessageAt = Date.now();
-          return;
-        }
-        finished = true;
-        source.close();
-        content.innerHTML = '<div class="error">The plan stream disconnected.</div>';
-        status.textContent = "Error";
-        logStep.textContent = "Disconnected";
-        stopLog("err");
-      };
-    }
-
-    let backgroundRefreshRunning = false;
-    function updatePlanCountdowns() {
-      const browserNow = Math.floor(Date.now() / 1000);
-      document.querySelectorAll(".plan-countdown").forEach(function (countdown) {
-        if (!countdown.dataset.target) return;
-        const target = Number(countdown.dataset.target);
-        const clockOffset = Number(countdown.dataset.clockOffset || 0);
-        const remaining = target - (browserNow + clockOffset);
-        const ready = remaining <= 0;
-        countdown.textContent = formatCountdown(remaining);
-        countdown.classList.toggle("now", ready);
-
-        const plan = countdown.closest(".plan, .prow");
-        if (!plan) return;
-        const autoExecuting = Boolean(plan.querySelector(".auto-executing"));
-        const held = Boolean(plan.querySelector(".execute-plan.is-held"));
-        const readyBadge = plan.querySelector(".live-ready");
-        if (readyBadge) readyBadge.hidden = !ready || autoExecuting || held;
-        const executeButton = plan.querySelector(".execute-plan");
-        if (
-          executeButton &&
-          !held &&
-          !executeButton.classList.contains("running") &&
-          !executeButton.classList.contains("auto-executing")
-        ) {
-          executeButton.disabled = !ready;
-          executeButton.title = ready
-            ? "Execute this plan now using the backend relayer"
-            : "This plan is still in cooldown";
-          const label = executeButton.querySelector("span:last-child");
-          if (label) label.textContent = ready ? "Execute now" : "Cooldown";
-        }
-      });
-    }
-
-    async function refreshPlansSilently() {
-      if (backgroundRefreshRunning) return;
-      backgroundRefreshRunning = true;
-      try {
-        const response = await fetch("/api/plans", { cache: "no-store" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        const data = await response.json();
-        const members = data.members || [];
-        const signature = plansSignature(members);
-        const plansElement = document.getElementById("plans");
-        if (signature !== lastPlansSignature) {
-          lastPlansSignature = signature;
-          plansElement.classList.add("plans-stable");
-          // Re-rendering rebuilds every plan element, so a poll landing mid-search would drop the
-          // operator's filters if paintPlans did not re-apply them straight away.
-          paintPlans(members);
-        }
-        updatePlanCountdowns();
-        const summary = (data.planCount || 0) + " plan" + (data.planCount === 1 ? "" : "s") +
-          " across " + members.length + " wallet" + (members.length === 1 ? "" : "s");
-        document.getElementById("plans-status").textContent =
-          summary + " · updated " + new Date().toLocaleTimeString();
-      } catch {
-        // Keep the last good snapshot visible; the next poll will retry.
-      } finally {
-        backgroundRefreshRunning = false;
-      }
-    }
-
-    /* ---- Admin holds -------------------------------------------------------
-       Pausing or stopping automation on someone else's plan is the only action here that needs the
-       admin token, so it is kept per-browser in localStorage and sent as x-admin-token. Everything
-       these endpoints do is off-chain: the schedule, its enrolment and the deposit are untouched,
-       and the owner can still cancel their own plan and be refunded. */
-    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
-    const adminTokenInput = document.getElementById("admin-token");
-
-    try {
-      adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
-    } catch {
-      // Private-mode browsers can refuse localStorage; the field still works for this session.
-    }
-    adminTokenInput.addEventListener("change", function () {
-      try {
-        const value = adminTokenInput.value.trim();
-        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
-        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-      } catch {
-        // As above — not being able to remember it is not a reason to fail the action.
-      }
-    });
-
-    /** status: 'paused' | 'cancelled' to place a hold, or null to lift one. */
-    function applyPlanHold(button, status) {
-      if (button.disabled) return;
-      const token = adminTokenInput.value.trim();
-      if (!token) {
-        showExecutionNotice(
-          "Enter the admin token to pause or resume a plan.",
-          "error",
-        );
-        adminTokenInput.focus();
-        return;
-      }
-
-      const chainId = Number(button.dataset.chainId);
-      const userAddress = button.dataset.user;
-      const scheduleId = button.dataset.scheduleId;
-      const planLabel = "plan #" + scheduleId + " for " + shortenAddress(userAddress);
-
-      let reason = null;
-      if (status) {
-        const verb = status === "paused" ? "Pause" : "Stop";
-        // The reason is shown to the plan owner on their card, so it is prompted for rather than
-        // left blank — "contact the admin" with no explanation is a bad thing to receive.
-        reason = window.prompt(
-          verb + " auto-execution of " + planLabel + " on chain " + chainId + ".\n\n" +
-          "This is off-chain: the plan and the user's " + stableSymbol(chainId) + " are untouched, but the relayer will " +
-          "stop executing it and the user is told to contact you.\n\n" +
-          "Reason shown to the user (optional):",
-          "",
-        );
-        // Cancelling the prompt means "never mind"; an empty string means "no reason given".
-        if (reason === null) return;
-      } else if (!window.confirm("Resume auto-execution of " + planLabel + "?")) {
-        return;
-      }
-
-      const previousHtml = button.innerHTML;
-      button.disabled = true;
-      button.innerHTML = '<span class="execute-spinner"></span><span>Saving…</span>';
-      showExecutionNotice(
-        (status ? "Placing a hold on " : "Resuming ") + planLabel + "…",
-        "running",
-      );
-
-      const endpoint = status ? "/api/admin/plans/control" : "/api/admin/plans/resume";
-      const body = { chainId: chainId, userAddress: userAddress, scheduleId: scheduleId };
-      if (status) {
-        body.status = status;
-        body.reason = reason;
-      }
-
-      fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
-        body: JSON.stringify(body),
-      })
-        .then(async function (response) {
-          const data = await response.json().catch(function () { return {}; });
-          if (!response.ok) {
-            throw new Error(data.error || "Request failed (HTTP " + response.status + ")");
-          }
-          showExecutionNotice(
-            status
-              ? "Auto-execution " + status + " for " + planLabel + "."
-              : data.message || "Resumed " + planLabel + ".",
-            "success",
-          );
-          // Force the next poll to re-render: the hold changes the card, but the plan snapshot
-          // itself may be byte-identical and would otherwise be skipped as unchanged.
-          lastPlansSignature = "";
-          window.setTimeout(refreshPlansSilently, 400);
-        })
-        .catch(function (error) {
-          showExecutionNotice("Could not update the plan: " + error.message, "error");
-          button.disabled = false;
-          button.innerHTML = previousHtml;
-        });
-    }
-
-    document.getElementById("refresh-plans").addEventListener("click", loadPlans);
-    window.setInterval(updatePlanCountdowns, 1000);
-    window.setInterval(refreshPlansSilently, 5000);
-
-    document.addEventListener("click", function (event) {
-      const refreshButton = event.target.closest(".refresh-plan");
-      if (refreshButton) {
-        if (refreshButton.disabled) return;
-        const chainId = Number(refreshButton.dataset.chainId);
-        const userAddress = refreshButton.dataset.user;
-        const scheduleId = refreshButton.dataset.scheduleId;
-        const currentPlan = refreshButton.closest(".plan, .prow");
-        const wasExpanded = currentPlan ? currentPlan.dataset.expanded === "true" : false;
-        const previousHtml = refreshButton.innerHTML;
-        refreshButton.disabled = true;
-        refreshButton.classList.add("running");
-        refreshButton.innerHTML = '<span class="execute-spinner"></span>';
-
-        fetch("/api/plans?chainIds=" + encodeURIComponent(chainId), {
-          cache: "no-store",
-        })
-          .then(async function (response) {
-            if (!response.ok) throw new Error("HTTP " + response.status);
-            const data = await response.json();
-            const members = data.members || [];
-            const member = members.find(function (item) {
-              return item.chainId === chainId &&
-                String(item.user).toLowerCase() === String(userAddress).toLowerCase();
-            });
-            const plan = member?.plans?.find(function (item) {
-              return String(item.scheduleId) === String(scheduleId);
-            });
-            if (!member || !plan) {
-              throw new Error("Plan is no longer available.");
-            }
-
-            const holder = document.createElement("div");
-            holder.innerHTML = renderPlanElement(
-              member,
-              plan,
-              explorerByChain[chainId] || null,
-            );
-            const refreshedPlan = holder.firstElementChild;
-            if (!refreshedPlan || !currentPlan) {
-              throw new Error("Could not update the plan card.");
-            }
-            if (wasExpanded) setRowExpanded(refreshedPlan, true);
-            currentPlan.replaceWith(refreshedPlan);
-            // The index holds element references, so a replaced node has to be picked back up
-            // before the next filter pass — otherwise it renders unfiltered and unsorted.
-            buildIndex();
-            applyFilters();
-            updatePlanCountdowns();
-            document.getElementById("plans-status").textContent =
-              "Plan #" + scheduleId + " refreshed · " + new Date().toLocaleTimeString();
-          })
-          .catch(function (error) {
-            refreshButton.disabled = false;
-            refreshButton.classList.remove("running");
-            refreshButton.innerHTML = previousHtml;
-            showExecutionNotice(
-              "Plan #" + scheduleId + " refresh failed: " + error.message,
-              "error",
-            );
-          });
-        return;
-      }
-
-      const executeButton = event.target.closest(".execute-plan");
-      if (executeButton) {
-        if (executeButton.disabled) return;
-        const chainId = Number(executeButton.dataset.chainId);
-        const userAddress = executeButton.dataset.user;
-        const scheduleId = executeButton.dataset.scheduleId;
-        const confirmed = window.confirm(
-          "Execute DCA plan #" + scheduleId + " for " + shortenAddress(userAddress) +
-          " on chain " + chainId + " using the backend relayer?",
-        );
-        if (!confirmed) return;
-
-        const previousHtml = executeButton.innerHTML;
-        executeButton.disabled = true;
-        executeButton.classList.add("running");
-        executeButton.innerHTML = '<span class="execute-spinner"></span><span>Executing…</span>';
-        showExecutionNotice(
-          "Executing plan #" + scheduleId + " for " + shortenAddress(userAddress) + "…",
-          "running",
-        );
-
-        fetch("/api/execute-plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chainId: chainId,
-            userAddress: userAddress,
-            scheduleId: scheduleId,
-          }),
-        })
-          .then(async function (response) {
-            const data = await response.json().catch(function () { return {}; });
-            if (!response.ok) {
-              throw new Error(data.error || "Execution request failed (HTTP " + response.status + ")");
-            }
-            if (!data.executed) {
-              const reason = Array.isArray(data.errors) && data.errors.length
-                ? data.errors.join(" · ")
-                : "The plan was not executed.";
-              throw new Error(reason);
-            }
-            showExecutionNotice(
-              "Plan #" + scheduleId + " executed successfully. Refreshing live state…",
-              "success",
-            );
-            window.setTimeout(loadPlans, 900);
-          })
-          .catch(function (error) {
-            showExecutionNotice("Execution failed: " + error.message, "error");
-            executeButton.disabled = false;
-            executeButton.classList.remove("running");
-            executeButton.innerHTML = previousHtml;
-          });
-        return;
-      }
-
-      const holdButton = event.target.closest(".hold-plan");
-      if (holdButton) {
-        applyPlanHold(holdButton, holdButton.dataset.holdStatus);
-        return;
-      }
-
-      const resumeButton = event.target.closest(".resume-plan");
-      if (resumeButton) {
-        applyPlanHold(resumeButton, null);
-        return;
-      }
-
-      // Row disclosure. The whole summary line is the target — the chevron alone is a small
-      // hit area for a list this dense — but only the summary line: clicking inside the open
-      // detail must not collapse it out from under the pointer.
-      const toggle = event.target.closest(".prow-toggle");
-      const rowMain = toggle ? null : event.target.closest(".prow-main");
-      const row = (toggle || rowMain) && !(rowMain && event.target.closest("button, a, .copy"))
-        ? (toggle || rowMain).closest(".prow")
-        : null;
-      if (row) setRowExpanded(row, row.dataset.expanded !== "true");
-    });
-
-    function setRowExpanded(row, expanded) {
-      if (!row) return;
-      row.dataset.expanded = expanded ? "true" : "false";
-      const detail = row.querySelector(".prow-detail");
-      if (detail) detail.hidden = !expanded;
-      const toggle = row.querySelector(".prow-toggle");
-      if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-    }
-
-    restoreFilters();
-    syncControls();
-    loadExplorerUrls().finally(loadPlans);
-  </script>
 </body>
 </html>

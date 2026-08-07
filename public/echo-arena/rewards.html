@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rewards — Echo Arena</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <style>
+    .reward-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; }
+    /* The native <select> is enhanced into a styled listbox (dashboard-controls.js); size its trigger. */
+    .reward-controls .dctl-select { min-width: 240px; }
+    .contract-pick .dctl-select { flex: 1 1 260px; min-width: 240px; }
+    .winners { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 4px 0 16px; }
+    .winner-card { border: 1px solid var(--border); border-radius: 14px; padding: 14px; position: relative; overflow: hidden; }
+    .winner-card[data-rank="1"] { border-color: rgba(245,181,94,0.5); background: linear-gradient(160deg, rgba(245,181,94,0.10), transparent 70%); }
+    .winner-card[data-rank="2"] { border-color: rgba(110,168,255,0.45); background: linear-gradient(160deg, rgba(110,168,255,0.09), transparent 70%); }
+    .winner-card[data-rank="3"] { border-color: rgba(72,217,154,0.4); background: linear-gradient(160deg, rgba(72,217,154,0.08), transparent 70%); }
+    .winner-rank { font-family: "Plus Jakarta Sans"; font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+    .winner-card h3 { margin: 6px 0 2px; font-size: 16px; }
+    .winner-bonus { font-size: 13px; color: var(--green); font-weight: 700; }
+    .winner-wallet { margin-top: 10px; }
+    .winner-status { margin-top: 10px; font-size: 11px; }
+    .badge.mint-minted { color: var(--green); border-color: rgba(72,217,154,0.4); background: rgba(72,217,154,0.1); }
+    .badge.mint-registered { color: var(--amber); border-color: rgba(245,181,94,0.3); background: rgba(245,181,94,0.08); }
+    .badge.mint-pending { color: var(--dim); }
+    .distribute-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .distribute-note { font-size: 12px; color: var(--dim); line-height: 1.5; margin: 6px 0 0; }
+    .steps { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; }
+    .steps li { display: flex; gap: 8px; align-items: center; color: var(--dim); }
+    .steps li[data-done="true"] { color: var(--green); }
+    .badge.st-review { color: var(--amber); border-color: rgba(245,181,94,0.3); background: rgba(245,181,94,0.09); }
+    .badge.st-finalized { color: #6ea8ff; border-color: rgba(110,168,255,0.3); background: rgba(110,168,255,0.08); }
+    .badge.st-awarded { color: var(--green); border-color: rgba(72,217,154,0.4); background: rgba(72,217,154,0.12); }
+    .rank-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+    .rank-table th, .rank-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .rank-table th { color: var(--dim); font-weight: 600; }
+    .rank-table tr.top3 td { background: rgba(245,181,94,0.06); }
+    .rank-table tr.ineligible td { color: var(--dim); }
+    .contract-pick { display: grid; gap: 8px; margin: 8px 0; }
+    .contract-pick .pick-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .contract-pick select, .contract-pick input { min-height: 34px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel, rgba(255,255,255,0.02)); color: inherit; font: inherit; }
+    .contract-pick .tab { font-size: 11px; padding: 5px 10px; cursor: pointer; }
+    .contract-pick .tab.active { background: var(--accent, #6ea8ff); color: #06121f; border-color: transparent; }
+    .detail h3 { margin: 14px 0 4px; font-size: 13px; }
+  </style>
+</head>
+<body data-project="echo-arena">
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake" href="/steadystake/">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena active" href="/echo-arena/" aria-current="true">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
+      <nav class="main-nav" aria-label="Echo Arena pages">
+        <a class="nav-link" href="/echo-arena/seasons.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seasons</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/players.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.4" />
+            <path d="M3 20a6 6 0 0 1 12 0" stroke-linecap="round" />
+            <path d="M16.5 5.2a3.4 3.4 0 0 1 0 5.6M18 20a6 6 0 0 0-2.2-4.65" stroke-linecap="round" />
+          </svg>
+          <span>Players</span>
+        </a>
+        <a class="nav-link active" href="/echo-arena/rewards.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Rewards</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Echo Arena</p>
+        <h1>Reward distribution</h1>
+        <p class="page-description">
+          Select a season that has ended, review the standings, choose a reward-NFT contract, and
+          distribute the top three's reward cards. Winners come from the frozen leaderboard — the
+          reward per rank is fixed (Rank 1 = +3, Rank 2 = +2, Rank 3 = +1) and minted on-chain.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Enter admin token</span>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="admin-field" style="max-width: 320px; margin: 0 0 14px;">
+      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+      </svg>
+      <input id="admin-token" type="password" autocomplete="off" spellcheck="false" placeholder="Admin token (required)" aria-label="Admin API token" />
+    </div>
+
+    <div class="reward-controls">
+      <label for="season-select" style="font-size:12px;color:var(--muted);">Season</label>
+      <select id="season-select"><option value="">Load seasons…</option></select>
+    </div>
+
+    <section class="content-panel" aria-label="Reward distribution">
+      <div id="content"><div class="empty">Enter the admin token and choose a season.</div></div>
+    </section>
+  </main>
+
+  <script src="/dashboard-shared.js"></script>
+  <script src="/dashboard-controls.js"></script>
+  <script>
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const adminTokenInput = document.getElementById("admin-token");
+    const seasonSelect = document.getElementById("season-select");
+    const statusEl = document.getElementById("status");
+    const contentEl = document.getElementById("content");
+
+    // Styled listbox over the season picker; it re-syncs itself as options are (re)loaded.
+    DashControls.enhanceSelect(seasonSelect);
+
+    try { adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch {}
+    adminTokenInput.addEventListener("change", function () {
+      try { const v = adminTokenInput.value.trim(); if (v) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, v); else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY); } catch {}
+    });
+    function token() { return adminTokenInput.value.trim(); }
+
+    const CARDS = {
+      1: { name: "Chronarch Card", bonus: 3 },
+      2: { name: "Navigator Card", bonus: 2 },
+      3: { name: "Signal Card", bonus: 1 },
+    };
+
+    async function api(method, path, body) {
+      const response = await fetch(path, {
+        method: method,
+        headers: Object.assign({ "x-admin-token": token() }, body ? { "Content-Type": "application/json" } : {}),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+      return data;
+    }
+
+    async function loadSeasons() {
+      if (!token()) { statusEl.textContent = "Enter the admin token"; return; }
+      statusEl.textContent = "Loading…";
+      try {
+        const data = await api("GET", "/api/admin/seasons");
+        // Only seasons at or past Review can have winners to distribute.
+        const eligible = (data.seasons || []).filter(function (s) {
+          return ["review", "finalized", "awarded"].indexOf(s.status) >= 0;
+        });
+        seasonSelect.innerHTML = '<option value="">Select a season…</option>' +
+          eligible.map(function (s) { return '<option value="' + s.seasonId + '">' + escapeHtml(s.name) + " — " + s.status + "</option>"; }).join("");
+        statusEl.textContent = eligible.length + " season(s) ready · " + new Date().toLocaleTimeString();
+        if (!eligible.length) contentEl.innerHTML = '<div class="empty">No seasons in Review or later. Finalize a season first (Seasons tab).</div>';
+      } catch (error) {
+        statusEl.textContent = "Error: " + error.message;
+      }
+    }
+
+    function winnerCard(rank, wallet, award) {
+      const card = CARDS[rank];
+      const statusLabel = award ? award.status : "pending";
+      const badgeClass = award ? "mint-" + award.status : "mint-pending";
+      const tokenInfo = award && award.tokenId ? '<div class="winner-status">Token #' + escapeHtml(award.tokenId) + "</div>" : "";
+      return '<div class="winner-card" data-rank="' + rank + '">' +
+        '<div class="winner-rank">Rank ' + rank + "</div>" +
+        "<h3>" + escapeHtml(card.name) + "</h3>" +
+        '<div class="winner-bonus">+' + card.bonus + " Auto Execution slots</div>" +
+        '<div class="winner-wallet">' + (wallet ? addressElement(wallet) : '<span class="addr zero">no eligible winner</span>') + "</div>" +
+        '<div class="winner-status"><span class="badge ' + badgeClass + '">' + escapeHtml(statusLabel) + "</span></div>" +
+        tokenInfo +
+      "</div>";
+    }
+
+    let rewardContracts = [];
+    async function loadContracts() {
+      try {
+        const data = await api("GET", "/api/admin/reward-nfts?enabledOnly=true");
+        rewardContracts = data.contracts || [];
+      } catch { rewardContracts = []; }
+    }
+
+    const CHAIN_NAMES = {
+      8453: "Base", 84532: "Base Sepolia", 677: "BOT Chain", 968: "BOT Testnet",
+      137: "Polygon", 56: "BNB Chain", 2222: "Kava", 11155111: "Sepolia",
+    };
+    function chainName(id) { return CHAIN_NAMES[id] || ("Chain " + id); }
+
+    function renderStandings(records) {
+      if (!records || !records.length) return "<p class='empty'>No verified ranked results yet.</p>";
+      const rows = records.map(function (r) {
+        const medal = r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank;
+        return '<tr class="' + (r.isTopThree ? "top3" : "") + (r.prizeEligible ? "" : " ineligible") + '">' +
+          "<td>" + medal + "</td>" +
+          "<td>" + addressElement(r.address) + "</td>" +
+          "<td>" + (r.seasonRating || 0).toLocaleString() + "</td>" +
+          "<td>" + (r.highestDaily || 0).toLocaleString() + "</td>" +
+          "<td>" + r.eligibleDays + (r.prizeEligible ? "" : " · under min") + "</td></tr>";
+      }).join("");
+      return '<table class="rank-table"><thead><tr><th>#</th><th>Player</th><th>Season rating</th><th>Best daily</th><th>Eligible days</th></tr></thead><tbody>' + rows + "</tbody></table>";
+    }
+
+    function contractPicker() {
+      const options = rewardContracts.map(function (c) {
+        return '<option value="' + c.id + '">' + escapeHtml(c.name) + " · " + escapeHtml(chainName(c.chainId)) + " · " + escapeHtml(c.address.slice(0, 10)) + "…</option>";
+      }).join("");
+      const hasRegistry = rewardContracts.length > 0;
+      return '<div class="contract-pick" id="contract-pick">' +
+        '<div class="pick-row">' +
+          '<button type="button" class="button ghost tab' + (hasRegistry ? " active" : "") + '" data-tab="registry">Registered</button>' +
+          '<button type="button" class="button ghost tab' + (hasRegistry ? "" : " active") + '" data-tab="manual">Paste address</button>' +
+        "</div>" +
+        '<div class="pick-row" data-pane="registry"' + (hasRegistry ? "" : " hidden") + '>' +
+          '<select id="pick-contract"><option value="">Select a reward-NFT contract…</option>' + options + "</select>" +
+          (hasRegistry ? "" : '<span class="distribute-note">No contracts registered yet — use Paste address.</span>') +
+        "</div>" +
+        '<div class="pick-row" data-pane="manual"' + (hasRegistry ? " hidden" : "") + '>' +
+          '<input id="pick-chain" type="number" placeholder="chain ID" style="max-width:120px;" />' +
+          '<input id="pick-address" type="text" placeholder="0x reward-NFT contract address" style="flex:1;min-width:220px;" />' +
+        "</div>" +
+      "</div>";
+    }
+
+    async function showSeason(seasonId) {
+      if (!seasonId) { contentEl.innerHTML = '<div class="empty">Choose a season.</div>'; return; }
+      statusEl.textContent = "Loading season " + seasonId + "…";
+      try {
+        const detail = await api("GET", "/api/admin/seasons/" + seasonId + "/rewards");
+        const season = detail.season;
+        const records = detail.records || [];
+        // Winners: from finalists once finalized, else the prize-eligible top three by score.
+        const winners = detail.finalists && detail.finalists.length
+          ? detail.finalists.map(function (f) { return { rank: f.finalRank, wallet: f.walletAddress }; })
+          : records.filter(function (p) { return p.prizeEligible; }).slice(0, 3).map(function (p, i) { return { rank: i + 1, wallet: p.address }; });
+
+        const awards = detail.awards || [];
+        const awardByRank = {};
+        awards.forEach(function (a) { awardByRank[a.rank] = a; });
+
+        const cards = [1, 2, 3].map(function (rank) {
+          const w = winners.find(function (x) { return x.rank === rank; });
+          return winnerCard(rank, w ? w.wallet : null, awardByRank[rank]);
+        }).join("");
+
+        const allMinted = awards.length > 0 && awards.every(function (a) { return a.status === "minted"; });
+        const done = season.status === "awarded" || allMinted;
+        const buttonLabel = done ? "Rewards distributed" : "Confirm &amp; distribute rewards";
+
+        contentEl.innerHTML =
+          '<div class="card-head" style="margin-bottom:12px;"><span class="network-title"><span class="net-name">' + escapeHtml(season.name) +
+            '</span></span><span class="badge st-' + escapeHtml(season.status) + '">' + escapeHtml(season.status) + "</span></div>" +
+          '<div class="row"><span class="label">Networks</span><span class="addr">' + escapeHtml((season.availableNetworks && season.availableNetworks.length) ? season.availableNetworks.map(chainName).join(", ") : "All networks") + "</span></div>" +
+          '<div class="winners">' + cards + "</div>" +
+          '<div class="detail"><h3>Standings</h3>' + renderStandings(records) + "</div>" +
+          (done ? "" : ('<div class="detail"><h3>Reward-NFT contract</h3>' + contractPicker() + "</div>")) +
+          '<ul class="steps" id="steps"></ul>' +
+          '<div class="distribute-bar">' +
+            '<button class="button" id="distribute" data-id="' + seasonId + '" data-status="' + season.status + '"' + (done ? " disabled" : "") + ">" + buttonLabel + "</button>" +
+            '<span class="distribute-note">Finalizes the ranking (if needed), then registers + mints each reward card to its winner on the chosen contract. Winners come from the leaderboard.</span>' +
+          "</div>";
+        const pick = document.getElementById("pick-contract");
+        if (pick) DashControls.enhanceSelect(pick);
+        statusEl.textContent = "Season " + seasonId + " · " + season.status;
+      } catch (error) {
+        contentEl.innerHTML = '<div class="error">Failed: ' + escapeHtml(error.message) + "</div>";
+        statusEl.textContent = "Error";
+      }
+    }
+
+    function setStep(steps, label, done) {
+      const li = document.createElement("li");
+      li.dataset.done = done ? "true" : "false";
+      li.innerHTML = (done ? "✓ " : "• ") + escapeHtml(label);
+      steps.appendChild(li);
+    }
+
+    // Read the reward-NFT target the admin chose in the contract picker.
+    function selectedContract() {
+      const pick = document.getElementById("contract-pick");
+      if (!pick) return { error: "No contract selection available." };
+      const manualPane = pick.querySelector('[data-pane="manual"]');
+      const manualActive = manualPane && !manualPane.hidden;
+      if (manualActive) {
+        const chain = Number(document.getElementById("pick-chain").value);
+        const address = document.getElementById("pick-address").value.trim();
+        if (!Number.isFinite(chain) || chain <= 0) return { error: "Enter the contract's chain ID." };
+        if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return { error: "Enter a valid contract address." };
+        return { chainId: chain, contract: address };
+      }
+      const id = document.getElementById("pick-contract").value;
+      if (!id) return { error: "Select a reward-NFT contract (or use Paste address)." };
+      return { contractId: Number(id) };
+    }
+
+    async function distribute(button) {
+      const seasonId = Number(button.dataset.id);
+      const status = button.dataset.status;
+      const target = selectedContract();
+      if (target.error) { statusEl.textContent = target.error; return; }
+      if (!window.confirm("Distribute reward cards for season " + seasonId + "?\n\nThis finalizes the winners (if needed), registers the result on-chain, and mints the NFTs to the winning wallets. It cannot be undone.")) return;
+      const steps = document.getElementById("steps");
+      steps.innerHTML = "";
+      button.disabled = true;
+      const previous = button.textContent;
+      button.textContent = "Distributing…";
+      try {
+        if (status === "review") {
+          statusEl.textContent = "Finalizing…";
+          const f = await api("POST", "/api/admin/seasons/" + seasonId + "/finalize");
+          setStep(steps, "Finalized top three (" + (f.finalists || []).length + " winners)", true);
+        } else {
+          setStep(steps, "Already finalized", true);
+        }
+        statusEl.textContent = "Registering + minting…";
+        const result = await api("POST", "/api/admin/seasons/" + seasonId + "/distribute", target);
+        setStep(steps, "Registered result on-chain", true);
+        setStep(steps, "Minted " + (result.minted || []).length + " reward card(s)", true);
+        statusEl.textContent = "Rewards distributed";
+        await showSeason(seasonId);
+      } catch (error) {
+        setStep(steps, "Failed: " + error.message, false);
+        statusEl.textContent = "Failed: " + error.message;
+        button.disabled = false;
+        button.textContent = previous;
+      }
+    }
+
+    contentEl.addEventListener("click", function (event) {
+      const tab = event.target.closest(".contract-pick .tab");
+      if (tab) {
+        const pick = tab.closest(".contract-pick");
+        pick.querySelectorAll(".tab").forEach(function (t) { t.classList.toggle("active", t === tab); });
+        pick.querySelector('[data-pane="registry"]').hidden = tab.dataset.tab !== "registry";
+        pick.querySelector('[data-pane="manual"]').hidden = tab.dataset.tab !== "manual";
+        return;
+      }
+      const button = event.target.closest("#distribute");
+      if (button && !button.disabled) distribute(button);
+    });
+    async function boot() { await loadContracts(); await loadSeasons(); }
+    seasonSelect.addEventListener("change", function () { showSeason(seasonSelect.value); });
+    document.getElementById("refresh").addEventListener("click", boot);
+    adminTokenInput.addEventListener("change", boot);
+    boot();
+  </script>
+</body>
+</html>
