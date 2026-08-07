@@ -11,7 +11,9 @@
     "run": "nest build && node dist/run-executor.js",
     "plans": "nest build && node dist/plans/fetch-plans.js",
     "index-plans": "nest build && node dist/plans/index-plans.js",
-    "loop": "node loop.js"
+    "loop": "node loop.js",
+    "sync:game-contracts": "node scripts/sync-game-contracts.mjs",
+    "check:game-contracts": "node scripts/sync-game-contracts.mjs --check"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

@@ -1,0 +1,56 @@
+{
+  "968": {
+    "chainId": 968,
+    "key": "bot-testnet",
+    "StablecoinGamePassCheckout": {
+      "address": "0x2cc7b863ad51d83b204de150b07f946096d90412",
+      "stablecoin": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
+      "decimals": 6
+    },
+    "SeasonRewardNFT": {
+      "address": "0xe2c5eb12fc047d0eee6efcb7f2c19e4c15f3bafe"
+    },
+    "AutoPlanCapacityVerifier": {
+      "address": "0xf2ad1a2aa60720599f21a2dde4470614d933821d",
+      "signer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "vaultRole": "0xdb561fe13a6516b31c8fcd5cb8b5a4e3fefe43a9",
+      "domain": "Echo Arena Capacity/1"
+    }
+  },
+  "84532": {
+    "chainId": 84532,
+    "key": "base-sepolia",
+    "StablecoinGamePassCheckout": {
+      "address": "0x8081f7b750dd231ffb3ce722d9e70ba1819e4bf2",
+      "stablecoin": "0x508D52Ed54989700b94c381b54b53f68ED18Ce52",
+      "decimals": 6
+    },
+    "SeasonRewardNFT": {
+      "address": "0x523085b15a7b21119ac9879d04ea96db5bbe3b36"
+    },
+    "AutoPlanCapacityVerifier": {
+      "address": "0x3245506eae2ca51cae15478ae5dbb241a1282bd7",
+      "signer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "vaultRole": "0x6457b147a647426edd4bcdbd5de534cb15e05f2a",
+      "domain": "Echo Arena Capacity/1"
+    }
+  },
+  "11155111": {
+    "chainId": 11155111,
+    "key": "eth-sepolia",
+    "StablecoinGamePassCheckout": {
+      "address": "0x15f22b740c270794470ef0553370fb480ad61284",
+      "stablecoin": "0x5a55d42682B78a01b69C0EA06731d9cBB2C46A9F",
+      "decimals": 6
+    },
+    "SeasonRewardNFT": {
+      "address": "0xd7d709e5e6eb2526e863f6ee6f2b86b0bab338a4"
+    },
+    "AutoPlanCapacityVerifier": {
+      "address": "0x4b92e8c809295569ff12cbe822e5ed28c4ad47ef",
+      "signer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "vaultRole": "0xd6be588d237bf20eef58c7e09ad3d28d6eddfae2",
+      "domain": "Echo Arena Capacity/1"
+    }
+  }
+}

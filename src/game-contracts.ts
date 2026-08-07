@@ -71,6 +71,17 @@ interface RawEntry {
  *
  * GAME_CONTRACTS_FILE is checked first: an explicit override that lost to a file that happened to
  * be sitting in the repo checkout would not be an override at all.
+ *
+ * The sibling contracts/ checkout is preferred over the copy shipped inside backend/, because the
+ * deploy script writes the sibling one: an operator who reruns the deploy locally must see the new
+ * addresses, not the snapshot from the last sync.
+ *
+ * The backend-local copy is the last candidate and the one that matters in production. backend/ and
+ * contracts/ are separate repos, so Railway builds the backend alone and no sibling contracts/ ever
+ * exists there. Without a file shipped inside this repo every consumer here silently reports "not
+ * deployed" — the networks dashboard, the balances page, and the capacity permit signer alike.
+ * Keep it in sync with `pnpm run sync:game-contracts`; it is committed for the same reason
+ * deployed-addresses.json is.
  */
 export function findGameContractsFile(): string | null {
   const candidates = [
@@ -78,6 +89,10 @@ export function findGameContractsFile(): string | null {
     join(process.cwd(), '..', 'contracts', 'deployed-game-contracts.json'),
     join(process.cwd(), 'contracts', 'deployed-game-contracts.json'),
     join(__dirname, '..', '..', 'contracts', 'deployed-game-contracts.json'),
+    // Shipped with the backend repo: dist/game-contracts.js -> backend/, and cwd when run from
+    // the backend root. Mirrors how config.ts resolves deployed-addresses.json.
+    join(__dirname, '..', 'deployed-game-contracts.json'),
+    join(process.cwd(), 'deployed-game-contracts.json'),
   ].filter(Boolean);
   return candidates.find((c) => existsSync(c)) ?? null;
 }
