@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Store catalogue — Echo Arena</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <!-- seasons.css carries the shared form furniture (.form-section, .field, .seg, .stat-strip) that
+       every Echo Arena editor now uses, not just the season one. -->
+  <link rel="stylesheet" href="/seasons.css" />
+  <link rel="stylesheet" href="/game-config.css" />
+</head>
+<body data-project="echo-arena">
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake" href="/steadystake/">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena active" href="/echo-arena/" aria-current="true">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
+      <nav class="main-nav" aria-label="Echo Arena pages">
+        <a class="nav-link" href="/echo-arena/seasons.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seasons</span>
+        </a>
+        <a class="nav-link active" href="/echo-arena/store.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4.5 8h15l-1.2 11.2a2 2 0 0 1-2 1.8H7.7a2 2 0 0 1-2-1.8L4.5 8Z" stroke-linejoin="round" />
+            <path d="M9 8V6.4a3 3 0 0 1 6 0V8" stroke-linecap="round" />
+          </svg>
+          <span>Store</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/settings.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M5 7h14M5 12h14M5 17h14" stroke-linecap="round" />
+            <circle cx="9" cy="7" r="2.1" /><circle cx="15" cy="12" r="2.1" /><circle cx="8" cy="17" r="2.1" />
+          </svg>
+          <span>Settings</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/players.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.4" />
+            <path d="M3 20a6 6 0 0 1 12 0" stroke-linecap="round" />
+            <path d="M16.5 5.2a3.4 3.4 0 0 1 0 5.6M18 20a6 6 0 0 0-2.2-4.65" stroke-linecap="round" />
+          </svg>
+          <span>Players</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/rewards.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Rewards</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Echo Arena</p>
+        <h1>Store catalogue</h1>
+        <p class="page-description">
+          Every hull, wake and round the Store sells: what it is called, what it costs in verified
+          Steady Points, who may fly it, what colour it is, and whether it is on the shelf at all.
+          Saves are live — the game picks them up within about a minute, with no deploy.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <div class="admin-field" style="flex-basis: 240px;">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" aria-label="Admin API token" />
+        </div>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+        <button class="button ghost" id="reset-catalog" type="button">Restore defaults</button>
+        <button class="button primary" id="new-item" type="button">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Add item
+        </button>
+      </div>
+    </div>
+
+    <div class="stat-strip" id="stats"></div>
+
+    <section class="content-panel" aria-label="Catalogue">
+      <div class="filters">
+        <div class="filter-row filter-row-primary">
+          <div class="search-field">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" stroke-linecap="round" />
+            </svg>
+            <input id="item-search" type="search" autocomplete="off" spellcheck="false"
+              placeholder="Search by name, id or art" aria-label="Search the catalogue" />
+            <button class="search-clear" id="search-clear" type="button" aria-label="Clear search" hidden>×</button>
+          </div>
+          <span class="result-line" id="result-line"></span>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">Shelf</span>
+          <div class="chips" id="kind-chips"></div>
+        </div>
+      </div>
+      <div id="content"><div class="empty">Loading catalogue…</div></div>
+    </section>
+
+    <p class="page-footnote">
+      The <b>drawing</b> is the one thing here that is not data: each item picks one of the silhouettes
+      compiled into the game client. A brand-new shape needs a game deploy — a new colourway, price,
+      name or gate on an existing shape does not.
+    </p>
+  </main>
+
+  <div id="modal-host" hidden>
+    <div class="modal-card is-wide" id="item-modal" hidden aria-labelledby="item-modal-title">
+      <div class="modal-head">
+        <span class="modal-glyph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4.5 8h15l-1.2 11.2a2 2 0 0 1-2 1.8H7.7a2 2 0 0 1-2-1.8L4.5 8Z" stroke-linejoin="round" />
+            <path d="M9 8V6.4a3 3 0 0 1 6 0V8" stroke-linecap="round" />
+          </svg>
+        </span>
+        <div class="modal-titles">
+          <h2 id="item-modal-title">Add an item</h2>
+          <p id="item-modal-sub">It goes on the shelf as soon as you save it.</p>
+        </div>
+        <button type="button" class="modal-close" data-modal-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="season-form">
+          <div class="form-sections">
+            <section class="form-section">
+              <h3>Identity</h3>
+              <div class="form-row">
+                <div class="field" data-field="f-kind">
+                  <label for="f-kind">Shelf</label>
+                  <select id="f-kind" class="dash-select">
+                    <option value="ship">Hull</option>
+                    <option value="trail">Wake</option>
+                    <option value="bolt">Round</option>
+                  </select>
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-item-id">
+                  <label for="f-item-id">Item id <span class="hint">permanent</span></label>
+                  <input id="f-item-id" type="text" maxlength="40" placeholder="crimson-delta" data-autofocus />
+                  <p class="field-error" hidden></p>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field" data-field="f-name">
+                  <label for="f-name">Name <span class="hint">required</span></label>
+                  <input id="f-name" type="text" maxlength="60" placeholder="Delta Lance" />
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-eyebrow">
+                  <label for="f-eyebrow">Eyebrow <span class="hint">two or three words</span></label>
+                  <input id="f-eyebrow" type="text" maxlength="40" placeholder="Interceptor" />
+                  <p class="field-error" hidden></p>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field wide" data-field="f-blurb">
+                  <label for="f-blurb">Blurb <span class="hint">one sentence on the card</span></label>
+                  <textarea id="f-blurb" rows="2" maxlength="240" placeholder="A narrow dart with forward canards and twin outriggers."></textarea>
+                  <p class="field-error" hidden></p>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-section">
+              <h3>Look</h3>
+              <div class="form-row">
+                <div class="field" data-field="f-art">
+                  <label for="f-art">Drawing <span class="hint">compiled into the game</span></label>
+                  <select id="f-art" class="dash-select"></select>
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-ink">
+                  <label for="f-ink">Body colour</label>
+                  <div class="colour-field">
+                    <input id="f-ink-swatch" type="color" aria-label="Pick the body colour" />
+                    <input id="f-ink" type="text" maxlength="7" spellcheck="false" placeholder="#4d9dff" />
+                  </div>
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-accent">
+                  <label for="f-accent">Lit colour</label>
+                  <div class="colour-field">
+                    <input id="f-accent-swatch" type="color" aria-label="Pick the lit colour" />
+                    <input id="f-accent" type="text" maxlength="7" spellcheck="false" placeholder="#d8f2ff" />
+                  </div>
+                  <p class="field-error" hidden></p>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-section">
+              <h3>Price &amp; availability</h3>
+              <div class="form-row">
+                <div class="field" data-field="f-requires">
+                  <label for="f-requires">Who may fly it</label>
+                  <select id="f-requires" class="dash-select">
+                    <option value="pass">Game Pass holders</option>
+                    <option value="base">Everyone, including guests</option>
+                  </select>
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-sp">
+                  <label for="f-sp">Price <span class="hint">verified SP, on top of the pass</span></label>
+                  <input id="f-sp" type="number" min="0" step="10" value="0" />
+                  <div class="seg" data-preset-for="f-sp">
+                    <button type="button" data-value="0">Free</button>
+                    <button type="button" data-value="400">400</button>
+                    <button type="button" data-value="1200">1,200</button>
+                  </div>
+                  <p class="field-error" hidden></p>
+                </div>
+                <div class="field" data-field="f-enabled">
+                  <span class="field-label">On the shelf</span>
+                  <label class="switch">
+                    <input id="f-enabled" type="checkbox" checked />
+                    <span class="switch-track"><span class="switch-knob"></span></span>
+                    <span class="switch-text">Shown in the Store</span>
+                  </label>
+                  <p class="field-error" hidden></p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="preview" id="item-preview">
+            <div class="preview-head"><span>Card preview</span></div>
+            <div class="swatch-large" id="preview-swatch"><span id="preview-art">standard</span></div>
+            <p class="preview-eyebrow" id="preview-eyebrow">Standard issue</p>
+            <p class="preview-name" id="preview-name">Untitled</p>
+            <p class="preview-blurb" id="preview-blurb">—</p>
+            <div class="preview-rows">
+              <div class="row"><span class="label">Gate</span><span class="val" id="preview-gate">Game Pass</span></div>
+              <div class="row"><span class="label">Price</span><span class="val" id="preview-price">Free</span></div>
+            </div>
+            <p class="preview-utc">
+              The card the player sees is drawn by the game with the real silhouette; this shows the
+              copy and the palette only.
+            </p>
+          </aside>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <p class="modal-error" id="item-error" hidden></p>
+        <span class="spacer"></span>
+        <button type="button" class="button" data-modal-close>Cancel</button>
+        <button type="button" class="button primary" id="item-save">Save item</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/dashboard-shared.js"></script>
+  <script src="/dashboard-controls.js"></script>
+  <script>
+    "use strict";
+
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+    const KIND_LABELS = { ship: "Hulls", trail: "Wakes", bolt: "Rounds" };
+    const KIND_SINGULAR = { ship: "hull", trail: "wake", bolt: "round" };
+
+    const statusEl = document.getElementById("status");
+    const contentEl = document.getElementById("content");
+    const statsEl = document.getElementById("stats");
+    const chipsEl = document.getElementById("kind-chips");
+    const resultLine = document.getElementById("result-line");
+    const searchInput = document.getElementById("item-search");
+    const searchClear = document.getElementById("search-clear");
+    const adminTokenInput = document.getElementById("admin-token");
+
+    const itemModal = document.getElementById("item-modal");
+    const itemError = document.getElementById("item-error");
+
+    /** Everything the page renders from: the last admin config read. */
+    let state = { catalogue: { ship: [], trail: [], bolt: [] }, meta: null };
+    let activeKind = "ship";
+    let search = "";
+    let editing = null; // the row being edited, or null on a create
+    let modalHandle = null;
+
+    try { adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch {}
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const value = adminTokenInput.value.trim();
+        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {}
+      load();
+    });
+
+    function token() { return adminTokenInput.value.trim(); }
+
+    function needsToken() {
+      setStatus("Paste the admin token to load the catalogue.", "error");
+      contentEl.innerHTML = '<div class="empty">The catalogue is behind the admin token.</div>';
+      adminTokenInput.focus();
+    }
+
+    function setStatus(text, tone) {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (tone ? " " + tone : "");
+    }
+
+    /**
+     * Every call carries the admin token. A non-2xx answer is thrown with the backend's own message,
+     * which is the one worth showing: the service explains *why* an edit was refused (the last
+     * unlocked hull, a base item with a price on it) and a generic "failed" would throw that away.
+     */
+    async function api(path, method, body) {
+      const response = await fetch(path, {
+        method: method || "GET",
+        headers: Object.assign(
+          { "x-admin-token": token() },
+          body ? { "Content-Type": "application/json" } : {},
+        ),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || data.message || ("Request failed (" + response.status + ")"));
+      return data;
+    }
+
+    async function load() {
+      if (!token()) return needsToken();
+      setStatus("Loading…");
+      try {
+        const data = await api("/api/admin/game/config");
+        state = { catalogue: data.catalogue, meta: data.meta };
+        render();
+        setStatus(data.updatedAt ? "Saved " + relativeTime(data.updatedAt) : "Loaded", "success");
+      } catch (error) {
+        setStatus(error.message, "error");
+        contentEl.innerHTML = '<div class="error">' + escapeHtml(error.message) + "</div>";
+      }
+    }
+
+    function relativeTime(iso) {
+      const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);
+      if (!Number.isFinite(seconds)) return "recently";
+      if (seconds < 60) return "just now";
+      if (seconds < 3600) return Math.round(seconds / 60) + "m ago";
+      if (seconds < 86400) return Math.round(seconds / 3600) + "h ago";
+      return Math.round(seconds / 86400) + "d ago";
+    }
+
+    function items(kind) {
+      return (state.catalogue && state.catalogue[kind]) || [];
+    }
+
+    function render() {
+      renderStats();
+      renderChips();
+      renderShelf();
+    }
+
+    function renderStats() {
+      const all = items("ship").concat(items("trail"), items("bolt"));
+      const live = all.filter(function (item) { return item.enabled; });
+      const paid = live.filter(function (item) { return item.spRequired > 0; });
+      const free = live.filter(function (item) { return item.requires === "base"; });
+      statsEl.innerHTML =
+        stat(live.length, "on the shelf") +
+        stat(all.length - live.length, "held back") +
+        stat(free.length, "open to everyone") +
+        stat(paid.length, "SP-gated");
+    }
+
+    function stat(value, label) {
+      return '<div class="stat"><b>' + escapeHtml(String(value)) + "</b><span>" + escapeHtml(label) + "</span></div>";
+    }
+
+    function renderChips() {
+      chipsEl.innerHTML = ["ship", "trail", "bolt"].map(function (kind) {
+        const list = items(kind);
+        const live = list.filter(function (item) { return item.enabled; }).length;
+        return (
+          '<button type="button" class="chip-btn' + (kind === activeKind ? " on" : "") + '" data-kind="' + kind + '">' +
+            escapeHtml(KIND_LABELS[kind]) +
+            '<span class="chip-count">' + live + "/" + list.length + "</span>" +
+          "</button>"
+        );
+      }).join("");
+    }
+
+    function renderShelf() {
+      const list = items(activeKind).filter(matchesSearch);
+      resultLine.textContent = list.length + " of " + items(activeKind).length + " " + KIND_LABELS[activeKind].toLowerCase();
+
+      if (!list.length) {
+        contentEl.innerHTML = '<div class="empty">' +
+          (search ? "Nothing on this shelf matches “" + escapeHtml(search) + "”." : "This shelf is empty. Add an item to stock it.") +
+          "</div>";
+        return;
+      }
+
+      const full = items(activeKind);
+      contentEl.innerHTML = '<div class="item-grid">' + list.map(function (item) {
+        const index = full.indexOf(item);
+        return itemCard(item, index === 0, index === full.length - 1);
+      }).join("") + "</div>";
+    }
+
+    function matchesSearch(item) {
+      if (!search) return true;
+      const needle = search.toLowerCase();
+      return (
+        item.name.toLowerCase().includes(needle) ||
+        item.itemId.toLowerCase().includes(needle) ||
+        item.art.toLowerCase().includes(needle) ||
+        item.eyebrow.toLowerCase().includes(needle)
+      );
+    }
+
+    function itemCard(item, isFirst, isLast) {
+      const price = item.spRequired > 0 ? item.spRequired.toLocaleString() + " SP" : "No SP cost";
+      const gate = item.requires === "base" ? "Everyone" : "Game Pass";
+      return (
+        '<article class="item-card' + (item.enabled ? "" : " is-off") + '" data-id="' + item.id + '">' +
+          '<div class="item-swatch" style="--ink:' + escapeHtml(item.ink) + ';--accent:' + escapeHtml(item.accent) + '">' +
+            '<span class="item-art">' + escapeHtml(item.art) + "</span>" +
+          "</div>" +
+          '<div class="item-body">' +
+            '<p class="item-eyebrow">' + escapeHtml(item.eyebrow || "—") + "</p>" +
+            '<h3>' + escapeHtml(item.name) + "</h3>" +
+            '<p class="item-id"><code>' + escapeHtml(item.itemId) + "</code></p>" +
+            '<p class="item-blurb">' + escapeHtml(item.blurb || "No description.") + "</p>" +
+            '<div class="item-tags">' +
+              '<span class="badge ' + (item.requires === "base" ? "tone-open" : "tone-pass") + '">' + gate + "</span>" +
+              '<span class="badge ' + (item.spRequired > 0 ? "tone-priced" : "tone-free") + '">' + escapeHtml(price) + "</span>" +
+              (item.enabled ? "" : '<span class="badge tone-off">Held back</span>') +
+            "</div>" +
+          "</div>" +
+          '<div class="item-actions">' +
+            '<button type="button" class="icon-button" data-act="up" ' + (isFirst ? "disabled" : "") + ' title="Move earlier on the shelf" aria-label="Move earlier">↑</button>' +
+            '<button type="button" class="icon-button" data-act="down" ' + (isLast ? "disabled" : "") + ' title="Move later on the shelf" aria-label="Move later">↓</button>' +
+            '<button type="button" class="button ghost" data-act="toggle">' + (item.enabled ? "Hold back" : "Put on shelf") + "</button>" +
+            '<button type="button" class="button ghost" data-act="edit">Edit</button>' +
+            '<button type="button" class="button ghost danger" data-act="delete">Delete</button>' +
+          "</div>" +
+        "</article>"
+      );
+    }
+
+    /* Shelf interactions ------------------------------------------------------------------- */
+
+    chipsEl.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-kind]");
+      if (!button) return;
+      activeKind = button.dataset.kind;
+      renderChips();
+      renderShelf();
+    });
+
+    searchInput.addEventListener("input", function () {
+      search = searchInput.value.trim();
+      searchClear.hidden = !search;
+      renderShelf();
+    });
+    searchClear.addEventListener("click", function () {
+      searchInput.value = "";
+      search = "";
+      searchClear.hidden = true;
+      renderShelf();
+    });
+
+    contentEl.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-act]");
+      if (!button) return;
+      const card = button.closest(".item-card");
+      const id = Number(card.dataset.id);
+      const list = items(activeKind);
+      const item = list.find(function (row) { return row.id === id; });
+      if (!item) return;
+
+      try {
+        if (button.dataset.act === "edit") return openItemModal(item);
+        if (button.dataset.act === "toggle") {
+          setStatus("Saving…");
+          await api("/api/admin/game/catalog/" + id, "PATCH", { enabled: !item.enabled });
+          return load();
+        }
+        if (button.dataset.act === "up" || button.dataset.act === "down") {
+          const ids = list.map(function (row) { return row.id; });
+          const from = ids.indexOf(id);
+          const to = button.dataset.act === "up" ? from - 1 : from + 1;
+          if (to < 0 || to >= ids.length) return;
+          ids.splice(to, 0, ids.splice(from, 1)[0]);
+          setStatus("Reordering…");
+          await api("/api/admin/game/catalog/reorder", "POST", { kind: activeKind, ids: ids });
+          return load();
+        }
+        if (button.dataset.act === "delete") {
+          const ok = await DashModal.confirm({
+            title: "Delete " + item.name + "?",
+            body:
+              "It leaves the catalogue for good. Pilots who had it equipped keep their locker row and " +
+              "fall back to the base " + KIND_SINGULAR[activeKind] + " until they pick again.",
+            note: "Holding it back instead keeps the row and lets you put it out again later.",
+            tone: "danger",
+            confirmLabel: "Delete item",
+          });
+          if (!ok) return;
+          setStatus("Deleting…");
+          await api("/api/admin/game/catalog/" + id, "DELETE");
+          return load();
+        }
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", load);
+    document.getElementById("new-item").addEventListener("click", function () { openItemModal(null); });
+
+    document.getElementById("reset-catalog").addEventListener("click", async function () {
+      const ok = await DashModal.confirm({
+        title: "Restore the shipped catalogue?",
+        body:
+          "Every item Echo Arena ships with goes back to its original name, colours, price, gate and " +
+          "position — your edits to those are lost.",
+        note: "Items you added yourself are left exactly as they are; this only undoes edits to the built-in ones.",
+        tone: "warn",
+        confirmLabel: "Restore defaults",
+      });
+      if (!ok) return;
+      try {
+        setStatus("Restoring…");
+        await api("/api/admin/game/catalog/reset", "POST");
+        await load();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    /* The item form ------------------------------------------------------------------------ */
+
+    const fields = {
+      kind: document.getElementById("f-kind"),
+      itemId: document.getElementById("f-item-id"),
+      name: document.getElementById("f-name"),
+      eyebrow: document.getElementById("f-eyebrow"),
+      blurb: document.getElementById("f-blurb"),
+      art: document.getElementById("f-art"),
+      ink: document.getElementById("f-ink"),
+      inkSwatch: document.getElementById("f-ink-swatch"),
+      accent: document.getElementById("f-accent"),
+      accentSwatch: document.getElementById("f-accent-swatch"),
+      requires: document.getElementById("f-requires"),
+      sp: document.getElementById("f-sp"),
+      enabled: document.getElementById("f-enabled"),
+    };
+
+    /** Refill the drawing list for the chosen shelf — each kind has its own compiled silhouettes. */
+    function fillArtOptions(kind, selected) {
+      const art = (state.meta && state.meta.art && state.meta.art[kind]) || [];
+      fields.art.innerHTML = art.map(function (key) {
+        return '<option value="' + escapeHtml(key) + '"' + (key === selected ? " selected" : "") + ">" + escapeHtml(key) + "</option>";
+      }).join("");
+    }
+
+    function openItemModal(item) {
+      editing = item;
+      document.getElementById("item-modal-title").textContent = item ? "Edit " + item.name : "Add an item";
+      document.getElementById("item-modal-sub").textContent = item
+        ? "Changes reach players on their next config read — within about a minute."
+        : "It goes on the shelf as soon as you save it.";
+
+      const kind = item ? item.kind : activeKind;
+      fields.kind.value = kind;
+      fields.kind.disabled = !!item;
+      fields.itemId.value = item ? item.itemId : "";
+      fields.itemId.disabled = !!item;
+      fields.name.value = item ? item.name : "";
+      fields.eyebrow.value = item ? item.eyebrow : "";
+      fields.blurb.value = item ? item.blurb : "";
+      fillArtOptions(kind, item ? item.art : null);
+      setColour("ink", item ? item.ink : "#6e8cff");
+      setColour("accent", item ? item.accent : "#eafbff");
+      fields.requires.value = item ? item.requires : "pass";
+      fields.sp.value = item ? item.spRequired : 0;
+      fields.enabled.checked = item ? item.enabled : true;
+
+      itemError.hidden = true;
+      clearFieldErrors();
+      syncPreview();
+      modalHandle = DashModal.open(itemModal, { dismissible: true });
+    }
+
+    function setColour(which, value) {
+      fields[which].value = value;
+      fields[which + "Swatch"].value = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000";
+    }
+
+    ["ink", "accent"].forEach(function (which) {
+      fields[which].addEventListener("input", function () {
+        if (/^#[0-9a-fA-F]{6}$/.test(fields[which].value.trim())) {
+          fields[which + "Swatch"].value = fields[which].value.trim();
+        }
+        syncPreview();
+      });
+      fields[which + "Swatch"].addEventListener("input", function () {
+        fields[which].value = fields[which + "Swatch"].value;
+        syncPreview();
+      });
+    });
+
+    fields.kind.addEventListener("change", function () {
+      fillArtOptions(fields.kind.value, null);
+      syncPreview();
+    });
+
+    // A base item cannot also cost SP — the two contradict, and the game would show it unlocked
+    // while refusing to equip it. The backend refuses the save; the form just stops you getting there.
+    fields.requires.addEventListener("change", function () {
+      const base = fields.requires.value === "base";
+      fields.sp.disabled = base;
+      if (base) fields.sp.value = 0;
+      syncPreview();
+    });
+
+    ["name", "eyebrow", "blurb", "art", "sp", "itemId"].forEach(function (key) {
+      fields[key].addEventListener("input", syncPreview);
+      fields[key].addEventListener("change", syncPreview);
+    });
+
+    itemModal.querySelectorAll("[data-preset-for]").forEach(function (group) {
+      group.addEventListener("click", function (event) {
+        const button = event.target.closest("button[data-value]");
+        if (!button) return;
+        const target = document.getElementById(group.dataset.presetFor);
+        if (target.disabled) return;
+        target.value = button.dataset.value;
+        syncPreview();
+      });
+    });
+
+    function syncPreview() {
+      const sp = Number(fields.sp.value) || 0;
+      const base = fields.requires.value === "base";
+      document.getElementById("preview-art").textContent = fields.art.value || "—";
+      document.getElementById("preview-eyebrow").textContent = fields.eyebrow.value.trim() || "—";
+      const nameEl = document.getElementById("preview-name");
+      nameEl.textContent = fields.name.value.trim() || "Untitled";
+      nameEl.classList.toggle("empty", !fields.name.value.trim());
+      document.getElementById("preview-blurb").textContent = fields.blurb.value.trim() || "—";
+      document.getElementById("preview-gate").textContent = base ? "Everyone" : "Game Pass";
+      document.getElementById("preview-price").textContent = base
+        ? "Free"
+        : sp > 0 ? sp.toLocaleString() + " verified SP" : "Pass alone";
+      const swatch = document.getElementById("preview-swatch");
+      swatch.style.setProperty("--ink", fields.ink.value.trim() || "#000");
+      swatch.style.setProperty("--accent", fields.accent.value.trim() || "#fff");
+
+      itemModal.querySelectorAll("[data-preset-for]").forEach(function (group) {
+        const target = document.getElementById(group.dataset.presetFor);
+        group.querySelectorAll("button[data-value]").forEach(function (button) {
+          button.classList.toggle("on", String(target.value) === button.dataset.value);
+        });
+      });
+    }
+
+    function clearFieldErrors() {
+      itemModal.querySelectorAll(".field").forEach(function (field) {
+        field.classList.remove("invalid");
+        const error = field.querySelector(".field-error");
+        if (error) error.hidden = true;
+      });
+    }
+
+    document.getElementById("item-save").addEventListener("click", async function () {
+      clearFieldErrors();
+      itemError.hidden = true;
+
+      const payload = {
+        art: fields.art.value,
+        name: fields.name.value.trim(),
+        eyebrow: fields.eyebrow.value.trim(),
+        blurb: fields.blurb.value.trim(),
+        requires: fields.requires.value,
+        spRequired: Number(fields.sp.value) || 0,
+        ink: fields.ink.value.trim(),
+        accent: fields.accent.value.trim(),
+        enabled: fields.enabled.checked,
+      };
+
+      try {
+        setStatus("Saving…");
+        if (editing) {
+          await api("/api/admin/game/catalog/" + editing.id, "PATCH", payload);
+        } else {
+          payload.kind = fields.kind.value;
+          payload.itemId = fields.itemId.value.trim().toLowerCase();
+          await api("/api/admin/game/catalog", "POST", payload);
+          activeKind = payload.kind;
+        }
+        if (modalHandle) modalHandle.close();
+        await load();
+      } catch (error) {
+        itemError.textContent = error.message;
+        itemError.hidden = false;
+        setStatus(error.message, "error");
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

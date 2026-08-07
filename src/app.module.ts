@@ -14,6 +14,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { CapacityModule } from './capacity/capacity.module';
 import { PlayersModule } from './players/players.module';
+import { GameConfigModule } from './game-config/game-config.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { PlayersModule } from './players/players.module';
     SeasonsModule,
     CapacityModule,
     PlayersModule,
+    GameConfigModule,
   ],
 })
 export class AppModule {}

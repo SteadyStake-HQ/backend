@@ -16,7 +16,8 @@ import {
 } from '../supabase/purchase-intents';
 import { getPassEntitlement } from '../supabase/pass-entitlements';
 import { isSupabaseConfigured } from '../supabase/dca-plans-store';
-import { PASS_PLANS, getPassPlan, planAmountAtomic } from './pass-plans';
+import { listPassPlans } from '../supabase/pass-plans-store';
+import { planAmountAtomic } from './pass-plans';
 import { PASS_CHECKOUT_ABI, ERC20_APPROVE_ABI } from './pass-checkout-abi';
 
 const INTENT_TTL_SECONDS = 10 * 60; // §7.1
@@ -44,7 +45,8 @@ export class PaymentsService {
    * What the network's checkout contract will actually honour: which PASS_PLANS it has seeded and
    * enabled, and where it sends payment.
    *
-   * PASS_PLANS is the backend's price table; `plans(planId)` on the checkout is what `buyPass` will
+   * The `pass_plans` table (dashboard-editable, falling back to the compiled `PASS_PLANS`) is the
+   * backend's price table; `plans(planId)` on the checkout is what `buyPass` will
    * honour. They drift whenever a plan is added to the table after a contract was deployed, and the
    * drift is expensive for the player: the Game Pass screen offers the plan, the wallet pays gas to
    * approve, and only then does `buyPass` revert with PlanDisabled. So the two are reconciled here,
@@ -69,7 +71,7 @@ export class PaymentsService {
     try {
       const client = createPublicClient({ chain, transport: http(rpc) });
       const planIds = new Set<number>();
-      for (const plan of PASS_PLANS) {
+      for (const plan of await listPassPlans(true)) {
         const [, , enabled] = await client.readContract({
           address: network.checkoutContract as `0x${string}`,
           abi: PASS_CHECKOUT_ABI,
@@ -120,7 +122,10 @@ export class PaymentsService {
   async listCheckoutOptions() {
     this.ensureDb();
     const networks = await getPaymentNetworks(true);
-    const allIds = PASS_PLANS.map((p) => p.id);
+    // Only the plans the operator has left on sale. A plan disabled on the dashboard is off every
+    // network at once, whether or not its checkout contract still has it seeded.
+    const plans = await listPassPlans(true);
+    const allIds = plans.map((p) => p.id);
     const withPlans = await Promise.all(
       networks.map(async (n) => {
         const checkout = await this.readCheckout(n);
@@ -135,7 +140,7 @@ export class PaymentsService {
     );
     return {
       ok: true,
-      plans: PASS_PLANS.map((p) => ({ id: p.id, key: p.key, label: p.label, durationSeconds: p.durationSeconds, priceCents: p.priceCents })),
+      plans: plans.map((p) => ({ id: p.id, key: p.key, label: p.label, durationSeconds: p.durationSeconds, priceCents: p.priceCents })),
       networks: withPlans,
     };
   }
@@ -152,7 +157,9 @@ export class PaymentsService {
     }
     const wallet = input.wallet.toLowerCase();
     const chainId = Number(input.chainId);
-    const plan = getPassPlan(Number(input.planId));
+    // Only on-sale plans: a plan the operator disabled must not be buyable by a client that still
+    // has the old option list on screen.
+    const plan = (await listPassPlans(true)).find((p) => p.id === Number(input.planId));
     if (!plan) throw new BadRequestException({ ok: false, error: 'Unknown pass plan.' });
 
     const network = await getPaymentNetwork(chainId);
@@ -165,7 +172,7 @@ export class PaymentsService {
     const checkout = await this.readCheckout(network);
     if (checkout && !checkout.planIds.has(plan.id)) {
       this.logger.warn(
-        `Plan ${plan.id} (${plan.key}) is in PASS_PLANS but not enabled on ${network.checkoutContract} (chain ${chainId}); seed it with setPlan().`,
+        `Plan ${plan.id} (${plan.key}) is on sale in the plan table but not enabled on ${network.checkoutContract} (chain ${chainId}); seed it with setPlan().`,
       );
       throw new BadRequestException({
         ok: false,

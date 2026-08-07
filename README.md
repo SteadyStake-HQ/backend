@@ -33,7 +33,7 @@ picker.
 | | Pages | Serves |
 | --- | --- | --- |
 | **SteadyStake** — `public/steadystake/` | Plan activity (`/steadystake/`), Tokens, Relayer &amp; fees, Balances, Capacity | The DCA scheduler |
-| **Echo Arena** — `public/echo-arena/` | Seasons, Players, Rewards | The game |
+| **Echo Arena** — `public/echo-arena/` | Seasons, Store, Settings, Players, Rewards | The game |
 | **Shared** — `public/` | Networks (`/networks.html`) | Both — the chain registry carries the DCA contract addresses and the Echo Arena game contracts per chain |
 
 Capacity sits under SteadyStake because it governs Auto Execution Plan slots, even though the bonus
@@ -43,6 +43,39 @@ The pre-split URLs (`/tokens.html`, `/seasons.html`, …) are kept as redirect s
 bookmarks still land; `/deployments.html` likewise still forwards to Networks. A page added to
 either product needs its nav block copied from a sibling page in the same folder — the nav is inline
 HTML per page, not templated.
+
+## Echo Arena game configuration
+
+**Store** (`/echo-arena/store.html`) and **Settings** (`/echo-arena/settings.html`) are live control
+of the game itself — no deploy, no publish step. Between them they own the Store catalogue (every
+hull, wake and round: name, copy, palette, price in verified Steady Points, who may fly it, shelf
+order, on/off), the SP economy (multipliers, daily caps, the base-SP formula and its skill ladder),
+the arena constants, the bounds a submitted run is checked against, the daily quests, the feature
+kill switches, and the Game Pass price table.
+
+The game reads the merged result from `GET /api/game/config` and caches it for about a minute, so a
+save lands in-game within roughly that. Admin writes are `/api/admin/game/*` behind `ADMIN_API_TOKEN`
+like the rest of the privileged surface.
+
+Three things are worth knowing before turning a knob:
+
+- **The drawing is not data.** An item's `art` names a canvas routine compiled into the game client,
+  so a genuinely new silhouette needs a game deploy. A new colourway, price, name, gate or ordering
+  on an existing silhouette does not — which is what adding a catalogue item usually means.
+- **The game keeps its own copy of every default** (`lib/cosmetics.ts`, `lib/steady-points.ts`,
+  `lib/arena-rules.ts`) and falls back to it when this backend is unreachable, so an outage here
+  leaves the game running on shipped rules rather than closing the Store. `src/game-config/
+  game-defaults.ts` and those files have to be changed together or a backend outage silently
+  re-prices things.
+- **The chain is the authority on pass prices.** `buyPass` asserts the treasury received exactly the
+  contract's own price, so a plan row that disagrees does not re-price anything — it makes the
+  buyer's transaction revert after they have paid gas to approve. Run `setPlan()` on every deployed
+  checkout first, then edit the table; the Settings page reads the on-chain values back and flags
+  the drift per network.
+
+Tables (`echo_store_catalog`, `echo_game_settings`, `echo_game_quests`, `pass_plans`) are created
+and seeded from the shipped defaults on first boot, once — a Store you deliberately empty is not
+restocked by the next deploy.
 
 ## What a run charges
 

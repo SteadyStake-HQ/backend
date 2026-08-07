@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Game settings — Echo Arena</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <link rel="stylesheet" href="/seasons.css" />
+  <link rel="stylesheet" href="/game-config.css" />
+</head>
+<body data-project="echo-arena">
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Backend dashboard home">
+        <img src="/logo.png" alt="" width="38" height="38" />
+        <span>SteadyStake</span>
+      </a>
+      <div class="project-switch" role="group" aria-label="Project">
+        <a class="project-tab project-tab--steadystake" href="/steadystake/">SteadyStake</a>
+        <a class="project-tab project-tab--echo-arena active" href="/echo-arena/" aria-current="true">Echo Arena</a>
+        <a class="project-tab project-tab--shared" href="/networks.html">Shared</a>
+      </div>
+      <nav class="main-nav" aria-label="Echo Arena pages">
+        <a class="nav-link" href="/echo-arena/seasons.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+            <path d="M17 5h2a2 2 0 0 1-2 2M7 5H5a2 2 0 0 0 2 2M10 21h4M12 17v4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seasons</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/store.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4.5 8h15l-1.2 11.2a2 2 0 0 1-2 1.8H7.7a2 2 0 0 1-2-1.8L4.5 8Z" stroke-linejoin="round" />
+            <path d="M9 8V6.4a3 3 0 0 1 6 0V8" stroke-linecap="round" />
+          </svg>
+          <span>Store</span>
+        </a>
+        <a class="nav-link active" href="/echo-arena/settings.html" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M5 7h14M5 12h14M5 17h14" stroke-linecap="round" />
+            <circle cx="9" cy="7" r="2.1" /><circle cx="15" cy="12" r="2.1" /><circle cx="8" cy="17" r="2.1" />
+          </svg>
+          <span>Settings</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/players.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.4" />
+            <path d="M3 20a6 6 0 0 1 12 0" stroke-linecap="round" />
+            <path d="M16.5 5.2a3.4 3.4 0 0 1 0 5.6M18 20a6 6 0 0 0-2.2-4.65" stroke-linecap="round" />
+          </svg>
+          <span>Players</span>
+        </a>
+        <a class="nav-link" href="/echo-arena/rewards.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M20 7h-3.2a2.4 2.4 0 1 0-4.8 0h-.0a2.4 2.4 0 1 0-4.8 0H4v4h16V7ZM5 11v9h14v-9M12 7v13" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Rewards</span>
+        </a>
+      </nav>
+      <span class="live-pill">Operations live</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div class="heading-copy">
+        <p class="eyebrow">Echo Arena</p>
+        <h1>Game settings</h1>
+        <p class="page-description">
+          The rules the arena runs on: what a run earns, how much a wallet may earn in a day, the
+          cycle and combat constants, the bounds a submitted run is checked against, the daily quests,
+          the feature kill switches, and the Game Pass price table. Saves are live.
+        </p>
+      </div>
+      <div class="page-actions">
+        <span class="status" id="status">Loading…</span>
+        <div class="admin-field" style="flex-basis: 240px;">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" aria-label="Admin API token" />
+        </div>
+        <button class="button refresh" id="refresh" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="settings-stack" id="sections"></div>
+
+    <!-- Quests ------------------------------------------------------------------------------- -->
+    <section class="settings-card" style="margin-top: 16px;" aria-label="Daily quests">
+      <div class="settings-head">
+        <div class="titles">
+          <h2>Daily quests</h2>
+          <p>
+            A free wallet sees one of these a day, rotating by UTC date in the order below; a pass
+            holder sees all of them at once. A quest reward is paid outside the normal-mode sub-cap,
+            so it is the one SP a player can bank without spending a verified run — keep them small.
+          </p>
+        </div>
+        <div class="settings-actions">
+          <button class="button ghost" id="quests-reset" type="button">Restore defaults</button>
+          <button class="button primary" id="quest-new" type="button">Add quest</button>
+        </div>
+      </div>
+      <div class="settings-body">
+        <div class="table-scroll">
+          <table class="cfg-table">
+            <thead>
+              <tr>
+                <th>Quest</th><th>Key</th><th>Counter</th>
+                <th class="num">Target</th><th class="num">Reward</th><th>State</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="quests-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game Pass plans ---------------------------------------------------------------------- -->
+    <section class="settings-card" style="margin-top: 16px;" aria-label="Game Pass plans">
+      <div class="settings-head">
+        <div class="titles">
+          <h2>Game Pass plans</h2>
+          <p>
+            What a pass costs and how long it lasts. <b>The checkout contract is the authority on
+            price and duration</b> — <code>buyPass</code> asserts the treasury received exactly its
+            own price, so a row here that disagrees does not re-price anything, it makes the buyer's
+            transaction revert after they have already paid gas to approve. Change the contract with
+            <code>setPlan()</code> first, this table second.
+          </p>
+        </div>
+        <div class="settings-actions">
+          <button class="button primary" id="plan-new" type="button">Add plan</button>
+        </div>
+      </div>
+      <div class="settings-body">
+        <div class="table-scroll">
+          <table class="cfg-table">
+            <thead>
+              <tr>
+                <th class="num">Id</th><th>Plan</th><th>Key</th>
+                <th class="num">Duration</th><th class="num">Price</th><th>State</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="plans-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div id="plan-chains"></div>
+      </div>
+    </section>
+
+    <p class="page-footnote">
+      Every value on this page is read by the game over HTTP and cached for about a minute, so a save
+      reaches players without a deploy. If this backend is unreachable the game falls back to the
+      rules it was compiled with — it keeps running, on the shipped numbers rather than these.
+    </p>
+  </main>
+
+  <div id="modal-host" hidden>
+    <div class="modal-card" id="quest-modal" hidden aria-labelledby="quest-modal-title">
+      <div class="modal-head">
+        <span class="modal-glyph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M5 4.5h14v15l-7-3.6-7 3.6v-15Z" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <div class="modal-titles">
+          <h2 id="quest-modal-title">Add a quest</h2>
+          <p id="quest-modal-sub">Live for every player on their next status read.</p>
+        </div>
+        <button type="button" class="modal-close" data-modal-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-sections">
+          <section class="form-section">
+            <h3>Quest</h3>
+            <div class="form-row">
+              <div class="field"><label for="q-key">Key <span class="hint">permanent</span></label>
+                <input id="q-key" type="text" maxlength="40" placeholder="deep_loop" data-autofocus /></div>
+              <div class="field"><label for="q-label">Label</label>
+                <input id="q-label" type="text" maxlength="40" placeholder="Deep Loop" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="q-metric">Counter</label>
+                <select id="q-metric" class="dash-select">
+                  <option value="runs">Finished runs</option>
+                  <option value="echoes">Echoes joined (cumulative)</option>
+                  <option value="best_cycle">Deepest cycle reached (best, not sum)</option>
+                </select></div>
+              <div class="field"><label for="q-target">Target</label>
+                <input id="q-target" type="number" min="1" step="1" value="1" /></div>
+              <div class="field"><label for="q-reward">Reward <span class="hint">SP</span></label>
+                <input id="q-reward" type="number" min="0" max="500" step="1" value="5" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><span class="field-label">State</span>
+                <label class="switch">
+                  <input id="q-enabled" type="checkbox" checked />
+                  <span class="switch-track"><span class="switch-knob"></span></span>
+                  <span class="switch-text">Offered to players</span>
+                </label></div>
+              <div class="field"><label for="q-sort">Rotation order</label>
+                <input id="q-sort" type="number" min="0" step="10" value="100" /></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <p class="modal-error" id="quest-error" hidden></p>
+        <span class="spacer"></span>
+        <button type="button" class="button" data-modal-close>Cancel</button>
+        <button type="button" class="button primary" id="quest-save">Save quest</button>
+      </div>
+    </div>
+
+    <div class="modal-card" id="plan-modal" hidden aria-labelledby="plan-modal-title">
+      <div class="modal-head">
+        <span class="modal-glyph warn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <rect x="3" y="6" width="18" height="12" rx="2.5" /><path d="M3 10h18" />
+          </svg>
+        </span>
+        <div class="modal-titles">
+          <h2 id="plan-modal-title">Add a plan</h2>
+          <p id="plan-modal-sub">Price and duration must match what every checkout contract has seeded.</p>
+        </div>
+        <button type="button" class="modal-close" data-modal-close aria-label="Close">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-sections">
+          <section class="form-section">
+            <h3>Plan</h3>
+            <div class="form-row">
+              <div class="field"><label for="p-id">Plan id <span class="hint">matches the contract</span></label>
+                <input id="p-id" type="number" min="1" max="255" step="1" data-autofocus /></div>
+              <div class="field"><label for="p-key">Key</label>
+                <input id="p-key" type="text" maxlength="40" placeholder="week" /></div>
+              <div class="field"><label for="p-label">Label</label>
+                <input id="p-label" type="text" maxlength="40" placeholder="Week Pass" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="p-days">Duration <span class="hint">days</span></label>
+                <input id="p-days" type="number" min="0" step="1" value="7" />
+                <div class="seg" data-preset-for="p-days">
+                  <button type="button" data-value="1">1d</button>
+                  <button type="button" data-value="7">7d</button>
+                  <button type="button" data-value="30">30d</button>
+                </div></div>
+              <div class="field"><label for="p-price">Price <span class="hint">US dollars</span></label>
+                <input id="p-price" type="number" min="0.01" step="0.01" value="3.99" /></div>
+              <div class="field"><span class="field-label">On sale</span>
+                <label class="switch">
+                  <input id="p-enabled" type="checkbox" checked />
+                  <span class="switch-track"><span class="switch-knob"></span></span>
+                  <span class="switch-text">Offered at checkout</span>
+                </label></div>
+            </div>
+            <p class="drift-note">
+              Price is held in whole US cents and converted per network from the stablecoin's own
+              decimals, so the dollar figure is the same number on every chain. It must equal the
+              price the checkout contract holds for this id.
+            </p>
+          </section>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <p class="modal-error" id="plan-error" hidden></p>
+        <span class="spacer"></span>
+        <button type="button" class="button" data-modal-close>Cancel</button>
+        <button type="button" class="button primary" id="plan-save">Save plan</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/dashboard-shared.js"></script>
+  <script src="/dashboard-controls.js"></script>
+  <script>
+    "use strict";
+
+    const ADMIN_TOKEN_STORAGE_KEY = "steadystake.adminToken";
+
+    /**
+     * The settings form, declared rather than written out as markup.
+     *
+     * Every knob carries the sentence explaining what it does, because these numbers gate a paid
+     * entitlement and an SP balance that in turn gates wallet permissions — "what does this one do"
+     * has to be readable where it is edited, not in a spec the operator does not have open.
+     */
+    const SECTIONS = [
+      {
+        key: "economy",
+        title: "Steady Points economy",
+        blurb:
+          "What a run earns and how much a wallet may bank in a UTC day. Every finished run earns, " +
+          "in every mode — the daily cap is the only ceiling on SP issued per wallet per day.",
+        fields: [
+          { key: "passMultiplierPct", label: "Pass SP multiplier", hint: "%", min: 0, max: 10000, step: 10,
+            note: "Applied to every mode a pass holder plays. Stacks multiplicatively with the season's own multiplier on verified runs." },
+          { key: "freeMultiplierPct", label: "Free SP multiplier", hint: "%", min: 0, max: 10000, step: 10,
+            note: "The baseline. 100 means a wallet with no pass earns the raw base SP." },
+          { key: "rankedAttemptsPerDay", label: "Ranked attempts / day", min: 0, max: 1000, step: 1,
+            note: "Deliberately the same for free and pass wallets: the pass changes SP economics, not how many shots at the board you get." },
+          { key: "freeDailySpCap", label: "Daily SP cap — baseline", min: 0, max: 1000000, step: 10,
+            note: "No live season and no in-date pass. This is the ceiling for the whole day, across every mode." },
+          { key: "boostedDailySpCap", label: "Daily SP cap — boosted", min: 0, max: 1000000, step: 50,
+            note: "A live season OR an in-date pass. High enough that a human never reaches it (the UI renders it as ∞) but still bounding a scripted client." },
+          { key: "normalDailySpCap", label: "Normal-mode sub-cap", min: 0, max: 1000000, step: 10,
+            note: "How much of a season day unlimited normal play may produce. Between seasons there is no sub-cap at all — it exists to make verified runs worth spending." },
+          { key: "cyclePointsCap", label: "Cycle points cap", min: 0, max: 10000, step: 1,
+            note: "Base SP = min(cycles, this) + combat + skill bonus, all capped by the total below." },
+          { key: "combatKillsPerPoint", label: "Kills per combat point", min: 1, max: 10000, step: 1,
+            note: "Combat points are paid on echoes destroyed, not echoes joined — kills, not survival." },
+          { key: "combatPointsCap", label: "Combat points cap", min: 0, max: 10000, step: 1,
+            note: "The most combat can contribute to one run." },
+          { key: "baseSpCap", label: "Base SP cap / run", min: 0, max: 100000, step: 1,
+            note: "The ceiling on one run before any multiplier. Raising it re-prices the whole SP economy — the daily caps are set in units of it." },
+        ],
+      },
+      {
+        key: "arena",
+        title: "Arena constants",
+        blurb:
+          "Cycle length and echo combat, shared by the game loop and the server's plausibility check. " +
+          "Change these and every score in the game moves with them — the leaderboard does not rescale.",
+        fields: [
+          { key: "baseCycleLength", label: "Cycle 1 length", hint: "seconds", min: 1, max: 3600, step: 1,
+            note: "Every later cycle is one second longer than the one before it." },
+          { key: "echoDestroyBonus", label: "Echo destroy bonus", hint: "points", min: 0, max: 1000000, step: 10,
+            note: "Score for destroying an echo, before the per-echo and health terms." },
+          { key: "maxEchoHealth", label: "Max echo health", min: 1, max: 1000, step: 1,
+            note: "How much an echo can soak at its toughest." },
+        ],
+      },
+      {
+        key: "antiCheat",
+        title: "Submission bounds",
+        blurb:
+          "What the server rejects a submitted run for. The simulation runs in the browser, so a score " +
+          "cannot be verified exactly — these bound what an honest run is physically able to produce.",
+        fields: [
+          { key: "maxCycle", label: "Max cycle", min: 1, max: 100000, step: 10,
+            note: "A run reporting a deeper cycle than this is refused outright." },
+          { key: "maxEchoes", label: "Max echoes", min: 1, max: 100000, step: 10,
+            note: "One echo joins per completed cycle, so this is a backstop, not the real limit." },
+          { key: "scoreCeilingSlackPct", label: "Score ceiling headroom", hint: "%", min: 100, max: 100000, step: 10,
+            note: "Multiplier on the theoretical maximum before a score is called fabricated. Below 100 the ceiling sits under what a good run reaches and every honest run is rejected." },
+          { key: "scoreCeilingFlat", label: "Flat headroom", hint: "points", min: 0, max: 100000000, step: 100,
+            note: "Added on top of the multiplier, so short runs are not judged on a tiny ceiling." },
+          { key: "survivalSlackSeconds", label: "Survival slack", hint: "seconds", min: 0, max: 3600, step: 1,
+            note: "How far the reported survival time may sit outside the window its reported cycle implies. One second absorbs the frame the death lands on." },
+        ],
+      },
+    ];
+
+    /** The kill switches, each with the consequence of turning it off spelled out. */
+    const FLAGS = [
+      { key: "storeEnabled", label: "Store", note: "Off closes the Store outright: no cards, no equipping, and every pilot flies the base look." },
+      { key: "rankedEnabled", label: "Ranked mode", note: "Off shuts rated season play. Players fall back to normal mode." },
+      { key: "openVerifiedEnabled", label: "Open-verified mode", note: "Off shuts the pass-only verified lane. Players fall back to normal mode." },
+      { key: "normalEnabled", label: "Normal mode", note: "The mode every closed window falls back to. Turning this off with the others off is refused — use maintenance mode." },
+      { key: "questsEnabled", label: "Daily quests", note: "Off stops quests being offered and paid. Balances already banked are untouched." },
+      { key: "leaderboardEnabled", label: "Leaderboard", note: "Off hides the board. Runs are still recorded and still rated." },
+      { key: "maintenanceMode", label: "Maintenance mode", danger: true, note: "Refuses every ticket and every run submission with the message below. Reads keep working, so players can still see their record." },
+    ];
+
+    const statusEl = document.getElementById("status");
+    const sectionsEl = document.getElementById("sections");
+    const adminTokenInput = document.getElementById("admin-token");
+    const questModal = document.getElementById("quest-modal");
+    const planModal = document.getElementById("plan-modal");
+
+    let state = { settings: null, defaults: null, quests: [], plans: [], planNetworks: [] };
+    let modalHandle = null;
+    let editingQuest = null;
+    let editingPlan = null;
+
+    try { adminTokenInput.value = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch {}
+    adminTokenInput.addEventListener("change", function () {
+      try {
+        const value = adminTokenInput.value.trim();
+        if (value) window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, value);
+        else window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {}
+      load();
+    });
+
+    function token() { return adminTokenInput.value.trim(); }
+
+    function setStatus(text, tone) {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (tone ? " " + tone : "");
+    }
+
+    async function api(path, method, body) {
+      const response = await fetch(path, {
+        method: method || "GET",
+        headers: Object.assign(
+          { "x-admin-token": token() },
+          body ? { "Content-Type": "application/json" } : {},
+        ),
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(data.error || data.message || ("Request failed (" + response.status + ")"));
+      return data;
+    }
+
+    async function load() {
+      if (!token()) {
+        setStatus("Paste the admin token to load the settings.", "error");
+        sectionsEl.innerHTML = '<div class="empty">Game settings are behind the admin token.</div>';
+        adminTokenInput.focus();
+        return;
+      }
+      setStatus("Loading…");
+      try {
+        const [config, plans] = await Promise.all([
+          api("/api/admin/game/config"),
+          api("/api/admin/game/pass-plans").catch(function (error) {
+            // The plan table needs the payment networks and an RPC; a settings page that would not
+            // render at all because a chain is unreachable is worse than one missing a section.
+            return { plans: [], networks: [], error: error.message };
+          }),
+        ]);
+        state = {
+          settings: config.settings,
+          defaults: config.defaults,
+          quests: config.quests || [],
+          plans: plans.plans || [],
+          planNetworks: plans.networks || [],
+          planError: plans.error || null,
+        };
+        renderSections();
+        renderQuests();
+        renderPlans();
+        setStatus(config.updatedAt ? "Saved " + relativeTime(config.updatedAt) : "Loaded", "success");
+      } catch (error) {
+        setStatus(error.message, "error");
+        sectionsEl.innerHTML = '<div class="error">' + escapeHtml(error.message) + "</div>";
+      }
+    }
+
+    function relativeTime(iso) {
+      const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);
+      if (!Number.isFinite(seconds)) return "recently";
+      if (seconds < 60) return "just now";
+      if (seconds < 3600) return Math.round(seconds / 60) + "m ago";
+      if (seconds < 86400) return Math.round(seconds / 3600) + "h ago";
+      return Math.round(seconds / 86400) + "d ago";
+    }
+
+    /* Settings sections --------------------------------------------------------------------- */
+
+    function renderSections() {
+      sectionsEl.innerHTML = SECTIONS.map(sectionCard).join("") + featuresCard();
+      sectionsEl.querySelectorAll("input, textarea").forEach(function (input) {
+        input.addEventListener("input", function () { markDirty(input.closest(".settings-card")); });
+        input.addEventListener("change", function () { markDirty(input.closest(".settings-card")); });
+      });
+      renderSkillTiers();
+    }
+
+    function sectionCard(section) {
+      const values = state.settings[section.key];
+      return (
+        '<section class="settings-card" data-section="' + section.key + '">' +
+          '<div class="settings-head">' +
+            '<div class="titles"><h2>' + escapeHtml(section.title) + "</h2><p>" + escapeHtml(section.blurb) + "</p></div>" +
+            '<div class="settings-actions">' +
+              '<span class="settings-dirty" hidden>Unsaved</span>' +
+              '<button type="button" class="button ghost" data-act="reset">Restore defaults</button>' +
+              '<button type="button" class="button primary" data-act="save">Save</button>' +
+            "</div>" +
+          "</div>" +
+          '<div class="settings-body">' +
+            '<div class="settings-grid">' +
+              section.fields.map(function (field) {
+                const id = section.key + "-" + field.key;
+                return (
+                  '<div class="field">' +
+                    '<label for="' + id + '">' + escapeHtml(field.label) +
+                      (field.hint ? ' <span class="hint">' + escapeHtml(field.hint) + "</span>" : "") +
+                    "</label>" +
+                    '<input id="' + id + '" data-key="' + field.key + '" type="number" ' +
+                      'min="' + field.min + '" max="' + field.max + '" step="' + field.step + '" ' +
+                      'value="' + escapeHtml(String(values[field.key])) + '" />' +
+                    '<p class="note">' + escapeHtml(field.note) + "</p>" +
+                  "</div>"
+                );
+              }).join("") +
+            "</div>" +
+            (section.key === "economy" ? skillTierBlock() : "") +
+          "</div>" +
+        "</section>"
+      );
+    }
+
+    /**
+     * The skill bonus is a ladder, not a single number, so it gets its own repeatable editor: a score
+     * to reach and the flat SP it adds. The game reads the richest tier a run qualifies for.
+     */
+    function skillTierBlock() {
+      return (
+        '<section class="form-section">' +
+          "<h3>Skill bonus ladder</h3>" +
+          '<div id="skill-tiers"></div>' +
+          '<button type="button" class="button ghost" id="skill-add" style="margin-top:10px">Add a tier</button>' +
+        "</section>"
+      );
+    }
+
+    function renderSkillTiers() {
+      const host = document.getElementById("skill-tiers");
+      if (!host) return;
+      const tiers = state.settings.economy.skillBonusTiers || [];
+      host.innerHTML = tiers.length
+        ? tiers.map(function (tier, index) {
+            return (
+              '<div class="form-row" data-tier="' + index + '" style="margin-bottom:8px">' +
+                '<div class="field"><label>Score at least</label>' +
+                  '<input type="number" min="0" step="100" data-tier-field="score" value="' + escapeHtml(String(tier.score)) + '" /></div>' +
+                '<div class="field"><label>Adds <span class="hint">SP</span></label>' +
+                  '<input type="number" min="0" step="1" data-tier-field="bonus" value="' + escapeHtml(String(tier.bonus)) + '" /></div>' +
+                '<div class="field"><span class="field-label">&nbsp;</span>' +
+                  '<button type="button" class="button ghost danger" data-tier-remove="' + index + '">Remove</button></div>' +
+              "</div>"
+            );
+          }).join("")
+        : '<p class="note" style="color:var(--dim);font-size:11.5px">No ladder: every run gets 0 skill bonus.</p>';
+
+      host.querySelectorAll("input").forEach(function (input) {
+        input.addEventListener("input", function () { markDirty(host.closest(".settings-card")); });
+      });
+    }
+
+    sectionsEl.addEventListener("click", async function (event) {
+      const remove = event.target.closest("[data-tier-remove]");
+      if (remove) {
+        readSkillTiers();
+        state.settings.economy.skillBonusTiers.splice(Number(remove.dataset.tierRemove), 1);
+        renderSkillTiers();
+        markDirty(remove.closest(".settings-card"));
+        return;
+      }
+      if (event.target.id === "skill-add") {
+        readSkillTiers();
+        state.settings.economy.skillBonusTiers.push({ score: 0, bonus: 0 });
+        renderSkillTiers();
+        markDirty(event.target.closest(".settings-card"));
+        return;
+      }
+
+      const button = event.target.closest("[data-act]");
+      if (!button) return;
+      const card = button.closest(".settings-card");
+      const section = card.dataset.section;
+
+      try {
+        if (button.dataset.act === "save") {
+          setStatus("Saving…");
+          const data = await api("/api/admin/game/settings/" + section, "PATCH", readSection(section));
+          state.settings = data.settings;
+          renderSections();
+          setStatus("Saved", "success");
+          return;
+        }
+        if (button.dataset.act === "reset") {
+          const ok = await DashModal.confirm({
+            title: "Restore the shipped values?",
+            body: "Every field in this section goes back to what the backend was built with.",
+            tone: "warn",
+            confirmLabel: "Restore defaults",
+          });
+          if (!ok) return;
+          setStatus("Restoring…");
+          const data = await api("/api/admin/game/settings/" + section + "/reset", "POST");
+          state.settings = data.settings;
+          renderSections();
+          setStatus("Restored", "success");
+        }
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    /** Pull the skill ladder out of the DOM before anything re-renders it. */
+    function readSkillTiers() {
+      const host = document.getElementById("skill-tiers");
+      if (!host) return;
+      const tiers = [];
+      host.querySelectorAll("[data-tier]").forEach(function (row) {
+        tiers.push({
+          score: Number(row.querySelector('[data-tier-field="score"]').value) || 0,
+          bonus: Number(row.querySelector('[data-tier-field="bonus"]').value) || 0,
+        });
+      });
+      state.settings.economy.skillBonusTiers = tiers;
+    }
+
+    function readSection(key) {
+      if (key === "features") return readFeatures();
+      const card = sectionsEl.querySelector('[data-section="' + key + '"]');
+      const body = {};
+      card.querySelectorAll("input[data-key]").forEach(function (input) {
+        body[input.dataset.key] = Number(input.value);
+      });
+      if (key === "economy") {
+        readSkillTiers();
+        body.skillBonusTiers = state.settings.economy.skillBonusTiers;
+      }
+      return body;
+    }
+
+    function featuresCard() {
+      const values = state.settings.features;
+      return (
+        '<section class="settings-card" data-section="features">' +
+          '<div class="settings-head">' +
+            '<div class="titles"><h2>Features</h2><p>' +
+              escapeHtml(
+                "Kill switches. Each one shuts a whole feature off for every player without a deploy — " +
+                "what you reach for when something is being abused mid-season and the fix is not ready.",
+              ) +
+            "</p></div>" +
+            '<div class="settings-actions">' +
+              '<span class="settings-dirty" hidden>Unsaved</span>' +
+              '<button type="button" class="button ghost" data-act="reset">Restore defaults</button>' +
+              '<button type="button" class="button primary" data-act="save">Save</button>' +
+            "</div>" +
+          "</div>" +
+          '<div class="settings-body">' +
+            '<div class="flag-list">' +
+              FLAGS.map(function (flag) {
+                const id = "flag-" + flag.key;
+                return (
+                  '<div class="flag' + (flag.danger ? " is-danger" : "") + '">' +
+                    '<label class="switch">' +
+                      '<input id="' + id + '" data-flag="' + flag.key + '" type="checkbox"' + (values[flag.key] ? " checked" : "") + " />" +
+                      '<span class="switch-track"><span class="switch-knob"></span></span>' +
+                      '<span class="switch-text">' + escapeHtml(flag.label) + "</span>" +
+                    "</label>" +
+                    "<p>" + escapeHtml(flag.note) + "</p>" +
+                  "</div>"
+                );
+              }).join("") +
+            "</div>" +
+            '<div class="field wide">' +
+              '<label for="maintenance-message">Maintenance message <span class="hint">the only thing a player is shown</span></label>' +
+              '<textarea id="maintenance-message" rows="2" maxlength="240">' + escapeHtml(values.maintenanceMessage || "") + "</textarea>" +
+            "</div>" +
+          "</div>" +
+        "</section>"
+      );
+    }
+
+    function readFeatures() {
+      const body = {};
+      sectionsEl.querySelectorAll("[data-flag]").forEach(function (input) {
+        body[input.dataset.flag] = input.checked;
+      });
+      body.maintenanceMessage = document.getElementById("maintenance-message").value.trim();
+      return body;
+    }
+
+    function markDirty(card) {
+      if (!card) return;
+      const pill = card.querySelector(".settings-dirty");
+      if (pill) pill.hidden = false;
+    }
+
+    /* Quests -------------------------------------------------------------------------------- */
+
+    const METRIC_LABELS = { runs: "Finished runs", echoes: "Echoes joined", best_cycle: "Deepest cycle" };
+
+    function renderQuests() {
+      const body = document.getElementById("quests-body");
+      if (!state.quests.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty">No quests. Players simply see none.</td></tr>';
+        return;
+      }
+      body.innerHTML = state.quests.map(function (quest) {
+        return (
+          '<tr data-key="' + escapeHtml(quest.key) + '"' + (quest.enabled ? "" : ' class="row-off"') + ">" +
+            "<td><b>" + escapeHtml(quest.label) + "</b></td>" +
+            "<td><code>" + escapeHtml(quest.key) + "</code></td>" +
+            "<td>" + escapeHtml(METRIC_LABELS[quest.metric] || quest.metric) + "</td>" +
+            '<td class="num">' + quest.target.toLocaleString() + "</td>" +
+            '<td class="num">' + quest.reward.toLocaleString() + " SP</td>" +
+            "<td>" + (quest.enabled ? '<span class="badge tone-open">Offered</span>' : '<span class="badge tone-off">Off</span>') + "</td>" +
+            '<td class="actions">' +
+              '<button type="button" class="button ghost" data-act="edit">Edit</button> ' +
+              '<button type="button" class="button ghost danger" data-act="delete">Delete</button>' +
+            "</td>" +
+          "</tr>"
+        );
+      }).join("");
+    }
+
+    document.getElementById("quests-body").addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-act]");
+      if (!button) return;
+      const key = button.closest("tr").dataset.key;
+      const quest = state.quests.find(function (row) { return row.key === key; });
+      if (!quest) return;
+
+      if (button.dataset.act === "edit") return openQuestModal(quest);
+      const ok = await DashModal.confirm({
+        title: "Delete " + quest.label + "?",
+        body: "It stops being offered immediately. SP already paid for it stays banked — the ledger is append-only.",
+        tone: "danger",
+        confirmLabel: "Delete quest",
+      });
+      if (!ok) return;
+      try {
+        setStatus("Deleting…");
+        await api("/api/admin/game/quests/" + encodeURIComponent(key), "DELETE");
+        await load();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("quest-new").addEventListener("click", function () { openQuestModal(null); });
+
+    document.getElementById("quests-reset").addEventListener("click", async function () {
+      const ok = await DashModal.confirm({
+        title: "Restore the shipped quests?",
+        body: "The three built-in quests go back to their original label, counter, target and reward.",
+        note: "Quests you added yourself are left as they are.",
+        tone: "warn",
+        confirmLabel: "Restore defaults",
+      });
+      if (!ok) return;
+      try {
+        setStatus("Restoring…");
+        await api("/api/admin/game/quests/reset", "POST");
+        await load();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    function openQuestModal(quest) {
+      editingQuest = quest;
+      document.getElementById("quest-modal-title").textContent = quest ? "Edit " + quest.label : "Add a quest";
+      document.getElementById("q-key").value = quest ? quest.key : "";
+      document.getElementById("q-key").disabled = !!quest;
+      document.getElementById("q-label").value = quest ? quest.label : "";
+      document.getElementById("q-metric").value = quest ? quest.metric : "runs";
+      document.getElementById("q-target").value = quest ? quest.target : 1;
+      document.getElementById("q-reward").value = quest ? quest.reward : 5;
+      document.getElementById("q-enabled").checked = quest ? quest.enabled : true;
+      document.getElementById("q-sort").value = quest ? quest.sortOrder : 100;
+      document.getElementById("quest-error").hidden = true;
+      modalHandle = DashModal.open(questModal, { dismissible: true });
+    }
+
+    document.getElementById("quest-save").addEventListener("click", async function () {
+      const error = document.getElementById("quest-error");
+      error.hidden = true;
+      try {
+        setStatus("Saving…");
+        await api("/api/admin/game/quests", "POST", {
+          key: editingQuest ? editingQuest.key : document.getElementById("q-key").value.trim().toLowerCase(),
+          label: document.getElementById("q-label").value.trim(),
+          metric: document.getElementById("q-metric").value,
+          target: Number(document.getElementById("q-target").value),
+          reward: Number(document.getElementById("q-reward").value),
+          enabled: document.getElementById("q-enabled").checked,
+          sortOrder: Number(document.getElementById("q-sort").value),
+        });
+        if (modalHandle) modalHandle.close();
+        await load();
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        setStatus(err.message, "error");
+      }
+    });
+
+    /* Game Pass plans ----------------------------------------------------------------------- */
+
+    function renderPlans() {
+      const body = document.getElementById("plans-body");
+      if (state.planError) {
+        body.innerHTML = '<tr><td colspan="7" class="error">' + escapeHtml(state.planError) + "</td></tr>";
+        document.getElementById("plan-chains").innerHTML = "";
+        return;
+      }
+      if (!state.plans.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty">No plans. Nothing is on sale.</td></tr>';
+      } else {
+        body.innerHTML = state.plans.map(function (plan) {
+          return (
+            '<tr data-id="' + plan.id + '"' + (plan.enabled ? "" : ' class="row-off"') + ">" +
+              '<td class="num">' + plan.id + "</td>" +
+              "<td><b>" + escapeHtml(plan.label) + "</b></td>" +
+              "<td><code>" + escapeHtml(plan.key) + "</code></td>" +
+              '<td class="num">' + describeDuration(plan.durationSeconds) + "</td>" +
+              '<td class="num">' + formatUsd(plan.priceCents) + "</td>" +
+              "<td>" + (plan.enabled ? '<span class="badge tone-open">On sale</span>' : '<span class="badge tone-off">Off sale</span>') + "</td>" +
+              '<td class="actions">' +
+                '<button type="button" class="button ghost" data-act="edit">Edit</button> ' +
+                '<button type="button" class="button ghost danger" data-act="delete">Remove</button>' +
+              "</td>" +
+            "</tr>"
+          );
+        }).join("");
+      }
+      renderPlanChains();
+    }
+
+    /**
+     * Per network, what its checkout contract actually charges for each plan. This is the check the
+     * table cannot do for itself: the contract is the authority, and drift here means a buyer's
+     * transaction reverts after they have already paid gas to approve.
+     */
+    function renderPlanChains() {
+      const host = document.getElementById("plan-chains");
+      if (!state.planNetworks.length) {
+        host.innerHTML = '<p class="note" style="color:var(--dim);font-size:11.5px;margin-top:12px">No payment networks are enabled, so there is nothing to reconcile against.</p>';
+        return;
+      }
+      host.innerHTML = state.planNetworks.map(function (network) {
+        const rows = network.plans.map(function (row) {
+          const plan = state.plans.find(function (p) { return p.id === row.id; });
+          if (!row.drift) {
+            return (
+              "<tr><td>" + escapeHtml(plan ? plan.label : "Plan " + row.id) + "</td>" +
+                '<td colspan="3" class="empty">' + (network.readable ? "Not seeded on this contract" : "Chain unreadable") + "</td></tr>"
+            );
+          }
+          const priceOk = !row.drift.price;
+          const durationOk = !row.drift.duration;
+          return (
+            "<tr>" +
+              "<td>" + escapeHtml(plan ? plan.label : "Plan " + row.id) + "</td>" +
+              "<td>" + (row.enabledOnChain ? '<span class="badge tone-match">Seeded</span>' : '<span class="badge tone-off">Disabled</span>') + "</td>" +
+              '<td class="num">' + (priceOk
+                ? '<span class="badge tone-match">Price matches</span>'
+                : '<span class="badge tone-drift">Chain charges ' + escapeHtml(atomicToUsd(row.priceOnChain, network.stablecoinDecimals)) + "</span>") + "</td>" +
+              '<td class="num">' + (durationOk
+                ? '<span class="badge tone-match">Duration matches</span>'
+                : '<span class="badge tone-drift">Chain grants ' + describeDuration(row.durationOnChain) + "</span>") + "</td>" +
+            "</tr>"
+          );
+        }).join("");
+
+        const drifted = network.plans.some(function (row) { return row.drift && (row.drift.price || row.drift.duration); });
+        return (
+          '<div class="chain-block">' +
+            "<h4>Chain " + network.chainId + " · " + escapeHtml(network.stablecoinSymbol) + " · " +
+              '<code>' + escapeHtml(network.checkoutContract) + "</code></h4>" +
+            '<div class="table-scroll"><table class="cfg-table"><tbody>' + rows + "</tbody></table></div>" +
+            (drifted
+              ? '<p class="drift-note">This contract disagrees with the table above. Buyers on this chain will have ' +
+                "their <code>buyPass</code> revert after approving — run <code>setPlan()</code> to match, or take the " +
+                "plan off sale until you can.</p>"
+              : "") +
+          "</div>"
+        );
+      }).join("");
+    }
+
+    function describeDuration(seconds) {
+      if (seconds == null) return "—";
+      const days = seconds / 86400;
+      if (days >= 1 && Number.isInteger(days)) return days + (days === 1 ? " day" : " days");
+      const hours = seconds / 3600;
+      if (hours >= 1 && Number.isInteger(hours)) return hours + (hours === 1 ? " hour" : " hours");
+      return seconds.toLocaleString() + "s";
+    }
+
+    function formatUsd(cents) {
+      return "$" + (cents / 100).toFixed(2);
+    }
+
+    /** An on-chain atomic amount back into dollars, using that token's decimals. */
+    function atomicToUsd(atomic, decimals) {
+      try {
+        const value = BigInt(atomic);
+        const cents = decimals >= 2 ? value / 10n ** BigInt(decimals - 2) : value * 10n ** BigInt(2 - decimals);
+        return formatUsd(Number(cents));
+      } catch {
+        return "an unreadable amount";
+      }
+    }
+
+    document.getElementById("plans-body").addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-act]");
+      if (!button) return;
+      const id = Number(button.closest("tr").dataset.id);
+      const plan = state.plans.find(function (row) { return row.id === id; });
+      if (!plan) return;
+
+      if (button.dataset.act === "edit") return openPlanModal(plan);
+      const ok = await DashModal.confirm({
+        title: "Remove " + plan.label + "?",
+        body:
+          "The row is deleted. If this is one of the plans the backend ships with, the compiled table " +
+          "puts it straight back — take it off sale instead.",
+        note: "Passes already bought are unaffected: an entitlement is a dated row, not a subscription.",
+        tone: "danger",
+        confirmLabel: "Remove plan",
+      });
+      if (!ok) return;
+      try {
+        setStatus("Removing…");
+        await api("/api/admin/game/pass-plans/" + id, "DELETE");
+        await load();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    });
+
+    document.getElementById("plan-new").addEventListener("click", function () { openPlanModal(null); });
+
+    function openPlanModal(plan) {
+      editingPlan = plan;
+      document.getElementById("plan-modal-title").textContent = plan ? "Edit " + plan.label : "Add a plan";
+      document.getElementById("p-id").value = plan ? plan.id : "";
+      document.getElementById("p-id").disabled = !!plan;
+      document.getElementById("p-key").value = plan ? plan.key : "";
+      document.getElementById("p-label").value = plan ? plan.label : "";
+      document.getElementById("p-days").value = plan ? plan.durationSeconds / 86400 : 7;
+      document.getElementById("p-price").value = plan ? (plan.priceCents / 100).toFixed(2) : "3.99";
+      document.getElementById("p-enabled").checked = plan ? plan.enabled : true;
+      document.getElementById("plan-error").hidden = true;
+      modalHandle = DashModal.open(planModal, { dismissible: true });
+    }
+
+    planModal.querySelectorAll("[data-preset-for]").forEach(function (group) {
+      group.addEventListener("click", function (event) {
+        const button = event.target.closest("button[data-value]");
+        if (!button) return;
+        document.getElementById(group.dataset.presetFor).value = button.dataset.value;
+      });
+    });
+
+    document.getElementById("plan-save").addEventListener("click", async function () {
+      const error = document.getElementById("plan-error");
+      error.hidden = true;
+      try {
+        setStatus("Saving…");
+        await api("/api/admin/game/pass-plans", "POST", {
+          id: Number(document.getElementById("p-id").value),
+          key: document.getElementById("p-key").value.trim().toLowerCase(),
+          label: document.getElementById("p-label").value.trim(),
+          durationSeconds: Math.round(Number(document.getElementById("p-days").value) * 86400),
+          // Dollars in the form, whole cents on the wire: the atomic amount is derived per network
+          // from the stablecoin's decimals, so the dollar figure has to survive the trip exactly.
+          priceCents: Math.round(Number(document.getElementById("p-price").value) * 100),
+          enabled: document.getElementById("p-enabled").checked,
+        });
+        if (modalHandle) modalHandle.close();
+        await load();
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        setStatus(err.message, "error");
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>
