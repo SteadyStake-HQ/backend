@@ -235,6 +235,15 @@ async function indexChain(
         endedAt: null,
         status: 'active',
         returnedUsdc6: null,
+        // A backfill reads block logs long after the fact, and the price a token had at a buy that
+        // happened last month is not something any feed will hand back. Prices are stamped only by
+        // the code paths that are present when a run happens, and upsertDcaPlans leaves these
+        // columns alone so a reindex cannot erase the ones that were.
+        startPriceUsd: null,
+        lastPriceUsd: null,
+        lastPriceAt: null,
+        avgPriceUsd: null,
+        pricedCount: 0,
       };
       rows.set(k, row);
     }

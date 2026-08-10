@@ -146,6 +146,18 @@ export interface PlanDetail {
   lastExecutionAt: string | null;
   endedAt: string | null;
 
+  // ---- Target-token price, as stamped at each buy. Null for buys that predate price recording,
+  // and for any buy that ran while no feed could quote the token. ----
+  /** USD price at the plan's first priced buy. */
+  startPriceUsd: number | null;
+  /** USD price at its most recent priced buy. */
+  lastPriceUsd: number | null;
+  lastPriceAt: string | null;
+  /** Mean of the prices stamped on its buys so far. */
+  avgPriceUsd: number | null;
+  /** Buys carrying a price. Below `executedCount` whenever some ran without one. */
+  pricedCount: number;
+
   /** false when the plan has no database row — it exists on-chain but its history was never
    * recorded, so dates/committed are shown as "Not recorded" instead of being inferred. */
   recorded: boolean;
@@ -482,6 +494,13 @@ function buildPlan(
         ? new Date(lastExecutionTime * 1000).toISOString()
         : null,
     endedAt: row?.endedAt ? row.endedAt.toISOString() : null,
+    // Only the stored row can answer these: a price is a fact about the moment a buy happened, and
+    // the struct does not keep it.
+    startPriceUsd: row?.startPriceUsd ?? null,
+    lastPriceUsd: row?.lastPriceUsd ?? null,
+    lastPriceAt: row?.lastPriceAt ? row.lastPriceAt.toISOString() : null,
+    avgPriceUsd: row?.avgPriceUsd ?? null,
+    pricedCount: row?.pricedCount ?? 0,
     recorded: row != null,
     live: live != null,
   };

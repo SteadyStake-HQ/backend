@@ -10,7 +10,12 @@ import { getRpc, getVaultUsdcGasTank } from '../config';
 import { DCA_VAULT_ABI, getChain } from '../run-executor';
 import { SchedulerService } from './scheduler.service';
 import { getPlanExecutionMode } from '../plans/plan-execution-state';
-import { isSupabaseConfigured } from '../supabase/dca-plans-store';
+import {
+  getMemberPlanPriceStats,
+  isSupabaseConfigured,
+  type PlanPriceStats,
+} from '../supabase/dca-plans-store';
+import { peekTokenPriceQuotes } from '../token-price';
 import {
   getMemberPlanAdminControlMap,
   planAdminControlKey,
@@ -21,6 +26,9 @@ import {
   planExecutionGateKey,
   type PlanExecutionGate,
 } from '../supabase/plan-execution-gates';
+
+/** A schedule with no target token reads as this; nothing can price it. */
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 const FREQUENCY_INTERVAL_SECONDS: Record<number, number> = {
   0: 60,
@@ -69,11 +77,15 @@ export class PlanTimingController {
     // plans without hold notices rather than making the whole dashboard countdown unavailable.
     let adminControls = new Map<string, PlanAdminControl>();
     let executionGates = new Map<string, PlanExecutionGate>();
+    // Buy prices recorded against this wallet's plans. Same reasoning as the holds above: a
+    // database hiccup should cost the page its price history, not its countdown.
+    let priceStats = new Map<string, PlanPriceStats>();
     if (isSupabaseConfigured()) {
       try {
-        [adminControls, executionGates] = await Promise.all([
+        [adminControls, executionGates, priceStats] = await Promise.all([
           getMemberPlanAdminControlMap(chainId, user),
           getMemberPlanExecutionGateMap(chainId, user),
+          getMemberPlanPriceStats(chainId, user),
         ]);
       } catch {
         // Leave empty: the executor enforces holds and resume gates regardless of what this view
@@ -199,6 +211,42 @@ export class PlanTimingController {
         }),
       );
 
+      /*
+       * What each plan's token is worth now, beside what it was worth at the plan's buys.
+       *
+       * One batched read for the whole wallet, and a cached one: this endpoint is polled every few
+       * seconds for a countdown, so it takes whatever price is already known and lets the refresh
+       * happen behind the response rather than holding the countdown for a feed.
+       */
+      const targetTokens = plans
+        .map((plan) => plan.targetToken)
+        .filter((token) => token != null && token.toLowerCase() !== ZERO_ADDRESS);
+      const quoteByToken = new Map(
+        peekTokenPriceQuotes(chainId, targetTokens).map((quote) => [quote.address, quote]),
+      );
+      const plansWithPrices = plans.map((plan) => {
+        const quote = quoteByToken.get(plan.targetToken.toLowerCase()) ?? null;
+        const stats = priceStats.get(plan.scheduleId) ?? null;
+        return {
+          ...plan,
+          price: {
+            /** Market price right now. Null when no feed quotes this token (every testnet mock). */
+            currentUsd: quote?.usd ?? null,
+            currentSource: quote?.source ?? null,
+            /** True when every source is failing and `currentUsd` is the last good one. */
+            currentStale: quote?.stale ?? false,
+            /** Price stamped at this plan's first buy, and at its most recent one. */
+            startUsd: stats?.startPriceUsd ?? null,
+            lastUsd: stats?.lastPriceUsd ?? null,
+            lastAt: stats?.lastPriceAt ? stats.lastPriceAt.toISOString() : null,
+            /** Mean of the prices stamped on its buys so far. */
+            avgUsd: stats?.avgPriceUsd ?? null,
+            /** How many buys carry a price — below executedCount when a feed was down for some. */
+            pricedCount: stats?.pricedCount ?? 0,
+          },
+        };
+      });
+
       return {
         ok: true,
         chainId,
@@ -216,7 +264,7 @@ export class PlanTimingController {
           intervalMs: timing.intervalMs,
           isRunning: timing.isRunning,
         },
-        plans,
+        plans: plansWithPrices,
       };
     } catch (error) {
       throw new ServiceUnavailableException({

@@ -37,6 +37,15 @@ export interface DcaPlanRow {
   endedAt: Date | null;
   status: DcaPlanStatus;
   returnedUsdc6: string | null;
+  /** USD price of the target token at the plan's first recorded buy. Null before one is recorded. */
+  startPriceUsd: number | null;
+  /** USD price at the most recent recorded buy — "what this token cost you last time". */
+  lastPriceUsd: number | null;
+  lastPriceAt: Date | null;
+  /** Mean of the prices stamped on this plan's buys so far. Null until one has a price. */
+  avgPriceUsd: number | null;
+  /** How many buys carry a price. Below executedCount when a feed was down for some of them. */
+  pricedCount: number;
 }
 
 function getPool(): Pool | null {
@@ -76,6 +85,20 @@ export const DCA_PLANS_DDL = `
   );
   CREATE INDEX IF NOT EXISTS dca_plans_member_idx ON dca_plans (chain_id, user_addr);
 
+  -- What the target token was worth at each buy. Added after the table shipped, so deployments
+  -- that already have it need the columns too.
+  --
+  -- The average is kept as a running sum and a sample count rather than a stored mean: a buy is
+  -- recorded one at a time and the price of the earlier ones is not re-fetchable, so an average has
+  -- to be extendable without rereading history. price_samples counts only the buys a feed
+  -- actually quoted, which is why it can sit below executed_count — a run that happened while every
+  -- price source was down is a real buy with no price, and averaging it in as zero would be a lie.
+  ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS start_price_usd double precision;
+  ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS last_price_usd double precision;
+  ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS last_price_at timestamptz;
+  ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS price_sum_usd double precision NOT NULL DEFAULT 0;
+  ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS price_samples integer NOT NULL DEFAULT 0;
+
   CREATE TABLE IF NOT EXISTS dca_index_cursor (
     chain_id integer PRIMARY KEY,
     last_block bigint NOT NULL,
@@ -99,7 +122,16 @@ export const DCA_PLANS_DDL = `
   ${NETWORK_ALLOCATIONS_DDL}
 `;
 
+/** A stored double, or null when the column is null — never NaN, which JSON cannot carry. */
+function numberOrNull(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === 'string' ? parseFloat(value) : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function rowFromDb(r: Record<string, unknown>): DcaPlanRow {
+  const priceSamples = Number(r.price_samples ?? 0);
+  const priceSum = numberOrNull(r.price_sum_usd) ?? 0;
   return {
     chainId: Number(r.chain_id),
     userAddr: r.user_addr as string,
@@ -115,6 +147,11 @@ function rowFromDb(r: Record<string, unknown>): DcaPlanRow {
     endedAt: r.ended_at ? new Date(r.ended_at as string) : null,
     status: (r.status as DcaPlanStatus) ?? 'active',
     returnedUsdc6: (r.returned_usdc6 as string | null) ?? null,
+    startPriceUsd: numberOrNull(r.start_price_usd),
+    lastPriceUsd: numberOrNull(r.last_price_usd),
+    lastPriceAt: r.last_price_at ? new Date(r.last_price_at as string) : null,
+    avgPriceUsd: priceSamples > 0 ? priceSum / priceSamples : null,
+    pricedCount: priceSamples,
   };
 }
 
@@ -321,17 +358,40 @@ export interface RecordPlanExecutedInput {
   /** false once the vault has retired the schedule (depleted) */
   active: boolean;
   at: Date;
+  /**
+   * USD price of the target token at the moment of the swap. Null when no feed could quote it —
+   * the buy is still recorded, it just carries no price rather than a made-up one.
+   */
+  tokenPriceUsd?: number | null;
 }
 
 /**
  * Record a swap the executor just performed. Values come from the schedule struct read right after
  * the swap, so they are exact rather than accumulated. A plan that is no longer active and was not
  * cancelled has run to completion.
+ *
+ * The price columns are the exception to "values are absolute": `price_sum_usd` accumulates, so it
+ * must move exactly once per buy. `executed_count` is the guard — it comes from the struct and only
+ * advances when a swap really happened, so a retry of the same recording (or the relayer and a
+ * wallet-signed client both reporting the same run) re-reads the same count and adds nothing.
  */
 export async function recordPlanExecuted(input: RecordPlanExecutedInput): Promise<void> {
   const p = getPool();
   if (!p) throw new Error('SUPABASE_DB_URL is not configured.');
   const committed = (BigInt(input.swappedUsdc6) + BigInt(input.remainingUsdc6)).toString();
+  const price =
+    typeof input.tokenPriceUsd === 'number' && Number.isFinite(input.tokenPriceUsd) && input.tokenPriceUsd > 0
+      ? input.tokenPriceUsd
+      : null;
+  /**
+   * True only for a buy this row has not counted yet. Unqualified column references in an UPDATE's
+   * SET list read the *old* row, so this compares the incoming count against the stored one even
+   * though the same statement is overwriting it — the read and the accumulate are therefore one
+   * statement, and two clients reporting the same run cannot both add to the sum.
+   */
+  const isNewBuy = '($4::integer > dca_plans.executed_count)';
+  /** A new buy that a feed actually priced — the only case that extends the average. */
+  const isPricedNewBuy = `(${isNewBuy} AND $9::double precision IS NOT NULL)`;
   await p.query(
     `UPDATE dca_plans SET
        executed_count = $4,
@@ -342,6 +402,11 @@ export async function recordPlanExecuted(input: RecordPlanExecutedInput): Promis
        last_execution_at = $7,
        status = CASE WHEN $8::boolean THEN 'active' ELSE 'completed' END,
        ended_at = CASE WHEN $8::boolean THEN ended_at ELSE COALESCE(ended_at, $7) END,
+       start_price_usd = CASE WHEN ${isPricedNewBuy} THEN COALESCE(start_price_usd, $9) ELSE start_price_usd END,
+       last_price_usd = CASE WHEN ${isPricedNewBuy} THEN $9 ELSE last_price_usd END,
+       last_price_at = CASE WHEN ${isPricedNewBuy} THEN $7 ELSE last_price_at END,
+       price_sum_usd = price_sum_usd + CASE WHEN ${isPricedNewBuy} THEN $9 ELSE 0 END,
+       price_samples = price_samples + CASE WHEN ${isPricedNewBuy} THEN 1 ELSE 0 END,
        updated_at = now()
      WHERE chain_id = $1 AND user_addr = $2 AND schedule_id = $3
        -- never resurrect a cancelled plan
@@ -355,6 +420,7 @@ export async function recordPlanExecuted(input: RecordPlanExecutedInput): Promis
       committed,
       input.at,
       input.active,
+      price,
     ],
   );
 }
@@ -381,6 +447,58 @@ export async function recordPlanCancelled(input: RecordPlanCancelledInput): Prom
      WHERE chain_id = $1 AND user_addr = $2 AND schedule_id = $3`,
     [input.chainId, input.userAddr.toLowerCase(), input.scheduleId, input.returnedUsdc6, input.at],
   );
+}
+
+/** What the target token was worth across one plan's buys, as recorded at each of them. */
+export interface PlanPriceStats {
+  scheduleId: number;
+  /** USD price at the plan's first priced buy — "what it cost when this plan started buying". */
+  startPriceUsd: number | null;
+  /** USD price at its most recent priced buy. */
+  lastPriceUsd: number | null;
+  lastPriceAt: Date | null;
+  /** Mean of the prices stamped on this plan's buys. Null until one carries a price. */
+  avgPriceUsd: number | null;
+  /** Buys that carry a price. Can sit below executedCount — see the DDL note on price_samples. */
+  pricedCount: number;
+  executedCount: number;
+}
+
+/**
+ * Recorded buy prices for one wallet's plans on one chain, keyed by schedule id.
+ *
+ * Read per-member rather than as part of the whole-table read: this answers a question the plan
+ * page asks about one wallet, and it rides along with the timing poll that page already runs.
+ */
+export async function getMemberPlanPriceStats(
+  chainId: number,
+  userAddr: string,
+): Promise<Map<string, PlanPriceStats>> {
+  const p = getPool();
+  if (!p) throw new Error('SUPABASE_DB_URL is not configured.');
+  const { rows } = await p.query(
+    `SELECT schedule_id, start_price_usd, last_price_usd, last_price_at,
+            price_sum_usd, price_samples, executed_count
+       FROM dca_plans
+      WHERE chain_id = $1 AND user_addr = $2`,
+    [chainId, userAddr.toLowerCase()],
+  );
+  const out = new Map<string, PlanPriceStats>();
+  for (const r of rows) {
+    const samples = Number(r.price_samples ?? 0);
+    const sum = numberOrNull(r.price_sum_usd) ?? 0;
+    const scheduleId = Number(r.schedule_id);
+    out.set(String(scheduleId), {
+      scheduleId,
+      startPriceUsd: numberOrNull(r.start_price_usd),
+      lastPriceUsd: numberOrNull(r.last_price_usd),
+      lastPriceAt: r.last_price_at ? new Date(r.last_price_at as string) : null,
+      avgPriceUsd: samples > 0 ? sum / samples : null,
+      pricedCount: samples,
+      executedCount: Number(r.executed_count ?? 0),
+    });
+  }
+  return out;
 }
 
 export async function getIndexCursor(chainId: number): Promise<bigint | null> {

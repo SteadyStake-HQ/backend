@@ -28,6 +28,7 @@ import {
 } from "./plans/plan-execution-state";
 import { getGasProfile, recordRun, RECORD_BUFFER_BPS } from "./gas-profile";
 import { getNativePriceUsd, prefetchNativePrices } from "./native-price";
+import { getTokenPriceUsd } from "./token-price";
 import {
   createPublicClient,
   createWalletClient,
@@ -1481,6 +1482,17 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               functionName: "getSchedule",
               args: [user, item.scheduleId],
             })) as { amountPerInterval: bigint; totalAmount: bigint; executedCount: bigint; active: boolean };
+            /*
+             * What the token was worth at this buy. Stamped here because now is the only time it can
+             * be: no feed will tell us next week what a token cost on the afternoon this run
+             * happened, so a price not captured at the run is a price the plan never gets to show.
+             * Best-effort by design — the buy is recorded either way, with no price rather than a
+             * guessed one (see recordPlanExecuted).
+             */
+            const tokenPriceUsd =
+              item.targetToken != null
+                ? await getTokenPriceUsd(chainId, item.targetToken).catch(() => null)
+                : null;
             await recordPlanExecuted({
               chainId,
               userAddr: userAddress,
@@ -1490,6 +1502,7 @@ export async function runExecutor(onProgress?: ProgressCallback, options?: RunEx
               remainingUsdc6: after.totalAmount.toString(),
               active: Boolean(after.active),
               at: new Date(),
+              tokenPriceUsd,
             });
           } catch (e) {
             errors.push(`recordPlanExecuted ${member} ${item.scheduleId}: ${(e as Error).message}`);
