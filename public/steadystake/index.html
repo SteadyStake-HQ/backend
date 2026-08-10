@@ -70,7 +70,28 @@
       <div class="heading-copy">
         <p class="eyebrow">Portfolio engine</p>
         <h1>DCA plan activity</h1>
-        <p class="page-description">Live contract state and historical plan progress across every registered wallet.</p>
+        <p class="page-description">Live contract state and historical plan progress across every
+          registered wallet.</p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke-linecap="round" />
+            </svg>
+            <span>Live <b>contract state</b> + plan history</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z" stroke-linejoin="round" /><path d="M16.5 12h.01" stroke-linecap="round" />
+            </svg>
+            <span>Across <b>every registered wallet</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" /><path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5" stroke-linecap="round" />
+            </svg>
+            <span>Pausing a plan needs the <b>admin token</b></span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="plans-status">Loading…</span>
@@ -164,7 +185,7 @@
               <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
             </svg>
             <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-              placeholder="Admin token (to pause plans)" aria-label="Admin API token" />
+              placeholder="Admin token" title="Admin API token — needed to pause plans" aria-label="Admin API token" />
           </div>
         </div>
 

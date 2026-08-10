@@ -75,6 +75,26 @@
           Every deployed contract on every network, and — the part a token balance alone cannot tell
           you — how much of what they hold is the protocol’s to take.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" stroke-linejoin="round" /><path d="M12 21v-9l8-4.5M12 12 4 7.5" stroke-linejoin="round" />
+            </svg>
+            <span>Every contract, <b>every network</b></span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M12 4v16M6 8h12M4 8l-2 5a3 3 0 0 0 6 0L6 8ZM18 8l-2 5a3 3 0 0 0 6 0L20 8Z" stroke-linejoin="round" stroke-linecap="round" />
+            </svg>
+            <span>Splits <b>custody</b> from protocol revenue</span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" /><path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5" stroke-linecap="round" />
+            </svg>
+            <span>Withdrawal always pays the <b>deployer wallet</b></span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
@@ -155,7 +175,7 @@
           <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
         </svg>
         <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-          placeholder="Admin token (to withdraw)" aria-label="Admin API token" />
+          placeholder="Admin token" title="Admin API token — needed to withdraw" aria-label="Admin API token" />
       </div>
       <button class="button primary" id="withdraw-all" type="button" disabled>Withdraw all revenue</button>
       <div class="withdraw-result" id="withdraw-result" role="status" aria-live="polite"></div>

@@ -232,6 +232,13 @@
     select.addEventListener("change", syncLabel);
 
     rebuild();
+
+    // A form that reuses one dialog across every open writes straight to `.value` and `.disabled`,
+    // neither of which fires an event — so the trigger would keep showing the last item's shelf, and
+    // a field locked on an edit would still look editable. Same shape as `input.dashDate` below: the
+    // caller pushes state in and asks for a redraw, without the control being rebuilt.
+    select.dashSelect = { refresh: rebuild };
+    return select.dashSelect;
   }
 
   // ---- Custom date + time picker -----------------------------------------

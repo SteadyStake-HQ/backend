@@ -19,6 +19,14 @@
   /* One knob for how wide the dashboard runs. The header and every page shell
      read it, so they stay locked to the same gutters on any monitor. */
   --shell-width: min(1720px, calc(100% - 56px));
+  /* One knob for every control an operator can type in or open: text boxes,
+     number boxes, search boxes, the admin token, native selects, the enhanced
+     listbox trigger and the calendar field. They sit next to each other in
+     toolbars and form rows constantly, so a control that is its own height or
+     its own radius reads as a different *kind* of control — which is a lie. */
+  --control-h: 38px;
+  --control-radius: 11px;
+  --control-pad-x: 12px;
   /* Which dashboard you are in, as a colour. Only the header reads these — the
      rest of the page keeps the shared palette — so the accent is a wayfinding
      cue, not a per-project theme. Default is SteadyStake's blue. */
@@ -249,9 +257,13 @@ button {
   padding: 42px 0 72px;
 }
 
+/* Top-aligned, not bottom-aligned: the copy block grows and shrinks with the page (a one-line
+   description on one page, an icon-led summary on the next) and bottom alignment made the toolbar
+   ride up and down with it. Anchoring both columns to the top keeps the controls in the same place
+   on every page in the dashboard. */
 .page-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -277,10 +289,82 @@ h1 {
 }
 
 .page-description {
-  max-width: 650px;
+  max-width: 66ch;
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.55;
+}
+
+/* ---- Page lede ---------------------------------------------------------
+   What a page description used to be: a paragraph of prose an operator read
+   once and then scrolled past forever. The facts inside it — what this page
+   edits, how far the edits reach, what it refuses to do — are the part worth
+   keeping, so they come out of the sentence and become a row of glyph-led
+   chips that can be read at a glance and re-read without re-reading.
+
+   The glyph is not decoration. Each one is the *kind* of fact it labels
+   (a clock for timing, a lock for what is read-only, a bolt for what goes
+   live without a deploy), so the shapes alone tell an operator which page
+   they are on before the words land. */
+.page-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 11px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(16, 23, 39, 0.66);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.page-fact svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--tone, var(--accent));
+}
+
+.page-fact b {
+  color: var(--text);
+  font-weight: 750;
+}
+
+/* Two facts carry colour, because they are the two an operator needs *before*
+   they start clicking rather than after:
+
+   is-guard — a limit. What this page will refuse to do, or what it needs first.
+   is-safe  — a guarantee. What a change here does not reach. On the pages that
+              edit a live registry this is the whole question, and an operator
+              who cannot see the answer at a glance goes and asks someone. */
+.page-fact.is-guard {
+  --tone: var(--amber);
+  border-color: rgba(245, 181, 94, 0.28);
+  background: rgba(245, 181, 94, 0.07);
+  color: #f3d8ae;
+}
+
+.page-fact.is-guard b {
+  color: #ffe6c2;
+}
+
+.page-fact.is-safe {
+  --tone: var(--green);
+  border-color: rgba(72, 217, 154, 0.24);
+  background: rgba(72, 217, 154, 0.06);
+  color: var(--green);
+  font-weight: 700;
 }
 
 .page-actions {
@@ -290,10 +374,72 @@ h1 {
   gap: 12px;
 }
 
+.page-actions .status {
+  white-space: nowrap;
+}
+
+.page-actions .button.primary {
+  flex: 0 0 auto;
+}
+
+/* The token box rides in the toolbar rather than owning a row under the
+   heading. It is entered once per browser and then ignored for the rest of the
+   day, so a full-width row was the most expensive placement on the page for the
+   least-used control on it. In the toolbar it drops the auto margin it uses as
+   a filter-bar item and takes a fixed share of the bar. */
+.page-actions .admin-field {
+  margin-left: 0;
+  flex: 0 1 220px;
+}
+
+/* Four controls can ride here (status, token, refresh, and a page action),
+   which is more than the heading can hold beside its copy on a laptop — so both
+   rows may wrap. The copy gives up width first, so the controls keep their
+   single line for as long as the viewport allows. */
+.page-heading {
+  flex-wrap: wrap;
+}
+
+.page-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1080px) {
+  .page-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .page-actions .admin-field {
+    flex: 1 1 100%;
+    order: 3;
+  }
+}
+
 .status {
   color: var(--muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+/* `success` / `error` are the status line's *tones*. `.error` is also the name of the page-level
+   empty-state panel below (a dashed frame with 44px of padding), and every page's setStatus writes
+   `class="status error"` — so a failed load used to paint its one-line message as a large dashed
+   box wedged into the toolbar. These win on specificity and keep the status a line of text. */
+.status.success {
+  color: var(--green);
+}
+
+.status.error {
+  padding: 0;
+  border: 0;
+  color: var(--red);
+  text-align: left;
+  font-weight: 700;
 }
 
 .button {
@@ -309,6 +455,11 @@ h1 {
   background: var(--surface-raised);
   font-size: 11px;
   font-weight: 750;
+  /* A two-word label is a *label*, not a paragraph: "Restore defaults" broken
+     over two lines makes the button taller than everything beside it and reads
+     as two separate things. Buttons grow sideways here, or they wrap to their
+     own row. */
+  white-space: nowrap;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
@@ -532,11 +683,15 @@ h1 {
 }
 
 .chip {
-  padding: 4px 8px;
+  padding: 4px 9px;
+  /* Tracked-out caps leave a trailing gap of their own; see .chip-btn. */
+  padding-right: calc(9px + 0.055em);
 }
 
 .badge {
-  padding: 3px 7px;
+  padding: 4px 9px;
+  padding-right: calc(9px + 0.055em);
+  line-height: 1.35;
 }
 
 .chip.gas,
@@ -649,8 +804,16 @@ a.addr:hover {
   background: rgba(110, 140, 255, 0.1);
 }
 
-.empty,
-.error {
+/* The empty-state panel: a dashed frame standing in for the content that is not
+   there. Scoped to the elements that actually are one (a div in a content area,
+   a full-width table row) because `empty` and `error` are attractive names for
+   an *inline state* too — a blank preview heading, a one-line status. Left
+   unscoped, those inherited a 44px dashed box and the page grew a large empty
+   rectangle where a word should have been. */
+div.empty,
+td.empty,
+div.error,
+td.error {
   padding: 44px 16px;
   border: 1px dashed var(--border);
   border-radius: 13px;
@@ -658,7 +821,8 @@ a.addr:hover {
   text-align: center;
 }
 
-.error {
+div.error,
+td.error {
   color: var(--amber);
 }
 
@@ -752,59 +916,135 @@ a.addr:hover {
   text-transform: uppercase;
 }
 
+/* ---- The control surface ------------------------------------------------
+   Every box an operator types into or opens is the same object: the same
+   height, the same corner, the same inset ground, the same focus ring. They
+   are constantly side by side — a token box next to Refresh, a select next to
+   a number field next to a toggle — and each extra height or radius in that
+   row reads as a different kind of control, which is a lie about what they do.
+
+   The visual is a *recessed* box on a raised page: a slightly darker ground
+   than the panel behind it with a hairline top edge, so it reads as somewhere
+   to put something rather than as another button. Focus lifts the ground and
+   paints a soft accent ring — the one moment a control is allowed to be the
+   brightest thing on screen. */
+.dash-control,
+.dash-select,
+.reward-controls select,
+.tier-row select,
+.field input[type="text"],
+.field input[type="number"],
+.field input[type="search"],
+.field input[type="password"],
+.field input:not([type]),
+.field textarea,
+.admin-field input,
+.search-field input,
+.dctl-trigger,
+.dctl-date-field {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 8px var(--control-pad-x);
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  color: var(--text);
+  background-color: var(--surface-soft);
+  background-image: linear-gradient(180deg, rgba(141, 159, 199, 0.055), transparent 42%);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dash-control:hover:not(:disabled),
+.dash-select:hover:not(:disabled),
+.reward-controls select:hover:not(:disabled),
+.tier-row select:hover:not(:disabled),
+.field input:hover:not(:disabled):not([type="color"]):not([type="checkbox"]),
+.field textarea:hover:not(:disabled),
+.admin-field input:hover,
+.search-field input:hover,
+.dctl-trigger:hover:not(:disabled),
+.dctl-date-field:hover {
+  border-color: var(--border-strong);
+  background-color: rgba(19, 28, 47, 0.9);
+}
+
+.dash-control:focus,
+.dash-select:focus,
+.reward-controls select:focus,
+.tier-row select:focus,
+.field input:focus:not([type="color"]):not([type="checkbox"]),
+.field textarea:focus,
+.admin-field input:focus,
+.search-field input:focus,
+.dctl-trigger:focus-visible,
+.dctl-date-field:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-color: var(--surface-raised);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.dash-control:disabled,
+.dash-select:disabled,
+.reward-controls select:disabled,
+.tier-row select:disabled,
+.field input:disabled,
+.field textarea:disabled,
+.dctl-select.is-disabled .dctl-trigger {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dash-control::placeholder,
+.field input::placeholder,
+.field textarea::placeholder,
+.admin-field input::placeholder,
+.search-field input::placeholder {
+  color: var(--dim);
+  font-weight: 550;
+}
+
+/* A control with a glyph pinned inside it (search, the token lock) gives the
+   glyph its own gutter rather than letting the text run under it. */
+.search-field input,
+.admin-field input {
+  padding-left: 35px;
+}
+
 /* ---- Native <select> controls -----------------------------------------
    The season picker (rewards) and tier override (capacity) are real native
    selects — their popup has to stay native, so we can't replace them with a
    listbox the way the sort menu does. Left unstyled they paint an OS chevron
    and a system-colored control that reads as a pale box on this dark shell.
-   We strip the native chrome, paint our own chevron, and force a dark option
-   list so the closed control matches every other control on the page. Scoped
-   to selects that opt in with .dash-select (or a data-styled ancestor) so the
-   hidden #plan-sort value store is never touched. */
+   We strip the native chrome, paint our own chevron in a divided well on the
+   trailing edge, and force a dark option list, so the closed control matches
+   every other control on the page. Scoped to selects that opt in with
+   .dash-select (or a data-styled ancestor) so the hidden #plan-sort value
+   store is never touched.
+
+   A select that can be reached by JS is better off enhanced —
+   `DashControls.enhanceSelect` swaps it for a listbox with a real popup — but
+   this is what it looks like until then, and what it falls back to. */
 .dash-select,
 .reward-controls select,
 .tier-row select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  min-height: 38px;
-  padding: 8px 34px 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background-color: var(--surface-soft);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%238e9bb8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 12px;
-  font-family: inherit;
-  font-size: 11px;
+  padding-right: 38px;
   font-weight: 700;
-  line-height: 1.2;
+  /* The chevron rides in the same rounded well the enhanced trigger paints, so
+     an enhanced select and a plain one are the same control at a glance. */
+  background-image:
+    linear-gradient(180deg, rgba(141, 159, 199, 0.055), transparent 42%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Crect width='20' height='20' rx='7' fill='%238d9fc7' fill-opacity='0.09'/%3E%3Cpath d='M6.5 8.5 10 12l3.5-3.5' fill='none' stroke='%238e9bb8' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0 0, right 9px center;
+  background-size: auto, 20px 20px;
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
-}
-
-.dash-select:hover,
-.reward-controls select:hover,
-.tier-row select:hover {
-  border-color: var(--border-strong);
-  background-color: rgba(19, 28, 47, 0.9);
-}
-
-.dash-select:focus-visible,
-.reward-controls select:focus-visible,
-.tier-row select:focus-visible {
-  outline: none;
-  border-color: rgba(110, 140, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
-}
-
-.dash-select:disabled,
-.reward-controls select:disabled,
-.tier-row select:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 /* Dark popup list. Honored by Chromium/Edge on Windows (the operator's browser);
@@ -829,11 +1069,11 @@ a.addr:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: var(--control-h);
   min-width: 208px;
   padding: 8px 10px 8px 11px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   color: var(--text);
   background: var(--surface-soft);
   font-size: 11px;
@@ -1123,61 +1363,36 @@ a.addr:hover {
   margin-left: auto;
 }
 
-#admin-token {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 12px 8px 34px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-  font: inherit;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  transition: border-color 160ms ease, background 160ms ease;
-}
-
-#admin-token::placeholder {
-  color: var(--dim);
-  font-family: var(--font-sans);
-  font-weight: 600;
-}
-
-#admin-token:focus {
-  outline: none;
-  border-color: rgba(245, 181, 94, 0.45);
-  background: var(--surface-raised);
-}
-
+/* A secret and an address are both strings you compare character by character,
+   so both are set in the mono face — the shared control surface above supplies
+   everything else about them. Placeholders stay in the sans face: they are
+   prose, not a value. */
+#admin-token,
 #wallet-search {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 34px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-  font: inherit;
-  font-size: 12px;
   font-family: var(--font-mono);
-  transition: border-color 160ms ease, background 160ms ease;
 }
 
+#admin-token::placeholder,
 #wallet-search::placeholder {
-  color: var(--dim);
   font-family: var(--font-sans);
-  font-weight: 600;
 }
 
-#wallet-search:focus {
-  outline: none;
-  border-color: rgba(110, 140, 255, 0.45);
-  background: var(--surface-raised);
+/* The token is the one control on the page that unlocks the rest of it, so its
+   focus ring is the project accent rather than the neutral blue — it is worth
+   finding again on a page that refused to load. */
+#admin-token:focus {
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  box-shadow: 0 0 0 3px rgba(245, 181, 94, 0.14);
+}
+
+/* Room for the clear button as well as the leading glyph. */
+.search-field input[type="search"] {
+  padding-right: 34px;
 }
 
 /* The native affordance is unstyleable and would sit beside the custom clear button. */
-#wallet-search::-webkit-search-cancel-button,
-#wallet-search::-webkit-search-decoration {
+.search-field input[type="search"]::-webkit-search-cancel-button,
+.search-field input[type="search"]::-webkit-search-decoration {
   -webkit-appearance: none;
   appearance: none;
 }
@@ -1221,12 +1436,17 @@ a.addr:hover {
   min-width: 0;
 }
 
+/* The trailing padding is larger than the leading one on every pill in this
+   file. Uppercase text is tracked out with letter-spacing, and CSS puts that
+   extra space *after* the last glyph as well — so a symmetric box measures
+   symmetric and looks like the text has been shoved against the right edge.
+   The compensation is the tracking itself, added back on that side. */
 .chip-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   flex: 0 0 auto;
-  padding: 6px 8px 6px 11px;
+  padding: 6px 10px 6px 13px;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
@@ -1254,11 +1474,12 @@ a.addr:hover {
 }
 
 .chip-count {
-  padding: 1px 5px;
+  padding: 2px 7px;
   border-radius: 999px;
   color: var(--text);
   background: rgba(141, 159, 199, 0.16);
   font-size: 9px;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2149,6 +2370,23 @@ a.addr:hover {
   background: rgba(240, 113, 135, 0.12);
 }
 
+/* ---- Buttons standing in a row of controls -----------------------------
+   A button beside a text box or a select matches its height, so a toolbar
+   reads as one bar rather than three sizes. A button inside a card, a table
+   row or a plan tile is a different object and keeps its own compact size —
+   those are not listed here.
+
+   Placed after every .button variant on purpose: several of the variants above
+   (.resume-plan, .execute-plan) set a compact height and tie with this rule on
+   specificity, and one of them is used as the commit button of a toolbar. */
+.page-actions .button,
+.controls .button,
+.search-row .button,
+.filter-row .button,
+.settings-actions .button {
+  min-height: var(--control-h);
+}
+
 /* Each network's live figures arrive on their own, so each is a placeholder until it does.
    A skeleton says "still coming" where an em dash would have said "there is nothing here". */
 .skel {
@@ -2193,8 +2431,21 @@ a.addr:hover {
 
 .dctl-select {
   position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Standalone in a toolbar it still wants a floor, so a one-word option does not
+   collapse the control. Inside a .field it fills the field, like every other
+   control in the form. */
+.filter-row > .dctl-select,
+.filter-group > .dctl-select,
+.select-field > .dctl-select,
+.reward-controls > .dctl-select {
   display: inline-block;
-  min-width: 180px;
+  width: auto;
+  min-width: 190px;
 }
 
 .dctl-date {
@@ -2203,48 +2454,24 @@ a.addr:hover {
   width: 100%;
 }
 
+/* Height, radius, ground and focus ring all come from the shared control
+   surface — everything below is what a *trigger* has that a text box does not:
+   a caret in its own divided well, and an open state. */
 .dctl-trigger,
 .dctl-date-field {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-  font-family: inherit;
-  font-size: 12px;
+  padding-right: 9px;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-
-.dctl-trigger:hover,
-.dctl-date-field:hover {
-  border-color: var(--border-strong);
-  background: rgba(19, 28, 47, 0.9);
-}
-
-.dctl-trigger:focus-visible,
-.dctl-date-field:focus-visible {
-  outline: none;
-  border-color: rgba(110, 140, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.16);
 }
 
 .dctl-select[data-open="true"] .dctl-trigger,
 .dctl-date[data-open="true"] .dctl-date-field {
-  border-color: rgba(110, 140, 255, 0.5);
-  background: rgba(21, 30, 49, 0.95);
-}
-
-.dctl-select.is-disabled .dctl-trigger {
-  cursor: not-allowed;
-  opacity: 0.5;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background-color: var(--surface-raised);
 }
 
 .dctl-value,
@@ -2267,10 +2494,26 @@ a.addr:hover {
   color: #91a6f3;
 }
 
+/* The caret sits in a well of its own, divided off by a hairline, so a trigger
+   reads as "this opens" at a glance and never as a text box with a stray
+   chevron in it. It matches the well painted on the native .dash-select, which
+   is the same control before JS reaches it. */
 .dctl-caret {
   flex: 0 0 auto;
+  box-sizing: content-box;
+  width: 12px;
+  height: 12px;
+  padding: 4px;
+  border-radius: 7px;
+  background: rgba(141, 159, 199, 0.09);
   color: var(--dim);
-  transition: transform 180ms ease, color 160ms ease;
+  transition: transform 180ms ease, color 160ms ease, background 160ms ease;
+}
+
+.dctl-trigger:hover .dctl-caret,
+.dctl-date-field:hover .dctl-caret {
+  color: var(--muted);
+  background: rgba(141, 159, 199, 0.16);
 }
 
 .dctl-select[data-open="true"] .dctl-caret,

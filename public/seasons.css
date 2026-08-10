@@ -758,11 +758,18 @@
   min-width: 0;
 }
 
+/* Rows used to be spaced by the slack the stretched fields left behind them. Now that a field is
+   only as tall as its own controls (see .field), the section owns the gap. */
+.form-section {
+  display: grid;
+  gap: 12px;
+}
+
 .form-section > h3 {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 0;
   color: var(--dim);
   font-size: 9px;
   font-weight: 800;
@@ -781,12 +788,22 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
   gap: 12px;
+  align-items: start;
 }
 
+/* Packed to the top, not stretched.
+   Fields in a row rarely hold the same number of parts — a plain select is a
+   label and a control, while the price beside it is a label, a control and a
+   row of presets, and the toggle beside *that* is a label and a switch. Left to
+   stretch, the grid shares the extra height out between the rows of the short
+   fields, and the switch ends up floating level with the presets instead of
+   sitting under its own label. Every control starts at the top of its field
+   and keeps its natural height. */
 .field {
   display: grid;
   gap: 5px;
   min-width: 0;
+  align-content: start;
 }
 
 .field.wide {
@@ -811,50 +828,24 @@
   font-weight: 600;
 }
 
-.field input[type="text"],
-.field input[type="number"],
+/* Height, radius, ground, hover, focus and placeholder all come from the shared
+   control surface in dashboard.css — a form field is the same object as the
+   token box in the toolbar, and the two used to disagree by a pixel and a
+   corner. Only what a textarea has and an input does not lives here. */
 .field textarea {
-  width: 100%;
-  min-height: 38px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-  font: inherit;
-  font-size: 12px;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-
-.field textarea {
-  min-height: 62px;
+  min-height: 76px;
   resize: vertical;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-.field input::placeholder,
-.field textarea::placeholder {
-  color: var(--dim);
-  font-weight: 500;
-}
-
-.field input:focus,
-.field textarea:focus {
-  outline: none;
-  border-color: rgba(110, 140, 255, 0.5);
-  background: var(--surface-raised);
-  box-shadow: 0 0 0 3px rgba(110, 140, 255, 0.12);
-}
-
-.field input:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.field.invalid input,
-.field.invalid textarea {
-  border-color: rgba(240, 113, 135, 0.55);
-  box-shadow: 0 0 0 3px rgba(240, 113, 135, 0.1);
+/* Loud enough to survive focus: an operator who clicks straight back into the
+   box they got wrong should still be able to see that it is the wrong one. The
+   :not() pile is only there to out-specify the shared focus ring. */
+.field.invalid input:not([type="color"]):not([type="checkbox"]),
+.field.invalid textarea:not([hidden]),
+.field.invalid .dctl-trigger:not([hidden]) {
+  border-color: rgba(240, 113, 135, 0.6);
+  box-shadow: 0 0 0 3px rgba(240, 113, 135, 0.13);
 }
 
 .field-error {
@@ -969,7 +960,10 @@
   word-break: break-word;
 }
 
-.preview-name.empty {
+/* `is-empty`, not `empty`: `.empty` is the page-level empty-state box (a dashed
+   frame with 44px of padding), and a preview heading that borrowed it drew a
+   large empty rectangle around the word "Untitled". */
+.preview-name.is-empty {
   color: var(--dim);
 }
 
@@ -1122,50 +1116,11 @@
 }
 
 /* ---- Toolbar tweaks ----------------------------------------------------
-   The token box moved up into the page actions (it is entered once per browser
-   and then ignored), so it drops the auto margin it uses as a toolbar item. */
-.page-actions .admin-field {
-  margin-left: 0;
-  flex: 0 1 220px;
-}
-
-.page-actions .status {
-  white-space: nowrap;
-}
-
-.page-actions .button.primary {
-  flex: 0 0 auto;
-}
-
+   The toolbar rules that used to live here (the token box's place in the page
+   actions, the wrap behaviour of the heading) moved to dashboard.css when every
+   page in the dashboard got the same toolbar — not just the Echo Arena editors
+   that load this file. */
 .filters .result-line {
   margin: 0 0 0 auto;
   white-space: nowrap;
-}
-
-/* Four controls ride in the page actions here (status, token, refresh, create), which is more than
-   the heading can hold beside its copy on a laptop — so both rows are allowed to wrap. */
-.page-heading {
-  flex-wrap: wrap;
-}
-
-/* The heading copy gives up width first, so the controls keep their single line for as long as the
-   viewport allows; below that they take a row of their own and wrap within it. */
-.page-actions {
-  flex: 0 0 auto;
-}
-
-@media (max-width: 1080px) {
-  .page-actions {
-    width: 100%;
-    margin-left: 0;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 700px) {
-  .page-actions .admin-field {
-    flex: 1 1 100%;
-    order: 3;
-  }
 }

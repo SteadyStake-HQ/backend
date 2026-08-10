@@ -12,8 +12,10 @@
   <link rel="stylesheet" href="/dashboard.css" />
   <style>
     .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; align-items: center; }
-    .search-row input { flex: 1 1 320px; min-height: 38px; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel, rgba(255,255,255,0.02)); color: inherit; font: inherit; }
-    .search-row .dctl-select { min-width: 170px; }
+    /* The box itself is the shared control surface (.dash-control in dashboard.css); only how much
+       of the row it takes belongs to this page. */
+    .search-row input { flex: 1 1 320px; }
+    .search-row .dctl-select { flex: 0 0 auto; width: auto; min-width: 190px; }
 
     .play-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 4px 0 18px; }
     .play-stat { border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
@@ -111,25 +113,46 @@
         <p class="eyebrow">Echo Arena</p>
         <h1>Players &amp; play records</h1>
         <p class="page-description">
-          Every wallet that has played, its run history in each mode — Normal, Ranked and
-          Open-verified — and the Steady Points ledger behind its balance, entry by entry. Read-only:
-          SP is credited by the game under its daily caps, so nothing here can mint points.
+          Every wallet that has played, its run history, and the Steady Points ledger behind its
+          balance, entry by entry.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" />
+            </svg>
+            <span><b>3 modes</b> — Normal, Ranked, Open-verified</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4.5 5.5h15v13h-15z" stroke-linejoin="round" />
+              <path d="M8 9.5h8M8 13h5" stroke-linecap="round" />
+            </svg>
+            <span>Ledger shown <b>entry by entry</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" />
+              <path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5" stroke-linecap="round" />
+            </svg>
+            <span><b>Read-only</b> — nothing here can mint SP</span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
+        <div class="admin-field">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" title="Admin API token — required" aria-label="Admin API token" />
+        </div>
         <button class="button refresh" id="refresh" type="button">Refresh</button>
       </div>
     </div>
 
-    <div class="admin-field" style="max-width: 320px; margin: 0 0 14px;">
-      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="4" y="10.5" width="16" height="10" rx="2" />
-        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
-      </svg>
-      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-        placeholder="Admin token (required)" aria-label="Admin API token" />
-    </div>
 
     <section class="content-panel" aria-label="Play totals">
       <div class="play-stats" id="totals"></div>
@@ -138,7 +161,7 @@
     <!-- The wallet list. Hidden while one wallet is open so the page reads as one thing at a time. -->
     <section class="content-panel" id="list-view" aria-label="Players">
       <div class="search-row">
-        <input id="search" type="text" placeholder="Filter by wallet address (full or partial)" spellcheck="false" />
+        <input id="search" class="dash-control" type="text" placeholder="Filter by wallet address (full or partial)" spellcheck="false" />
         <select id="sort" aria-label="Sort players by">
           <option value="last_played">Most recently played</option>
           <option value="sp">Highest SP balance</option>

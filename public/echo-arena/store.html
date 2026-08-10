@@ -74,14 +74,41 @@
         <p class="eyebrow">Echo Arena</p>
         <h1>Store catalogue</h1>
         <p class="page-description">
-          Every hull, wake and round the Store sells: what it is called, what it costs in verified
-          Steady Points, who may fly it, what colour it is, and whether it is on the shelf at all.
-          Saves are live — the game picks them up within about a minute, with no deploy.
+          Everything the Store sells — what it is called, what it costs, who may fly it, and whether
+          it is on the shelf at all.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 5h16M4 12h16M4 19h16" stroke-linecap="round" />
+            </svg>
+            <span><b>3 shelves</b> — hulls, wakes, rounds</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M13 2.5 4.5 13.5H11l-.8 8L19.5 10H13l.9-7.5Z" stroke-linejoin="round" />
+            </svg>
+            <span>Live in <b>~1 min</b>, no deploy</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.5v9M9.6 9.8h4.2a2.1 2.1 0 0 1 0 4.2H9.6" stroke-linecap="round" />
+            </svg>
+            <span>Priced in <b>verified SP</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M12 3 4.5 6.4v5.2c0 4.4 3 8.4 7.5 9.4 4.5-1 7.5-5 7.5-9.4V6.4L12 3Z" stroke-linejoin="round" />
+              <path d="M9.5 12.2 11.4 14l3.4-3.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>A <b>new shape</b> needs a game deploy</span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
-        <div class="admin-field" style="flex-basis: 240px;">
+        <div class="admin-field">
           <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="4" y="10.5" width="16" height="10" rx="2" />
             <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
@@ -126,8 +153,8 @@
 
     <p class="page-footnote">
       The <b>drawing</b> is the one thing here that is not data: each item picks one of the silhouettes
-      compiled into the game client. A brand-new shape needs a game deploy — a new colourway, price,
-      name or gate on an existing shape does not.
+      compiled into the game client, and every swatch above flies the real one. A brand-new shape needs
+      a game deploy — a new colourway, price, name or gate on an existing shape does not.
     </p>
   </main>
 
@@ -157,7 +184,7 @@
               <div class="form-row">
                 <div class="field" data-field="f-kind">
                   <label for="f-kind">Shelf</label>
-                  <select id="f-kind" class="dash-select">
+                  <select id="f-kind" class="dash-select" data-enhance>
                     <option value="ship">Hull</option>
                     <option value="trail">Wake</option>
                     <option value="bolt">Round</option>
@@ -196,7 +223,7 @@
               <div class="form-row">
                 <div class="field" data-field="f-art">
                   <label for="f-art">Drawing <span class="hint">compiled into the game</span></label>
-                  <select id="f-art" class="dash-select"></select>
+                  <select id="f-art" class="dash-select" data-enhance></select>
                   <p class="field-error" hidden></p>
                 </div>
                 <div class="field" data-field="f-ink">
@@ -223,7 +250,7 @@
               <div class="form-row">
                 <div class="field" data-field="f-requires">
                   <label for="f-requires">Who may fly it</label>
-                  <select id="f-requires" class="dash-select">
+                  <select id="f-requires" class="dash-select" data-enhance>
                     <option value="pass">Game Pass holders</option>
                     <option value="base">Everyone, including guests</option>
                   </select>
@@ -254,7 +281,10 @@
 
           <aside class="preview" id="item-preview">
             <div class="preview-head"><span>Card preview</span></div>
-            <div class="swatch-large" id="preview-swatch"><span id="preview-art">standard</span></div>
+            <div class="swatch-large" id="preview-swatch">
+              <canvas id="preview-canvas" aria-hidden="true"></canvas>
+              <span id="preview-art">standard</span>
+            </div>
             <p class="preview-eyebrow" id="preview-eyebrow">Standard issue</p>
             <p class="preview-name" id="preview-name">Untitled</p>
             <p class="preview-blurb" id="preview-blurb">—</p>
@@ -263,8 +293,8 @@
               <div class="row"><span class="label">Price</span><span class="val" id="preview-price">Free</span></div>
             </div>
             <p class="preview-utc">
-              The card the player sees is drawn by the game with the real silhouette; this shows the
-              copy and the palette only.
+              Drawn with the game's own routine, at the rank a Store card uses — so this is the
+              silhouette, the wake and the round a pilot will actually see.
             </p>
           </aside>
         </div>
@@ -281,6 +311,9 @@
 
   <script src="/dashboard-shared.js"></script>
   <script src="/dashboard-controls.js"></script>
+  <!-- The game's own hull/wake/round drawing, ported to plain JS. Every swatch on this page is a
+       real preview rather than a colour chip; see the file header on why it is a copy. -->
+  <script src="/echo-arena-art.js"></script>
   <script>
     "use strict";
 
@@ -411,9 +444,39 @@
       }).join("");
     }
 
+    /*
+     * Live previews on the shelf.
+     *
+     * Every card animates from one shared requestAnimationFrame loop (see /echo-arena-art.js), so a
+     * shelf of twelve costs one callback and the twelve ships stay in step with each other. The
+     * handles have to be released before the shelf is replaced: the loop holds a reference to each
+     * paint function, and a canvas that has left the document would otherwise be measured and
+     * painted forever, once per frame, for the life of the page.
+     */
+    let artHandles = [];
+
+    function releaseArt() {
+      artHandles.forEach(function (handle) { handle.destroy(); });
+      artHandles = [];
+    }
+
+    function mountArt(root) {
+      if (!window.EchoArenaArt) return;
+      root.querySelectorAll("canvas.item-canvas").forEach(function (canvas) {
+        const item = {
+          kind: canvas.dataset.kind,
+          art: canvas.dataset.art,
+          ink: canvas.dataset.ink,
+          accent: canvas.dataset.accent,
+        };
+        artHandles.push(window.EchoArenaArt.mount(canvas, function () { return item; }));
+      });
+    }
+
     function renderShelf() {
       const list = items(activeKind).filter(matchesSearch);
       resultLine.textContent = list.length + " of " + items(activeKind).length + " " + KIND_LABELS[activeKind].toLowerCase();
+      releaseArt();
 
       if (!list.length) {
         contentEl.innerHTML = '<div class="empty">' +
@@ -427,6 +490,7 @@
         const index = full.indexOf(item);
         return itemCard(item, index === 0, index === full.length - 1);
       }).join("") + "</div>";
+      mountArt(contentEl);
     }
 
     function matchesSearch(item) {
@@ -446,6 +510,13 @@
       return (
         '<article class="item-card' + (item.enabled ? "" : " is-off") + '" data-id="' + item.id + '">' +
           '<div class="item-swatch" style="--ink:' + escapeHtml(item.ink) + ';--accent:' + escapeHtml(item.accent) + '">' +
+            // The canvas is mounted after the shelf is in the document (mountArt), because it has to
+            // measure itself before it can size its bitmap.
+            '<canvas class="item-canvas" aria-hidden="true"' +
+              ' data-kind="' + escapeHtml(item.kind) + '"' +
+              ' data-art="' + escapeHtml(item.art) + '"' +
+              ' data-ink="' + escapeHtml(item.ink) + '"' +
+              ' data-accent="' + escapeHtml(item.accent) + '"></canvas>' +
             '<span class="item-art">' + escapeHtml(item.art) + "</span>" +
           "</div>" +
           '<div class="item-body">' +
@@ -579,12 +650,50 @@
       enabled: document.getElementById("f-enabled"),
     };
 
+    // Native <select>s are a pale OS control on this shell and cannot hold a popup that matches it.
+    // Enhanced, they keep the same element as the value store — every `.value` read below is
+    // unchanged — and gain a listbox that looks like the rest of the form.
+    DashControls.enhanceAll(itemModal);
+
+    /** Push a programmatic value or disabled state into an enhanced select's trigger. */
+    function refreshSelect(select) {
+      if (select.dashSelect) select.dashSelect.refresh();
+    }
+
     /** Refill the drawing list for the chosen shelf — each kind has its own compiled silhouettes. */
     function fillArtOptions(kind, selected) {
       const art = (state.meta && state.meta.art && state.meta.art[kind]) || [];
       fields.art.innerHTML = art.map(function (key) {
         return '<option value="' + escapeHtml(key) + '"' + (key === selected ? " selected" : "") + ">" + escapeHtml(key) + "</option>";
       }).join("");
+      refreshSelect(fields.art);
+    }
+
+    /*
+     * The preview rail's own ship, flown from the form rather than from a saved row: it reads the
+     * fields on every frame, so the hull changes shape as the drawing is picked and repaints as a hex
+     * is typed. Mounted on open and released on close so the clock is not driving a canvas nobody
+     * can see.
+     */
+    const previewCanvas = document.getElementById("preview-canvas");
+    let previewArt = null;
+
+    function mountPreviewArt() {
+      if (previewArt || !window.EchoArenaArt) return;
+      previewArt = window.EchoArenaArt.mount(previewCanvas, function () {
+        return {
+          kind: fields.kind.value,
+          art: fields.art.value,
+          ink: fields.ink.value.trim(),
+          accent: fields.accent.value.trim(),
+        };
+      });
+    }
+
+    function releasePreviewArt() {
+      if (!previewArt) return;
+      previewArt.destroy();
+      previewArt = null;
     }
 
     function openItemModal(item) {
@@ -596,6 +705,7 @@
 
       const kind = item ? item.kind : activeKind;
       fields.kind.value = kind;
+      // The shelf and the id are what a pilot's locker row points at, so an edit may not move them.
       fields.kind.disabled = !!item;
       fields.itemId.value = item ? item.itemId : "";
       fields.itemId.disabled = !!item;
@@ -607,12 +717,19 @@
       setColour("accent", item ? item.accent : "#eafbff");
       fields.requires.value = item ? item.requires : "pass";
       fields.sp.value = item ? item.spRequired : 0;
+      fields.sp.disabled = fields.requires.value === "base";
       fields.enabled.checked = item ? item.enabled : true;
+      refreshSelect(fields.kind);
+      refreshSelect(fields.requires);
 
       itemError.hidden = true;
       clearFieldErrors();
       syncPreview();
-      modalHandle = DashModal.open(itemModal, { dismissible: true });
+      modalHandle = DashModal.open(itemModal, {
+        dismissible: true,
+        onClose: releasePreviewArt,
+      });
+      mountPreviewArt();
     }
 
     function setColour(which, value) {
@@ -670,7 +787,7 @@
       document.getElementById("preview-eyebrow").textContent = fields.eyebrow.value.trim() || "—";
       const nameEl = document.getElementById("preview-name");
       nameEl.textContent = fields.name.value.trim() || "Untitled";
-      nameEl.classList.toggle("empty", !fields.name.value.trim());
+      nameEl.classList.toggle("is-empty", !fields.name.value.trim());
       document.getElementById("preview-blurb").textContent = fields.blurb.value.trim() || "—";
       document.getElementById("preview-gate").textContent = base ? "Everyone" : "Game Pass";
       document.getElementById("preview-price").textContent = base
@@ -679,6 +796,9 @@
       const swatch = document.getElementById("preview-swatch");
       swatch.style.setProperty("--ink", fields.ink.value.trim() || "#000");
       swatch.style.setProperty("--accent", fields.accent.value.trim() || "#fff");
+      // A no-op while the ship is flying; the repaint for an operator who asked for less motion and
+      // is looking at a still frame.
+      if (previewArt) previewArt.update();
 
       itemModal.querySelectorAll("[data-preset-for]").forEach(function (group) {
         const target = document.getElementById(group.dataset.presetFor);

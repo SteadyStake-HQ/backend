@@ -72,14 +72,41 @@
         <p class="eyebrow">Echo Arena</p>
         <h1>Game settings</h1>
         <p class="page-description">
-          The rules the arena runs on: what a run earns, how much a wallet may earn in a day, the
-          cycle and combat constants, the bounds a submitted run is checked against, the daily quests,
-          the feature kill switches, and the Game Pass price table. Saves are live.
+          The rules the arena runs on — earning, caps, combat constants, quests, kill switches and
+          the Game Pass price table.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M13 2.5 4.5 13.5H11l-.8 8L19.5 10H13l.9-7.5Z" stroke-linejoin="round" />
+            </svg>
+            <span>Live in <b>~1 min</b>, no deploy</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke-linecap="round" />
+            </svg>
+            <span>Sets the <b>daily SP caps</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M12 3 4.5 6.4v5.2c0 4.4 3 8.4 7.5 9.4 4.5-1 7.5-5 7.5-9.4V6.4L12 3Z" stroke-linejoin="round" />
+              <path d="M12 8.5v4.2M12 16.1v.01" stroke-linecap="round" />
+            </svg>
+            <span>SP gates <b>wallet permissions</b> — earn rates are load-bearing</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M3.5 8.5h17v10a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5v-10Z" stroke-linejoin="round" />
+              <path d="M3.5 12h17M9 4.5v4M15 4.5v4" stroke-linecap="round" />
+            </svg>
+            <span>Pass prices must match the <b>contract</b></span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
-        <div class="admin-field" style="flex-basis: 240px;">
+        <div class="admin-field">
           <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="4" y="10.5" width="16" height="10" rx="2" />
             <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
@@ -192,7 +219,7 @@
             </div>
             <div class="form-row">
               <div class="field"><label for="q-metric">Counter</label>
-                <select id="q-metric" class="dash-select">
+                <select id="q-metric" class="dash-select" data-enhance>
                   <option value="runs">Finished runs</option>
                   <option value="echoes">Echoes joined (cumulative)</option>
                   <option value="best_cycle">Deepest cycle reached (best, not sum)</option>
@@ -380,6 +407,11 @@
     const adminTokenInput = document.getElementById("admin-token");
     const questModal = document.getElementById("quest-modal");
     const planModal = document.getElementById("plan-modal");
+
+    // Swap the native <select>s for the shell's own listbox. The elements stay put as the value
+    // store, so every `.value` read below is unchanged.
+    DashControls.enhanceAll(questModal);
+    DashControls.enhanceAll(planModal);
 
     let state = { settings: null, defaults: null, quests: [], plans: [], planNetworks: [] };
     let modalHandle = null;
@@ -758,7 +790,11 @@
       document.getElementById("q-key").value = quest ? quest.key : "";
       document.getElementById("q-key").disabled = !!quest;
       document.getElementById("q-label").value = quest ? quest.label : "";
-      document.getElementById("q-metric").value = quest ? quest.metric : "runs";
+      const metric = document.getElementById("q-metric");
+      metric.value = quest ? quest.metric : "runs";
+      // The dialog is built once and reused, so the enhanced trigger has to be told that the value
+      // under it changed — writing `.value` fires nothing.
+      if (metric.dashSelect) metric.dashSelect.refresh();
       document.getElementById("q-target").value = quest ? quest.target : 1;
       document.getElementById("q-reward").value = quest ? quest.reward : 5;
       document.getElementById("q-enabled").checked = quest ? quest.enabled : true;

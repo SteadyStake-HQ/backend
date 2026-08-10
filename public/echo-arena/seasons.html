@@ -71,10 +71,32 @@
         <p class="eyebrow">Echo Arena</p>
         <h1>Seasons &amp; awards</h1>
         <p class="page-description">
-          Create and run verified ranked seasons, review the frozen leaderboard, and finalize the top
-          three. Duration is 7–90 days. Set the season's networks, SP multiplier, and per-wallet run
-          budgets here; distribute reward cards from the Rewards tab.
+          Create and run verified ranked seasons, review the frozen leaderboard, and finalize the
+          top three.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+              <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke-linecap="round" />
+            </svg>
+            <span><b>7–90 days</b> per season</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke-linecap="round" />
+            </svg>
+            <span>Sets <b>networks, multiplier, run budgets</b></span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M8 20h8M12 15.5V20" stroke-linecap="round" />
+              <path d="M7 4h10v4.5a5 5 0 0 1-10 0V4Z" stroke-linejoin="round" />
+              <path d="M17 5h2.5a2.5 2.5 0 0 1-2.5 2.5M7 5H4.5A2.5 2.5 0 0 0 7 7.5" stroke-linecap="round" />
+            </svg>
+            <span>Reward cards go out from <b>Rewards</b></span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
@@ -265,7 +287,7 @@
               <span>Preview</span>
               <span class="badge tone-draft">Draft</span>
             </div>
-            <p class="preview-name empty" id="p-name">Untitled season</p>
+            <p class="preview-name is-empty" id="p-name">Untitled season</p>
             <div class="preview-arc">
               <svg viewBox="0 0 200 112" role="img" aria-label="Season duration">
                 <defs>
@@ -1139,7 +1161,7 @@
       const name = el("f-name").value.trim();
       const nameEl = el("p-name");
       nameEl.textContent = name || "Untitled season";
-      nameEl.classList.toggle("empty", !name);
+      nameEl.classList.toggle("is-empty", !name);
 
       const days = Number(el("f-days").value);
       const safeDays = Number.isFinite(days) && days > 0 ? days : 0;

@@ -74,6 +74,26 @@
         <p class="page-description">
           Two tokens, one wallet per network — and the margin between them.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h13a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z" stroke-linejoin="round" /><path d="M16.5 12h.01" stroke-linecap="round" />
+            </svg>
+            <span>One <b>relayer wallet</b> per network</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M12 4v16M6 8h12M4 8l-2 5a3 3 0 0 0 6 0L6 8ZM18 8l-2 5a3 3 0 0 0 6 0L20 8Z" stroke-linejoin="round" stroke-linecap="round" />
+            </svg>
+            <span>Gas held vs. <b>fees collected</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" /><path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5" stroke-linecap="round" />
+            </svg>
+            <span>Changing a fee needs the <b>admin token</b></span>
+          </li>
+        </ul>
         <!-- What the paragraph here used to say, drawn. Gas leaves in the native token and fees
              arrive in a stablecoin, so a wallet can be earning steadily and still be unable to
              execute; the two tinted ends carry that without a sentence. -->
@@ -103,6 +123,16 @@
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
+        <!-- Same operator secret the plan-activity page uses, so entering it on either one unlocks
+             the other. Only needed to change a fee; every figure here reads without it. -->
+        <div class="admin-field">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" title="Admin API token — needed to change fees" aria-label="Admin API token" />
+        </div>
         <button class="button refresh" id="refresh" type="button">Refresh</button>
       </div>
     </div>
@@ -149,19 +179,6 @@
         <span class="filter-label">Network</span>
         <div class="chips" id="network-chips"></div>
         <button class="clear-filters" id="clear-networks" type="button" hidden>All networks</button>
-      </div>
-      <!-- Same operator secret the plan-activity page uses, so entering it on either one unlocks
-           the other. Only needed to change a fee; every figure here reads without it. -->
-      <div class="filter-row">
-        <span class="filter-label">Admin</span>
-        <div class="admin-field" style="max-width: 300px;">
-          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <rect x="4" y="10.5" width="16" height="10" rx="2" />
-            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
-          </svg>
-          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-            placeholder="Admin token (to change fees)" aria-label="Admin API token" />
-        </div>
       </div>
     </div>
 

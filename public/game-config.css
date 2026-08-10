@@ -66,16 +66,29 @@
 }
 
 /*
- * The swatch shows the item's two colours and names its drawing. It deliberately does *not* try to
- * draw the silhouette: the real one is canvas code in the game client, and an approximation here
- * would drift from the thing the player actually flies.
+ * The swatch flies the item.
+ *
+ * It used to be a two-colour gradient with the art key printed on it, on the reasoning that an
+ * approximation of the silhouette would drift from the thing the player actually flies. That traded
+ * a small risk of drift for a certainty: an operator could not see what they were editing at all.
+ * `art` is the one field on this form that is *not* data — it picks a compiled drawing — so it is
+ * the field the page most owes a picture of, and "delta" versus "monarch" is a word, not a shape.
+ *
+ * The drawing is the game's own routine, ported in /echo-arena-art.js, run on the item's real
+ * palette: a ship flying a figure-eight with its wake behind it and its rounds in the air, exactly
+ * as the game's Store cards draw it. The art key stays printed in the corner, because the key is
+ * what the API stores and what an error message will name.
+ *
+ * The gradient stays underneath as the ground the ship flies over — it is also the only thing left
+ * if the canvas cannot paint.
  */
 .item-swatch {
   position: relative;
-  height: 92px;
+  height: 128px;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 26% 34%, var(--accent), transparent 58%),
-    linear-gradient(140deg, var(--ink), color-mix(in srgb, var(--ink) 55%, #05091a));
+    radial-gradient(circle at 26% 30%, color-mix(in srgb, var(--accent) 38%, transparent), transparent 62%),
+    linear-gradient(140deg, color-mix(in srgb, var(--ink) 42%, #070b16), #05091a);
 }
 
 .item-swatch::after {
@@ -85,14 +98,25 @@
   background: linear-gradient(180deg, transparent 45%, rgba(7, 10, 18, 0.55));
 }
 
+.item-canvas,
+.swatch-large canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .item-art {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   left: 12px;
   bottom: 10px;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(7, 10, 18, 0.6);
+  background: rgba(7, 10, 18, 0.66);
+  backdrop-filter: blur(3px);
   color: #fff;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -198,17 +222,26 @@
 
 .colour-field input[type="color"] {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  /* Square, on the shared control height: it is one of a pair with the hex box
+     beside it, and a picker even a couple of pixels short reads as an add-on
+     rather than as half the control. */
+  width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: transparent;
   cursor: pointer;
+  transition: border-color 160ms ease;
+}
+
+.colour-field input[type="color"]:hover {
+  border-color: var(--border-strong);
 }
 
 .colour-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
-.colour-field input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 6px; }
+.colour-field input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 7px; }
+.colour-field input[type="color"]::-moz-color-swatch { border: 0; border-radius: 7px; }
 
 .colour-field input[type="text"] {
   flex: 1 1 auto;
@@ -275,22 +308,27 @@
 
 /* ---- Catalogue preview rail ---------------------------------------------------------------- */
 
+/* The same drawing as the shelf card, wired to the form instead of to a saved row: change the art
+   key or either colour and the ship in the rail changes under your hand, before anything is saved. */
 .swatch-large {
   position: relative;
-  height: 108px;
+  height: 150px;
   border-radius: 13px;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 28% 32%, var(--accent), transparent 58%),
-    linear-gradient(140deg, var(--ink), color-mix(in srgb, var(--ink) 55%, #05091a));
+    radial-gradient(circle at 28% 30%, color-mix(in srgb, var(--accent) 38%, transparent), transparent 62%),
+    linear-gradient(140deg, color-mix(in srgb, var(--ink) 42%, #070b16), #05091a);
 }
 
-.swatch-large span {
+.swatch-large > span {
   position: absolute;
+  z-index: 2;
   left: 10px;
   bottom: 9px;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: rgba(7, 10, 18, 0.6);
+  background: rgba(7, 10, 18, 0.66);
+  backdrop-filter: blur(3px);
   color: #fff;
   font-family: var(--font-mono);
   font-size: 10px;

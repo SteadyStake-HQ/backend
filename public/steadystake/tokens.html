@@ -13,34 +13,6 @@
   <style>
     /* Page-local only. Everything structural is dashboard.css. */
 
-    .safe-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 12px 0 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .safe-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border: 1px solid rgba(72, 217, 154, 0.24);
-      border-radius: 999px;
-      background: rgba(72, 217, 154, 0.06);
-      color: var(--green);
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .safe-chip svg {
-      width: 13px;
-      height: 13px;
-      flex: 0 0 auto;
-    }
-
     /* ---- Panels ------------------------------------------------------------ */
 
     .panel {
@@ -93,24 +65,9 @@
       text-transform: uppercase;
     }
 
-    .field input {
-      min-height: 34px;
-      padding: 6px 10px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      color: var(--text);
-      background: var(--surface-soft);
-      font: inherit;
-      font-size: 12px;
-      transition: border-color 160ms ease, background 160ms ease;
-    }
-
-    .field input:focus {
-      outline: none;
-      border-color: var(--border-strong);
-      background: var(--surface-raised);
-    }
-
+    /* Height, corner, ground and focus ring come from the shared control surface in dashboard.css —
+       these boxes sit in the same toolbars as the token field and the selects, and used to be four
+       pixels shorter and a corner rounder than both. Only the widths are this page's business. */
     .field input.addr-input {
       width: 340px;
       max-width: 100%;
@@ -360,44 +317,56 @@
         <p class="page-description">
           What each network offers in the app's new-plan picker.
         </p>
-        <ul class="safe-strip" aria-label="What a change here does">
-          <li class="safe-chip">
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <ellipse cx="12" cy="6.5" rx="7.5" ry="3.2" /><path d="M4.5 6.5v11c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2v-11" stroke-linecap="round" /><path d="M4.5 12c0 1.8 3.4 3.2 7.5 3.2s7.5-1.4 7.5-3.2" stroke-linecap="round" />
+            </svg>
+            <span>The app's <b>new-plan picker</b>, per network</span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.2 2.4 3.3 5.3 3.3 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.3-5.3-3.3-8.5S9.8 5.9 12 3.5Z" />
+            </svg>
+            <span>Imported <b>per source</b> and per chain</span>
+          </li>
+          <li class="page-fact is-safe">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
               <path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            Off-chain only
+            <span>Off-chain only</span>
           </li>
-          <li class="safe-chip" title="Removing a token hides it from the picker. Plans already buying it keep running and keep their holdings.">
+          <li class="page-fact is-safe" title="Removing a token hides it from the picker. Plans already buying it keep running and keep their holdings.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
               <path d="m5 12.5 4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            Live plans unaffected
+            <span>Live plans unaffected</span>
           </li>
-          <li class="safe-chip">
+          <li class="page-fact is-safe">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
               <path d="M4 10h9a5 5 0 1 1 0 10H7" stroke-linecap="round" stroke-linejoin="round" />
               <path d="m4 10 4-4M4 10l4 4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            Fully reversible
+            <span>Fully reversible</span>
           </li>
         </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Loading…</span>
+        <div class="admin-field">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" title="Admin API token — needed to change the list" aria-label="Admin API token" />
+        </div>
         <button class="button refresh" id="refresh" type="button">Refresh</button>
       </div>
     </div>
 
     <!-- Same ADMIN_API_TOKEN as the other operator pages. Without it this page is read-only: the
          public list loads, every control refuses. -->
-    <div class="admin-field" style="max-width: 320px; margin: 0 0 18px;">
-      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="4" y="10.5" width="16" height="10" rx="2" />
-        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
-      </svg>
-      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-        placeholder="Admin token (to change the list)" aria-label="Admin API token" />
-    </div>
 
     <section class="panel" aria-label="Network">
       <div class="panel-head">

@@ -12,7 +12,8 @@
   <link rel="stylesheet" href="/dashboard.css" />
   <style>
     .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
-    .search-row input { flex: 1 1 320px; min-height: 38px; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel, rgba(255,255,255,0.02)); color: inherit; font: inherit; }
+    /* The box itself is the shared control surface (dashboard.css); the row owns only its width. */
+    .search-row input { flex: 1 1 320px; }
     .cap-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 4px 0 14px; }
     .cap-stat { border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
     .cap-stat b { font-size: 22px; display: block; }
@@ -92,23 +93,49 @@
           comes from Echo Arena reward cards, so a wallet's season results show up here. The tier
           override is audited — use it only with authorization.
         </p>
+        <ul class="page-facts">
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" stroke-linecap="round" />
+            </svg>
+            <span>Base limit + <b>reward-card bonus</b></span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" stroke-linejoin="round" /><path d="M12 21v-9l8-4.5M12 12 4 7.5" stroke-linejoin="round" />
+            </svg>
+            <span>Bonus slots used <b>across networks</b></span>
+          </li>
+          <li class="page-fact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" /><path d="M12 7.2V12l3.2 2" stroke-linecap="round" />
+            </svg>
+            <span>Recent <b>reservations</b></span>
+          </li>
+          <li class="page-fact is-guard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.2" /><path d="M8.5 10.5V7a3.5 3.5 0 0 1 7 0v3.5" stroke-linecap="round" />
+            </svg>
+            <span>Tier override is <b>audited</b> — authorization only</span>
+          </li>
+        </ul>
       </div>
       <div class="page-actions">
         <span class="status" id="status">Enter a wallet</span>
+        <div class="admin-field">
+          <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="10" rx="2" />
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+          </svg>
+          <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
+            placeholder="Admin token" title="Admin API token — required" aria-label="Admin API token" />
+        </div>
       </div>
     </div>
 
-    <div class="admin-field" style="max-width: 320px; margin: 0 0 14px;">
-      <svg class="admin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="4" y="10.5" width="16" height="10" rx="2" />
-        <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
-      </svg>
-      <input id="admin-token" type="password" autocomplete="off" spellcheck="false"
-        placeholder="Admin token (required)" aria-label="Admin API token" />
-    </div>
 
     <div class="search-row">
-      <input id="wallet" type="text" placeholder="Wallet address (0x…)" spellcheck="false" />
+      <input id="wallet" class="dash-control" type="text" placeholder="Wallet address (0x…)" spellcheck="false" />
       <button class="button" id="search" type="button">Inspect</button>
     </div>
 
