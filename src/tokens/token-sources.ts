@@ -553,6 +553,54 @@ export async function fetchFromSource(
  * Metadata comes from the first provider that reported real decimals — CMC reports none and is
  * carried at 18, so it must never overwrite a source that knows.
  */
+/** GeckoTerminal's cap for tokens/multi, and the reason this can backfill a whole list cheaply. */
+const GECKOTERMINAL_LOGO_BATCH = 30;
+
+/**
+ * Logo URLs for specific addresses, thirty per request, for tokens no list source could illustrate.
+ *
+ * The list providers only carry an image for tokens they happen to rank; one that arrives via
+ * CoinMarketCap's or CoinGecko's *list* but is not in GeckoTerminal's top pools reaches the end of a
+ * merge with `logoUrl: null` and falls back to Trust Wallet, whose repo covers a few hundred
+ * established tokens and nothing else. This asks GeckoTerminal about those leftovers by address
+ * rather than by rank, which is the question that actually has an answer for a small BNB Chain
+ * token: measured on the live list, it illustrated 11 of the 25 tokens that had no logo at all.
+ *
+ * Fails soft like every other provider here — a rate-limited call means the same lettered avatars
+ * the caller would have drawn anyway, never a failed import.
+ */
+export async function fetchGeckoTerminalLogos(
+  chainId: number,
+  addresses: string[],
+): Promise<Map<string, string>> {
+  const network = GECKOTERMINAL_NETWORK[chainId];
+  const out = new Map<string, string>();
+  if (!network || addresses.length === 0) return out;
+
+  for (let i = 0; i < addresses.length; i += GECKOTERMINAL_LOGO_BATCH) {
+    const chunk = addresses.slice(i, i + GECKOTERMINAL_LOGO_BATCH);
+    if (i > 0) await sleep(300);
+    let json: { data?: Array<{ attributes?: { address?: string; image_url?: string | null } }> };
+    try {
+      json = await getJson(
+        `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/multi/${chunk.join(',')}`,
+      );
+    } catch {
+      // Same reasoning as fromGeckoTerminal's page loop: the limit is per minute, so waiting it out
+      // costs more than the remaining logos are worth.
+      break;
+    }
+    for (const token of json?.data ?? []) {
+      const address = normalize(token.attributes?.address);
+      if (address == null || !chunk.includes(address)) continue;
+      // GeckoTerminal returns the literal string "missing.png" for tokens it has no image for.
+      const image = httpUrl(token.attributes?.image_url);
+      if (image != null && !image.endsWith('missing.png')) out.set(address, image);
+    }
+  }
+  return out;
+}
+
 export function mergeSources(results: SourceResult[]): SourcedToken[] {
   const merged = new Map<string, SourcedToken & { best: number; order: number }>();
   results.forEach((result, order) => {

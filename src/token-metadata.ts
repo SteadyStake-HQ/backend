@@ -11,7 +11,7 @@
  * is the thing that actually identifies the token anyway.
  */
 
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, getAddress, http } from 'viem';
 import { getRpc } from './config';
 import { getChain } from './run-executor';
 
@@ -52,12 +52,25 @@ const TRUST_CHAIN_SLUG: Record<number, string> = {
 
 const TRUST_CDN = 'https://assets-cdn.trustwallet.com/blockchains';
 
-/** Where a token's logo can be fetched from, or null when this chain has no asset repo. */
+/**
+ * Where a token's logo can be fetched from, or null when this chain has no asset repo.
+ *
+ * The address segment is EIP-55 checksummed because that is how the repo names its directories —
+ * `…/assets/0x0E09FaBB…/logo.png`. This used to lowercase it, and the CDN does not redirect: every
+ * URL built here 404'd, on every chain, for every token. Measured against the live BNB Chain list,
+ * all 25 tokens falling back to Trust Wallet had a broken logo and drew a lettered avatar instead.
+ */
 export function logoUrl(chainId: number, address: string): string | null {
   const slug = TRUST_CHAIN_SLUG[chainId];
   if (!slug) return null;
-  const addr = (address.startsWith('0x') ? address : `0x${address}`).toLowerCase();
-  return `${TRUST_CDN}/${slug}/assets/${addr}/logo.png`;
+  let checksummed: string;
+  try {
+    checksummed = getAddress(address.startsWith('0x') ? address : `0x${address}`);
+  } catch {
+    // Not an address, so there is no logo to point at — the caller renders an avatar.
+    return null;
+  }
+  return `${TRUST_CDN}/${slug}/assets/${checksummed}/logo.png`;
 }
 
 interface CacheEntry {

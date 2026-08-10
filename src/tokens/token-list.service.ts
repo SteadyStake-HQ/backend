@@ -15,6 +15,7 @@ import {
 import {
   availableSources,
   fetchFromSource,
+  fetchGeckoTerminalLogos,
   isCoinMarketCapConfigured,
   isTokenSourceName,
   mergeSources,
@@ -295,6 +296,20 @@ export class TokenListService {
       return true;
     });
 
+    // Tokens no provider illustrated, asked about by address rather than by rank. Runs before the
+    // Trust Wallet fallback below because that one is a guess at a URL — it is never checked, and
+    // its repo does not carry the long tail — while this is an image the feed says exists.
+    const unillustrated = toStore.filter((token) => !token.logoUrl).map((token) => token.address);
+    const backfilled = await fetchGeckoTerminalLogos(chainId, unillustrated).catch(
+      () => new Map<string, string>(),
+    );
+    if (backfilled.size > 0) {
+      this.logger.log(
+        `Backfilled ${backfilled.size} logos for chain ${chainId} from GeckoTerminal ` +
+          `(${unillustrated.length} tokens had none).`,
+      );
+    }
+
     const stored = await upsertTokens(
       toStore.map((token, index) => ({
         chainId,
@@ -302,7 +317,7 @@ export class TokenListService {
         symbol: token.symbol.slice(0, MAX_SYMBOL_LENGTH),
         name: token.name.slice(0, MAX_NAME_LENGTH),
         decimals: token.decimals,
-        logoUrl: token.logoUrl ?? logoUrl(chainId, token.address),
+        logoUrl: token.logoUrl ?? backfilled.get(token.address) ?? logoUrl(chainId, token.address),
         source: token.source,
         sortRank: index + 1,
         addedBy: input.updatedBy ?? null,
