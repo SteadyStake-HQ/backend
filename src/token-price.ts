@@ -7,12 +7,14 @@
  *
  *  - **DexScreener**, which quotes the pool a swap would actually route through — the price a DCA
  *    run will really get — and covers tokens too new or too small for anyone to have listed.
- *  - **CoinGecko**, via simple/token_price for the chain's asset platform. It only knows tokens it
- *    has listed, but it prices any number of them in a single call.
- *  - **BOT Chain's own DEX** for BOT Chain, where neither of the above has any coverage.
+ *  - **GeckoTerminal**, the batch feed: thirty addresses per call, keyless. This is what prices a
+ *    whole picker's worth of tokens without thirty separate requests.
+ *  - **CoinGecko**, via simple/token_price for the chain's asset platform. One address per call on
+ *    the keyless tier (see COINGECKO_BATCH), so it is a single-token fallback and nothing more.
+ *  - **BOT Chain's own DEX** for BOT Chain, where none of the above has any coverage.
  *
- * Which of the first two is tried first depends on how many tokens were asked for, and it is a
- * consequence of their shapes rather than a preference — see fetchBatch.
+ * Which is tried first depends on how many tokens were asked for, and it is a consequence of their
+ * shapes rather than a preference — see fetchBatch.
  *
  * Deliberately shaped like native-price.ts — same TTL, same stale-rather-than-null fallback, same
  * one-request-per-key coalescing — because the failure mode is the same one: a price that is a
@@ -23,7 +25,12 @@
  */
 
 /** Which feed a quote came from. An operator-set price and a market one are not the same claim. */
-export type TokenPriceSource = 'override' | 'dexscreener' | 'coingecko' | 'botdex';
+export type TokenPriceSource =
+  | 'override'
+  | 'dexscreener'
+  | 'coingecko'
+  | 'geckoterminal'
+  | 'botdex';
 
 export interface TokenPriceQuote {
   chainId: number;
@@ -43,6 +50,18 @@ const DEXSCREENER_CHAIN: Record<number, string> = {
   1: 'ethereum',
   56: 'bsc',
   137: 'polygon',
+  2222: 'kava',
+  8453: 'base',
+};
+
+/**
+ * GeckoTerminal's own network slugs, which are neither DexScreener's nor CoinGecko's. Kept in step
+ * with GECKOTERMINAL_NETWORK in tokens/token-sources.ts, which uses the same ids for the token list.
+ */
+const GECKOTERMINAL_NETWORK: Record<number, string> = {
+  1: 'eth',
+  56: 'bsc',
+  137: 'polygon_pos',
   2222: 'kava',
   8453: 'base',
 };
@@ -87,8 +106,23 @@ const FETCH_TIMEOUT_MS = 8_000;
  */
 const DEXSCREENER_BATCH = 1;
 
-/** CoinGecko's URL would get unwieldy past this; it has no documented hard cap. */
-const COINGECKO_BATCH = 50;
+/** GeckoTerminal's documented cap for tokens/multi, and the reason it is the batch source. */
+const GECKOTERMINAL_BATCH = 30;
+
+/**
+ * Addresses per CoinGecko request — one, because that is what the keyless tier allows.
+ *
+ * This was 50 on the belief that simple/token_price had no hard cap. It does now: anything above one
+ * address is rejected outright with `error_code: 10012`, "Number of contract addresses in the
+ * request exceeds the allowed limit of 1 contract address". Measured against the live BNB Chain list,
+ * every batched CoinGecko call was returning HTTP 400 and therefore nothing, silently — the whole
+ * source was dead in the multi-address path while looking like a chain no feed covers.
+ *
+ * Left at one rather than raised, and CoinGecko dropped from the batch path entirely (see
+ * fetchBatch): fanning a hundred tokens out one request each would trip its rate limit long before
+ * it answered. GeckoTerminal is the batch feed now.
+ */
+const COINGECKO_BATCH = 1;
 
 interface CachedPrice {
   usd: number;
@@ -209,6 +243,50 @@ async function fetchDexScreenerUsd(chainId: number, addresses: string[]): Promis
   return out;
 }
 
+interface GeckoTerminalToken {
+  attributes?: { address?: string; price_usd?: string | null };
+}
+
+/**
+ * GeckoTerminal prices for several addresses on one chain, thirty per request.
+ *
+ * Its price is the token's across the pools it indexes rather than one chosen pool, so it answers
+ * for tokens whose deepest pool DexScreener happens not to return — and it does it for a whole
+ * picker in a handful of calls, which is the property that matters here.
+ */
+async function fetchGeckoTerminalUsd(
+  chainId: number,
+  addresses: string[],
+): Promise<Record<string, number>> {
+  const network = GECKOTERMINAL_NETWORK[chainId];
+  if (!network || addresses.length === 0) return {};
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < addresses.length; i += GECKOTERMINAL_BATCH) {
+    chunks.push(addresses.slice(i, i + GECKOTERMINAL_BATCH));
+  }
+
+  const out: Record<string, number> = {};
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const json = await fetchJson<{ data?: GeckoTerminalToken[] | null }>(
+        `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/multi/${chunk.join(',')}`,
+      );
+      return { chunk, data: json?.data ?? [] };
+    }),
+  );
+
+  for (const { chunk, data } of results) {
+    for (const token of data) {
+      const address = normalizeTokenAddress(token.attributes?.address);
+      if (address == null || !chunk.includes(address)) continue;
+      const usd = positive(token.attributes?.price_usd);
+      if (usd != null) out[address] = usd;
+    }
+  }
+  return out;
+}
+
 /** CoinGecko prices for several addresses on one chain's asset platform, in a single request. */
 async function fetchCoingeckoUsd(chainId: number, addresses: string[]): Promise<Record<string, number>> {
   const platform = COINGECKO_PLATFORM[chainId];
@@ -281,15 +359,19 @@ function fallbackQuote(chainId: number, address: string): TokenPriceQuote {
 
 /**
  * Every live source for one chain's worth of addresses, stopping per address at the first that
- * answers. The order depends on how many were asked for, and it is not a preference — it is the two
+ * answers. The order depends on how many were asked for, and it is not a preference — it is the
  * feeds' shapes:
  *
  *  - **One address** (the executor stamping a buy, a plan page): DexScreener first. Its answer is
  *    the price of the pool a swap would actually route through, and it covers tokens too new or too
- *    small for CoinGecko to have listed.
- *  - **Many** (the picker): CoinGecko first, because it prices any number of addresses in one call
- *    with no per-token ceiling. DexScreener then fills in what CoinGecko does not know, in the small
- *    chunks its 30-pair response cap forces.
+ *    small for anyone to have listed. CoinGecko and GeckoTerminal then get their turn — at one
+ *    address each is as cheap as the other.
+ *  - **Many** (the picker): GeckoTerminal first, because thirty addresses per call is the only way
+ *    to price a hundred-token list without a hundred requests. DexScreener then fills in what it
+ *    does not know, in the single-address chunks its 30-pair response cap forces.
+ *
+ * CoinGecko is deliberately absent from the many-address path: its keyless tier takes one address
+ * per request (see COINGECKO_BATCH), so using it there would mean one request per token.
  */
 async function fetchBatch(chainId: number, addresses: string[]): Promise<void> {
   let missing = addresses;
@@ -309,8 +391,10 @@ async function fetchBatch(chainId: number, addresses: string[]): Promise<void> {
   const dexFirst = missing.length === 1;
 
   if (!dexFirst) {
-    const gecko = await fetchCoingeckoUsd(chainId, missing);
-    for (const [address, usd] of Object.entries(gecko)) remember(chainId, address, usd, 'coingecko');
+    const terminal = await fetchGeckoTerminalUsd(chainId, missing);
+    for (const [address, usd] of Object.entries(terminal)) {
+      remember(chainId, address, usd, 'geckoterminal');
+    }
     missing = stillMissing();
     if (missing.length === 0) return;
   }
@@ -323,6 +407,13 @@ async function fetchBatch(chainId: number, addresses: string[]): Promise<void> {
   if (dexFirst) {
     const gecko = await fetchCoingeckoUsd(chainId, missing);
     for (const [address, usd] of Object.entries(gecko)) remember(chainId, address, usd, 'coingecko');
+    missing = stillMissing();
+    if (missing.length === 0) return;
+
+    const terminal = await fetchGeckoTerminalUsd(chainId, missing);
+    for (const [address, usd] of Object.entries(terminal)) {
+      remember(chainId, address, usd, 'geckoterminal');
+    }
   }
 }
 
