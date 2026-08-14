@@ -9,6 +9,7 @@ import {
 } from '../supabase/network-allocations';
 import { getAllNetworks, getStableSymbol, type NetworkContracts } from '../config';
 import { getGameContracts, type GameContractsEntry } from '../game-contracts';
+import { getSS4Contracts, type SS4ContractsEntry } from '../ss4-contracts';
 import {
   getRegistryEntry,
   getRegistryRpc,
@@ -50,6 +51,14 @@ export interface AllocatedNetwork {
    * game deployment needs to see which of the three actually landed on this chain.
    */
   gameContracts: GameContractsEntry | null;
+  /**
+   * The `$SS4` token and presale on this chain, or null where they are not deployed. Kept apart
+   * from both `contracts` (the DCA stack) and `gameContracts` for the same reason those are apart
+   * from each other: a different deploy script writes a different file on a different release
+   * track, so "no SS4 here" and "no game contracts here" are independent facts an operator needs
+   * to be able to tell apart.
+   */
+  ss4Contracts: SS4ContractsEntry | null;
 }
 
 /**
@@ -185,6 +194,7 @@ export class NetworkAllocationService {
       updatedAt: allocation?.updatedAt ? allocation.updatedAt.toISOString() : null,
       contracts: deployed?.contracts ?? null,
       gameContracts: getGameContracts(entry.chainId),
+      ss4Contracts: getSS4Contracts(entry.chainId),
     };
   }
 

@@ -374,6 +374,134 @@
         '<div class="contract-rows">' + groups + recorded + "</div></details>";
     }
 
+    /* $SS4 amounts arrive as base-unit strings because the supply (1e27) does not survive a JS
+       number. Format by string surgery rather than parsing: BigInt would work here too, but this
+       keeps the whole page free of any numeric type that could silently round a balance. */
+    function formatUnits(base, decimals, maxFractionDigits) {
+      const s = String(base == null ? "0" : base).replace(/[^0-9]/g, "") || "0";
+      const d = Number(decimals) || 0;
+      const padded = s.padStart(d + 1, "0");
+      const whole = padded.slice(0, padded.length - d) || "0";
+      let fraction = d ? padded.slice(padded.length - d) : "";
+      if (maxFractionDigits !== undefined) fraction = fraction.slice(0, maxFractionDigits);
+      fraction = fraction.replace(/0+$/, "");
+      const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return fraction ? grouped + "." + fraction : grouped;
+    }
+
+    /* usdE6 is USD scaled by 1e6 throughout the presale contract (§7.4).
+       Full 6-digit precision, not 2: the token price is sub-cent ($0.025), and rounding the
+       display to cents would show it as "$0.02" — a wrong price on an operator dashboard.
+       Trailing zeros are trimmed, so whole-dollar caps still read as "$1,250,000". */
+    function formatUsd(usdE6) {
+      return "$" + formatUnits(usdE6, 6, 6);
+    }
+
+    function formatTimestamp(seconds) {
+      if (!seconds) return null;
+      return new Date(Number(seconds) * 1000).toLocaleString();
+    }
+
+    /* The phase the clock implies. Deliberately not called the sale's "state": without an RPC call
+       the dashboard cannot know whether it sold out, was finalized, or was cancelled, so it never
+       claims to. Mirrors derivePresalePhase() in src/ss4-contracts.ts. */
+    const SS4_PHASE_LABEL = {
+      unfrozen: "Not frozen",
+      upcoming: "Upcoming",
+      active: "Active",
+      ended: "Sale closed",
+      claimable: "Claims open",
+    };
+
+    function presalePhase(presale) {
+      if (!presale) return null;
+      if (!presale.configFrozen) return "unfrozen";
+      const now = Math.floor(Date.now() / 1000);
+      if (now < presale.saleStart) return "upcoming";
+      if (now < presale.saleEnd) return "active";
+      if (presale.claimStart && now >= presale.claimStart) return "claimable";
+      return "ended";
+    }
+
+    /**
+     * The $SS4 token and presale for one network (outline §5, §7), folded away like the blocks
+     * above it. A chain with no deployment says so: $SS4 has one canonical chain, so "not here" is
+     * the correct and expected answer nearly everywhere.
+     */
+    function ss4Contracts(network) {
+      const ss4 = network.ss4Contracts;
+      if (!ss4 || (!ss4.token && !ss4.presale)) {
+        return '<details class="net-contracts"><summary>$SS4 contracts</summary>' +
+          '<p class="no-game-deploy">No $SS4 deployment recorded for this chain. Deploy with ' +
+          'script/DeploySS4.s.sol; the addresses land in contracts/deployed-ss4-contracts.json.' +
+          "</p></details>";
+      }
+
+      const groups = [];
+
+      if (ss4.token) {
+        const t = ss4.token;
+        const rows = ['<div class="row primary"><span class="label">Address</span>' +
+          addressElement(t.address, network.explorerUrl) + "</div>"];
+        rows.push(detailRow("Symbol", t.symbol));
+        rows.push(detailRow("Decimals", t.decimals));
+        rows.push(detailRow("Total supply", formatUnits(t.totalSupply, t.decimals, 0) + " " + t.symbol));
+        if (t.allocations) {
+          Object.keys(t.allocations).forEach(function (pool) {
+            const a = t.allocations[pool];
+            const share = (Number(a.bps) / 100).toFixed(0) + "%";
+            const label = pool.charAt(0).toUpperCase() + pool.slice(1);
+            rows.push('<div class="row"><span class="label">' + escapeHtml(label) + " " + share +
+              "</span>" + addressElement(a.recipient, network.explorerUrl) + "</div>");
+          });
+        }
+        groups.push('<div class="game-group"><h3>$SS4 Token' +
+          ' <span class="contract-name">· SS4Token</span></h3>' + rows.join("") + "</div>");
+      }
+
+      if (ss4.presale) {
+        const p = ss4.presale;
+        const phase = presalePhase(p);
+        const rows = ['<div class="row primary"><span class="label">Address</span>' +
+          addressElement(p.address, network.explorerUrl) + "</div>"];
+        rows.push(detailRow("Phase", SS4_PHASE_LABEL[phase] || phase));
+        rows.push('<div class="row"><span class="label">Pays in</span>' +
+          addressElement(p.paymentToken, network.explorerUrl) + "</div>");
+        rows.push(detailRow("Payment token", (p.paymentSymbol || "?") + " · " + p.paymentDecimals + " decimals"));
+        rows.push(detailRow("Price", formatUsd(p.priceUsdE6) + " per SS4"));
+        rows.push(detailRow("For sale", formatUnits(p.saleAllocation, 18, 0) + " SS4"));
+        rows.push(detailRow("Min buy", formatUsd(p.minPurchaseUsdE6)));
+        rows.push(detailRow("Wallet cap",
+          p.maxPurchasePerWalletUsdE6 === "0" ? "Uncapped" : formatUsd(p.maxPurchasePerWalletUsdE6)));
+        rows.push(detailRow("Soft cap",
+          p.softCapUsdE6 === "0" ? "None" : formatUsd(p.softCapUsdE6)));
+        rows.push(detailRow("Hard cap", formatUsd(p.hardCapUsdE6)));
+        rows.push(detailRow("Sale opens", formatTimestamp(p.saleStart)));
+        rows.push(detailRow("Sale closes", formatTimestamp(p.saleEnd)));
+        rows.push(detailRow("Claims open", formatTimestamp(p.claimStart)));
+        rows.push(detailRow("TGE unlock", (Number(p.tgeUnlockBps) / 100) + "%"));
+        rows.push(detailRow("Config frozen", p.configFrozen ? "Yes" : "No — still editable"));
+        if (p.configHash) rows.push(detailRow("Config hash", p.configHash));
+        groups.push('<div class="game-group"><h3>$SS4 Presale' +
+          ' <span class="contract-name">· SS4Presale</span></h3>' + rows.join("") + "</div>");
+      }
+
+      /* The deployment file's own caveat, surfaced rather than buried: a testnet rehearsal whose
+         allocations all sit on one EOA must not be mistaken for a production launch. */
+      const note = ss4.note
+        ? '<p class="net-note ss4-note">' + escapeHtml(ss4.note) + "</p>"
+        : "";
+
+      const recorded = ss4.recordedAt
+        ? '<p class="recorded">Recorded ' + escapeHtml(new Date(ss4.recordedAt).toLocaleString()) +
+          (ss4.key ? " · " + escapeHtml(ss4.key) : "") + "</p>"
+        : "";
+
+      return '<details class="net-contracts"><summary>$SS4 contracts · ' + groups.length +
+        ' of 2</summary><div class="contract-rows">' + groups.join("") + note + recorded +
+        "</div></details>";
+    }
+
     function badge(network) {
       const label = STATUS_LABEL[network.status] || network.status;
       return '<span class="badge status-' + escapeHtml(network.status) + '">' + escapeHtml(label) + "</span>";
@@ -423,6 +551,16 @@
           ? '<span class="chip nogas">' + gameCount + ' of 3 deployed</span>'
           : '<span class="chip nogas">Not deployed</span>';
 
+      // $SS4 has one canonical chain, so unlike the game stack the honest default is "absent".
+      // The chip reports the sale's clock phase, which is the fact an operator is actually watching.
+      const ss4 = network.ss4Contracts;
+      const ss4Phase = ss4 && ss4.presale ? presalePhase(ss4.presale) : null;
+      const ss4Chip = ss4Phase === "active"
+        ? '<span class="chip gas">Presale active</span>'
+        : ss4 && (ss4.token || ss4.presale)
+          ? '<span class="chip nogas">' + escapeHtml(SS4_PHASE_LABEL[ss4Phase] || "Token only") + "</span>"
+          : '<span class="chip nogas">Not deployed</span>';
+
       const note = network.note
         ? '<p class="net-note">' + escapeHtml(network.note) + "</p>"
         : "";
@@ -446,8 +584,10 @@
           escapeHtml(network.stableSymbol) + "</span></div>" +
         '<div class="row"><span class="label">Deployment</span>' + deployed + "</div>" +
         '<div class="row"><span class="label">Game contracts</span>' + gameChip + "</div>" +
+        '<div class="row"><span class="label">$SS4</span>' + ss4Chip + "</div>" +
         contracts(network) +
         gameContracts(network) +
+        ss4Contracts(network) +
         note +
         meta +
         actions(network) +

@@ -1,0 +1,52 @@
+{
+  "968": {
+    "chainId": 968,
+    "key": "bot-testnet",
+    "environment": "testnet",
+    "note": "Testnet rehearsal only. Every economic value here is a placeholder pending the outline's §29 deployment blockers, and all six token allocations were minted to the deployer EOA, which §3.3 forbids for production. Not audited.",
+    "deployedAt": "2026-08-13T20:29:33Z",
+    "deployer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+    "explorer": "https://scan.bohr.life",
+    "compiler": "v0.8.35+commit.47b9dedd",
+    "compilationProfile": "ss4-optimized",
+    "SS4Token": {
+      "address": "0xf9c48adC0c8A970FE564c106fa6C1d9cC2D8d880",
+      "verified": true,
+      "name": "SteadyStake",
+      "symbol": "SS4",
+      "decimals": 18,
+      "totalSupply": "1000000000000000000000000000",
+      "allocations": {
+        "community": { "bps": 3500, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" },
+        "team": { "bps": 1500, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" },
+        "investors": { "bps": 1500, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" },
+        "treasury": { "bps": 1500, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" },
+        "liquidity": { "bps": 1000, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" },
+        "ecosystem": { "bps": 1000, "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294" }
+      }
+    },
+    "SS4Presale": {
+      "address": "0xCf2a6f0C1bD5E06284f2bE450FEd47A8C2539265",
+      "verified": true,
+      "admin": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "paymentToken": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
+      "paymentSymbol": "USDC",
+      "paymentDecimals": 6,
+      "priceUsdE6": "25000",
+      "saleAllocation": "50000000000000000000000000",
+      "minPurchaseUsdE6": "10000000",
+      "maxPurchasePerWalletUsdE6": "50000000000",
+      "softCapUsdE6": "100000000000",
+      "hardCapUsdE6": "1250000000000",
+      "saleStart": 1786652973,
+      "saleEnd": 1787862573,
+      "claimStart": 1787862573,
+      "claimDeadline": 0,
+      "tgeUnlockBps": 10000,
+      "vestCliffSeconds": 0,
+      "vestDurationSeconds": 0,
+      "configFrozen": true,
+      "configHash": "0x73e922f0fb8e67f3b9c9faaaf7cdcbf8e48892e38e68dbcc7c6f3855da8959ae"
+    }
+  }
+}

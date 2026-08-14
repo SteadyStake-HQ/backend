@@ -13,6 +13,7 @@
     "index-plans": "nest build && node dist/plans/index-plans.js",
     "loop": "node loop.js",
     "sync:game-contracts": "node scripts/sync-game-contracts.mjs",
+    "sync:ss4-contracts": "node scripts/sync-ss4-contracts.mjs",
     "check:game-contracts": "node scripts/sync-game-contracts.mjs --check"
   },
   "dependencies": {
