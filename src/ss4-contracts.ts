@@ -29,9 +29,49 @@ export interface SS4TokenInfo {
   allocations: Record<string, SS4AllocationInfo> | null;
 }
 
+/**
+ * The launch campaign carried by a v2 presale (§7 campaign extension).
+ *
+ * Present only on `SS4PresaleV2`. Everything here is frozen into the sale's `configHash`
+ * alongside the price, so these values are what buyers are held to — the backend reads them
+ * rather than keeping its own copy of the rates, because two copies of a published number
+ * is one copy too many.
+ */
+export interface SS4CampaignInfo {
+  /** `$SS4` base units reserved for all three bonuses combined. */
+  bonusAllocation: string;
+  /** Granted against a valid signed voucher. 200 = 2%. */
+  socialBonusBps: number;
+  /** Granted when the buyer's native BOT balance clears `holdRequirementWei`. 300 = 3%. */
+  holdBonusBps: number;
+  /** Credited to the referrer on the referee's purchase. 1000 = 10%. */
+  referralBonusBps: number;
+  /** Native BOT a buyer must hold to earn the holding bonus, in wei. */
+  holdRequirementWei: string;
+  /** Address whose signatures the contract accepts as social-task attestations. */
+  campaignSigner: string | null;
+  /** EIP-712 domain and type the voucher signer must reproduce exactly. */
+  eip712: {
+    name: string;
+    version: string;
+    domainSeparator: string | null;
+    voucherType: string;
+  } | null;
+}
+
 /** The presale (§7). Amount fields are base-unit strings for the same reason. */
 export interface SS4PresaleInfo {
   address: `0x${string}`;
+  /**
+   * 1 for `SS4Presale`, 2 for `SS4PresaleV2`. Consumers that only read the sale terms can
+   * ignore it; anything that builds a transaction must not, because v2's buy path takes a
+   * referrer and a voucher that v1's ABI has no room for.
+   */
+  version: 1 | 2;
+  /** Set on a v2 record: the contract key it replaces. Null on v1. */
+  supersedes: string | null;
+  /** The campaign, or null on a v1 sale which has none. */
+  campaign: SS4CampaignInfo | null;
   admin: string | null;
   paymentToken: `0x${string}`;
   paymentSymbol: string | null;
@@ -63,7 +103,23 @@ export interface SS4ContractsEntry {
   note: string | null;
   deployer: string | null;
   token: SS4TokenInfo | null;
+  /**
+   * The sale that is live: `SS4PresaleV2` when one is recorded, `SS4Presale` otherwise.
+   *
+   * Superseding rather than adding a second field is deliberate. v1 on BOT testnet is frozen
+   * and cannot be upgraded, so v2 is a different contract at a different address that the
+   * site now points at — "the presale" is unambiguously the newer one, and every existing
+   * reader of this field should follow it there without being changed.
+   */
   presale: SS4PresaleInfo | null;
+  /**
+   * Sales this chain has deployed that are no longer the live one, newest first.
+   *
+   * Kept rather than dropped because a superseded sale is not a dead one: v1 is frozen with
+   * real positions recorded against it, and its buyers still need `claim()` and `refund()`
+   * to be reachable. An operator looking for "where did that wallet buy" needs this list.
+   */
+  supersededPresales: SS4PresaleInfo[];
   /** When the deployment file was last written — how fresh these addresses are. */
   recordedAt: string | null;
 }
@@ -76,6 +132,7 @@ interface RawEntry {
   deployer?: string;
   SS4Token?: Record<string, unknown>;
   SS4Presale?: Record<string, unknown>;
+  SS4PresaleV2?: Record<string, unknown>;
 }
 
 /**
@@ -138,7 +195,8 @@ export function loadSS4Contracts(): Record<number, SS4ContractsEntry> {
         note: raw.note ?? null,
         deployer: raw.deployer ?? null,
         token: parseToken(raw),
-        presale: parsePresale(raw),
+        presale: pickLivePresale(raw),
+        supersededPresales: pickSupersededPresales(raw),
         recordedAt,
       };
     }
@@ -197,14 +255,29 @@ function parseToken(raw: RawEntry): SS4TokenInfo | null {
   };
 }
 
-function parsePresale(raw: RawEntry): SS4PresaleInfo | null {
-  const p = raw.SS4Presale;
+/** The sale a client should be pointed at: v2 when it exists, otherwise v1. */
+function pickLivePresale(raw: RawEntry): SS4PresaleInfo | null {
+  return parsePresale(raw.SS4PresaleV2, 2) ?? parsePresale(raw.SS4Presale, 1);
+}
+
+/** Everything else that was ever deployed here, newest first. */
+function pickSupersededPresales(raw: RawEntry): SS4PresaleInfo[] {
+  // Only meaningful once a v2 exists; before that there is nothing being superseded.
+  if (!raw.SS4PresaleV2) return [];
+  const v1 = parsePresale(raw.SS4Presale, 1);
+  return v1 ? [v1] : [];
+}
+
+function parsePresale(p: Record<string, unknown> | undefined, version: 1 | 2): SS4PresaleInfo | null {
   const address = str(p?.address);
   const paymentToken = str(p?.paymentToken);
   if (!p || !address || !paymentToken) return null;
 
   return {
     address: address as `0x${string}`,
+    version,
+    supersedes: str(p.supersedes),
+    campaign: version === 2 ? parseCampaign(p.campaign) : null,
     admin: str(p.admin),
     paymentToken: paymentToken as `0x${string}`,
     paymentSymbol: str(p.paymentSymbol),
@@ -222,6 +295,42 @@ function parsePresale(raw: RawEntry): SS4PresaleInfo | null {
     tgeUnlockBps: num(p.tgeUnlockBps, 10_000),
     configFrozen: p.configFrozen === true,
     configHash: str(p.configHash),
+  };
+}
+
+/**
+ * The campaign block on a v2 record.
+ *
+ * Returns null rather than a zeroed object when the block is absent: "this sale has no
+ * campaign" and "this sale has a campaign paying 0%" are different facts, and only the
+ * second one should ever render a rewards panel.
+ */
+function parseCampaign(value: unknown): SS4CampaignInfo | null {
+  if (!value || typeof value !== 'object') return null;
+  const c = value as Record<string, unknown>;
+
+  const rawEip712 = c.eip712;
+  let eip712: SS4CampaignInfo['eip712'] = null;
+  if (rawEip712 && typeof rawEip712 === 'object') {
+    const e = rawEip712 as Record<string, unknown>;
+    eip712 = {
+      name: str(e.name, 'SS4Presale') ?? 'SS4Presale',
+      version: str(e.version, '2') ?? '2',
+      domainSeparator: str(e.domainSeparator),
+      voucherType:
+        str(e.voucherType, 'CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)') ??
+        'CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)',
+    };
+  }
+
+  return {
+    bonusAllocation: amount(c.bonusAllocation),
+    socialBonusBps: num(c.socialBonusBps),
+    holdBonusBps: num(c.holdBonusBps),
+    referralBonusBps: num(c.referralBonusBps),
+    holdRequirementWei: amount(c.holdRequirementWei),
+    campaignSigner: str(c.campaignSigner),
+    eip712,
   };
 }
 
