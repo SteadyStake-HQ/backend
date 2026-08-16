@@ -67,7 +67,7 @@
       "configHash": "0x73e922f0fb8e67f3b9c9faaaf7cdcbf8e48892e38e68dbcc7c6f3855da8959ae"
     },
     "SS4PresaleV2": {
-      "address": "0x684B30FB0f133AA124AdBD2Fac6aa3D3D8F3aC30",
+      "address": "0x19fEB663233B76D84283ED84f5a2eD638C3d6d65",
       "supersedes": "SS4Presale",
       "note": "Adds the launch campaign: 2% social-task bonus against an EIP-712 voucher, 3% bonus for holding >= 1 BOT at purchase, and 10% referral to the referrer. v1 remains deployed and frozen; it is not upgradeable and was not migrated.",
       "supersededDeployments": [
@@ -82,6 +82,18 @@
           "deployedAt": "2026-08-16T12:34:03Z",
           "priceUsdE6": "4000",
           "reason": "Buyer limits changed: minPurchase $10 -> $4 and maxPurchasePerWallet $8,000 -> $4,444. configure() is atomic and one-way (7.5), so a frozen sale cannot have its limits edited -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
+        },
+        {
+          "address": "0x684B30FB0f133AA124AdBD2Fac6aa3D3D8F3aC30",
+          "deployedAt": "2026-08-16T13:34:13Z",
+          "priceUsdE6": "4000",
+          "reason": "Schedule changed to a throwaway test window. This address froze the real Aug 20 - Sep 2 sale dates, so the testnet sale could not be opened before Aug 20 and the buy/end/claim path was untestable. configure() is atomic and one-way (7.5), so the window cannot be edited -- redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
+        },
+        {
+          "address": "0xE1Efa844B604a16368d1d780cC20ED85c80111EF",
+          "deployedAt": "2026-08-16T15:48:00Z",
+          "priceUsdE6": "4000",
+          "reason": "Soft cap lowered to a test value. This address kept the real $16,000 soft cap, and settle() reverts SoftCapNotReached below it, so with a $4,444 per-wallet cap a single tester could never reach the claim path. configure() is atomic and one-way (7.5) -- redeployed rather than changed. Nothing was ever bought on it. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
         }
       ],
       "verified": true,
@@ -93,17 +105,17 @@
       "saleAllocation": "50000000000000000000000000",
       "minPurchaseUsdE6": "4000000",
       "maxPurchasePerWalletUsdE6": "4444000000",
-      "softCapUsdE6": "16000000000",
+      "softCapUsdE6": "100000000",
       "hardCapUsdE6": "200000000000",
-      "saleStart": 1787184000,
-      "saleEnd": 1788393600,
-      "claimStart": 1788480000,
+      "saleStart": 1786896900,
+      "saleEnd": 1786904100,
+      "claimStart": 1786904400,
       "claimDeadline": 0,
       "tgeUnlockBps": 10000,
       "vestCliffSeconds": 0,
       "vestDurationSeconds": 0,
       "configFrozen": true,
-      "configHash": "0x0309f4bd31a16c2f283a03d4258b11979e931eea9057bbb89c4add7111e8dd38",
+      "configHash": "0x0b540cabfd7aa7853e34c6fd01b5a0bdd0356e3e33ee19d8527dbeb7d82d1b5d",
       "campaign": {
         "bonusAllocation": "7500000000000000000000000",
         "socialBonusBps": 200,
@@ -115,12 +127,13 @@
         "eip712": {
           "name": "SS4Presale",
           "version": "2",
-          "domainSeparator": "0x67c72361784ea8ed507e56f9c8cea55100e95799b716c7cb30879a5a503653db",
+          "domainSeparator": "0x293b230ae9bf90e1c26d78595fab3532322cb4d27c87711cec8677e1414837b9",
           "voucherType": "CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)"
         }
       },
-      "deployedAt": "2026-08-16T13:34:13Z",
-      "explorerUrl": "https://scan.bohr.life/address/0x684B30FB0f133AA124AdBD2Fac6aa3D3D8F3aC30"
+      "deployedAt": "2026-08-16T16:03:00Z",
+      "explorerUrl": "https://scan.bohr.life/address/0x19fEB663233B76D84283ED84f5a2eD638C3d6d65",
+      "scheduleNote": "TEST VALUES, not the real sale. Two fields above are throwaway rehearsal settings: saleStart/saleEnd/claimStart are a 2-hour window on 2026-08-16 (16:15 / 18:15 / 18:20 UTC), and softCapUsdE6 is $100 instead of $16,000 so one wallet can settle the sale and reach claim. The real presale is 2026-08-20 -> 2026-09-02, public launch 2026-09-04, soft cap $16,000. Use those for mainnet and do not copy the two fields above."
     }
   }
 }
