@@ -67,29 +67,37 @@
       "configHash": "0x73e922f0fb8e67f3b9c9faaaf7cdcbf8e48892e38e68dbcc7c6f3855da8959ae"
     },
     "SS4PresaleV2": {
-      "address": "0xAb7420d87b418255aB240c7fCa323312E30A4fcd",
+      "address": "0xB4BBC087ddd4b1B92DC1dfE5cFc0aA8d6C714B06",
       "supersedes": "SS4Presale",
       "note": "Adds the launch campaign: 2% social-task bonus against an EIP-712 voucher, 3% bonus for holding >= 1 BOT at purchase, and 10% referral to the referrer. v1 remains deployed and frozen; it is not upgradeable and was not migrated.",
+      "supersededDeployments": [
+        {
+          "address": "0xAb7420d87b418255aB240c7fCa323312E30A4fcd",
+          "deployedAt": "2026-08-14T08:22:49Z",
+          "priceUsdE6": "25000",
+          "reason": "Repriced to $0.004 and rescheduled to the delayed Aug 20 window. configure() is atomic and one-way (7.5), so a frozen sale cannot be repriced -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it."
+        }
+      ],
       "verified": true,
       "admin": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
       "paymentToken": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
       "paymentSymbol": "USDC",
       "paymentDecimals": 6,
-      "priceUsdE6": "25000",
+      "priceUsdE6": "4000",
       "saleAllocation": "50000000000000000000000000",
       "minPurchaseUsdE6": "10000000",
-      "maxPurchasePerWalletUsdE6": "50000000000",
-      "softCapUsdE6": "100000000000",
-      "hardCapUsdE6": "1250000000000",
-      "saleStart": 1786719769,
-      "saleEnd": 1787929369,
-      "claimStart": 1787929369,
+      "maxPurchasePerWalletUsdE6": "8000000000",
+      "softCapUsdE6": "16000000000",
+      "hardCapUsdE6": "200000000000",
+      "saleStart": 1787184000,
+      "saleEnd": 1788393600,
+      "claimStart": 1788480000,
       "claimDeadline": 0,
       "tgeUnlockBps": 10000,
       "vestCliffSeconds": 0,
       "vestDurationSeconds": 0,
       "configFrozen": true,
-      "configHash": "0x2243273719f5db9dffb2bae177474681b6fa55bd7a5787e7cc54f0e04b2c4f87",
+      "configHash": "0x67dae77a175651ebb0ddf5d73cdcfe40ebe6ac275c69b231e8c7abc992249474",
       "campaign": {
         "bonusAllocation": "7500000000000000000000000",
         "socialBonusBps": 200,
@@ -101,12 +109,12 @@
         "eip712": {
           "name": "SS4Presale",
           "version": "2",
-          "domainSeparator": "0xa0895ba40b2a7e6aa6088ae866a10081aa8035ef06224437df1db3bc8d03406d",
+          "domainSeparator": "0x0e8e70857bdbd17d7989f8c13c8b3ff01cae19a96349a24918c332922f43491e",
           "voucherType": "CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)"
         }
       },
-      "deployedAt": "2026-08-14T08:22:49Z",
-      "explorerUrl": "https://scan.bohr.life/address/0xAb7420d87b418255aB240c7fCa323312E30A4fcd"
+      "deployedAt": "2026-08-16T12:34:03Z",
+      "explorerUrl": "https://scan.bohr.life/address/0xB4BBC087ddd4b1B92DC1dfE5cFc0aA8d6C714B06"
     }
   }
 }
