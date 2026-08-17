@@ -3,7 +3,7 @@
     "chainId": 968,
     "key": "bot-testnet",
     "environment": "testnet",
-    "note": "Testnet rehearsal only. Every economic value here is a placeholder pending the outline's \u00a729 deployment blockers, and all six token allocations were minted to the deployer EOA, which \u00a73.3 forbids for production. Not audited.",
+    "note": "Testnet rehearsal only. Every economic value here is a placeholder pending the outline's §29 deployment blockers, and all six token allocations were minted to the deployer EOA, which §3.3 forbids for production. Not audited.",
     "deployedAt": "2026-08-13T20:29:33Z",
     "deployer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
     "explorer": "https://scan.bohr.life",
@@ -69,33 +69,7 @@
     "SS4PresaleV2": {
       "address": "0x19fEB663233B76D84283ED84f5a2eD638C3d6d65",
       "supersedes": "SS4Presale",
-      "note": "Adds the launch campaign: 2% social-task bonus against an EIP-712 voucher, 3% bonus for holding >= 1 BOT at purchase, and 10% referral to the referrer. v1 remains deployed and frozen; it is not upgradeable and was not migrated.",
-      "supersededDeployments": [
-        {
-          "address": "0xAb7420d87b418255aB240c7fCa323312E30A4fcd",
-          "deployedAt": "2026-08-14T08:22:49Z",
-          "priceUsdE6": "25000",
-          "reason": "Repriced to $0.004 and rescheduled to the delayed Aug 20 window. configure() is atomic and one-way (7.5), so a frozen sale cannot be repriced -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it."
-        },
-        {
-          "address": "0xB4BBC087ddd4b1B92DC1dfE5cFc0aA8d6C714B06",
-          "deployedAt": "2026-08-16T12:34:03Z",
-          "priceUsdE6": "4000",
-          "reason": "Buyer limits changed: minPurchase $10 -> $4 and maxPurchasePerWallet $8,000 -> $4,444. configure() is atomic and one-way (7.5), so a frozen sale cannot have its limits edited -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
-        },
-        {
-          "address": "0x684B30FB0f133AA124AdBD2Fac6aa3D3D8F3aC30",
-          "deployedAt": "2026-08-16T13:34:13Z",
-          "priceUsdE6": "4000",
-          "reason": "Schedule changed to a throwaway test window. This address froze the real Aug 20 - Sep 2 sale dates, so the testnet sale could not be opened before Aug 20 and the buy/end/claim path was untestable. configure() is atomic and one-way (7.5), so the window cannot be edited -- redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
-        },
-        {
-          "address": "0xE1Efa844B604a16368d1d780cC20ED85c80111EF",
-          "deployedAt": "2026-08-16T15:48:00Z",
-          "priceUsdE6": "4000",
-          "reason": "Soft cap lowered to a test value. This address kept the real $16,000 soft cap, and settle() reverts SoftCapNotReached below it, so with a $4,444 per-wallet cap a single tester could never reach the claim path. configure() is atomic and one-way (7.5) -- redeployed rather than changed. Nothing was ever bought on it. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
-        }
-      ],
+      "note": "Adds the launch campaign: 2% social-task bonus against an EIP-712 voucher, 3% bonus for holding >= 1 BOT at purchase, and 10% referral to the referrer. Superseded by SS4PresaleV3. v1 remains deployed and frozen; it is not upgradeable and was not migrated.",
       "verified": true,
       "admin": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
       "paymentToken": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
@@ -134,6 +108,81 @@
       "deployedAt": "2026-08-16T16:03:00Z",
       "explorerUrl": "https://scan.bohr.life/address/0x19fEB663233B76D84283ED84f5a2eD638C3d6d65",
       "scheduleNote": "TEST VALUES, not the real sale. Two fields above are throwaway rehearsal settings: saleStart/saleEnd/claimStart are a 2-hour window on 2026-08-16 (16:15 / 18:15 / 18:20 UTC), and softCapUsdE6 is $100 instead of $16,000 so one wallet can settle the sale and reach claim. The real presale is 2026-08-20 -> 2026-09-02, public launch 2026-09-04, soft cap $16,000. Use those for mainnet and do not copy the two fields above."
+    },
+    "SS4PresaleV3": {
+      "address": "0x7dCCeA0686893E270C38deEAC386dA9ee6BFF080",
+      "supersedes": "SS4PresaleV2",
+      "note": "Adds the Early Supporter Campaign: a single variable Presale Boost (0 to the published +5.50%) carried inside an EIP-712 CampaignVoucher and capped by the frozen maxCampaignBoostBps. Replaces v2's three fixed bonuses -- v2's voucher carries no rate and its config is frozen, so a per-wallet boost could not be added to it. v2's 10% referral PAYOUT is deliberately gone: referrerOf / ReferrerBound are kept as tamper-proof attribution only, and a verified referral is instead paid as a +0.20% mission on the referrer's own boost. v1 and v2 remain deployed and frozen; neither is upgradeable and neither was migrated.",
+      "supersededDeployments": [
+        {
+          "address": "0x19fEB663233B76D84283ED84f5a2eD638C3d6d65",
+          "deployedAt": "2026-08-16T16:03:00Z",
+          "priceUsdE6": "4000",
+          "reason": "Superseded by SS4PresaleV3's campaign. v2 pays three fixed bonuses (2% social / 3% holding / 10% referral) against a voucher that carries no rate, and configure() is atomic and one-way (7.5) -- the Early Supporter Campaign's variable boost cannot be configured into it. Still on chain, still frozen, not migrated. It ended with a real position recorded against it (2,500 SS4 sold, $10 raised) which never reached its $100 soft cap, so it can only be cancelled and refunded, never finalized. Its 57,500,000 SS4 remain locked in it."
+        },
+        {
+          "address": "0xAb7420d87b418255aB240c7fCa323312E30A4fcd",
+          "deployedAt": "2026-08-14T08:22:49Z",
+          "priceUsdE6": "25000",
+          "reason": "Repriced to $0.004 and rescheduled to the delayed Aug 20 window. configure() is atomic and one-way (7.5), so a frozen sale cannot be repriced -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it."
+        },
+        {
+          "address": "0xB4BBC087ddd4b1B92DC1dfE5cFc0aA8d6C714B06",
+          "deployedAt": "2026-08-16T12:34:03Z",
+          "priceUsdE6": "4000",
+          "reason": "Buyer limits changed: minPurchase $10 -> $4 and maxPurchasePerWallet $8,000 -> $4,444. configure() is atomic and one-way (7.5), so a frozen sale cannot have its limits edited -- this address was redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
+        },
+        {
+          "address": "0x684B30FB0f133AA124AdBD2Fac6aa3D3D8F3aC30",
+          "deployedAt": "2026-08-16T13:34:13Z",
+          "priceUsdE6": "4000",
+          "reason": "Schedule changed to a throwaway test window. This address froze the real Aug 20 - Sep 2 sale dates, so the testnet sale could not be opened before Aug 20 and the buy/end/claim path was untestable. configure() is atomic and one-way (7.5), so the window cannot be edited -- redeployed rather than changed. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
+        },
+        {
+          "address": "0xE1Efa844B604a16368d1d780cC20ED85c80111EF",
+          "deployedAt": "2026-08-16T15:48:00Z",
+          "priceUsdE6": "4000",
+          "reason": "Soft cap lowered to a test value. This address kept the real $16,000 soft cap, and settle() reverts SoftCapNotReached below it, so with a $4,444 per-wallet cap a single tester could never reach the claim path. configure() is atomic and one-way (7.5) -- redeployed rather than changed. Nothing was ever bought on it. Still on chain, still frozen, not migrated, nothing points at it. Its 57,500,000 SS4 (sale + bonus pools) remain locked in it."
+        }
+      ],
+      "verified": true,
+      "admin": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "paymentToken": "0x4D92ccB72bc528E3133216fF43E04ab0C28a5DC5",
+      "paymentSymbol": "USDC",
+      "paymentDecimals": 6,
+      "priceUsdE6": "4000",
+      "saleAllocation": "50000000000000000000000000",
+      "minPurchaseUsdE6": "4000000",
+      "maxPurchasePerWalletUsdE6": "4444000000",
+      "softCapUsdE6": "100000000",
+      "hardCapUsdE6": "200000000000",
+      "saleStart": 1786977428,
+      "saleEnd": 1786984628,
+      "claimStart": 1786984928,
+      "claimDeadline": 0,
+      "tgeUnlockBps": 10000,
+      "vestCliffSeconds": 0,
+      "vestDurationSeconds": 0,
+      "configFrozen": true,
+      "configHash": "0xa9cafc7fd5974bdc838441fe18a3cc51d1996c37c3f874bc4ee4b5d1202baf75",
+      "campaign": {
+        "bonusAllocation": "7500000000000000000000000",
+        "maxCampaignBoostBps": 550,
+        "note": "550 bps = the published +5.50% campaign maximum, frozen into configHash. buyWithCampaign REVERTS above it rather than clamping, so the backend must never attest more -- a voucher over the ceiling costs a buyer their gas and sells them nothing. Section maxima behind it: community +1.10%, on-chain +2.60%, game +1.80% (see backend/src/campaign/campaign-missions.ts, which asserts the sum at boot). Vouchers are single-use per (buyer, nonce).",
+        "campaignSigner": "0x84FB50F31656585eBB28D79Dcd4b9c70B4ec38B9",
+        "signerNote": "Backend hot key. Holds CAMPAIGN_SIGNER_ROLE and nothing else, and was deliberately NOT granted to the admin/deployer. The most it can do is award up to the frozen 550 bps out of a capped, funded reserve; every voucher is single-use. Rotate with grantRole/revokeRole and invalidate outstanding vouchers with bumpCampaignEpoch(). Same key as the v2 rehearsal -- issue a new one from secure storage for mainnet.",
+        "eip712": {
+          "name": "SS4Presale",
+          "version": "3",
+          "domainSeparator": "0x682765416d2cc093b14047785becc8f46facb6b31b03006c89bd644139e18a44",
+          "voucherType": "CampaignVoucher(address buyer,uint16 boostBps,uint64 deadline,uint64 nonce,uint64 epoch)"
+        }
+      },
+      "deployedAt": "2026-08-17T14:35:31Z",
+      "deploymentBlock": 20189424,
+      "deploymentTx": "0xd57e560733e14307719f670cdf4fe0e2dec4335455314b29c4de7e6e50a683a7",
+      "explorerUrl": "https://scan.bohr.life/address/0x7dCCeA0686893E270C38deEAC386dA9ee6BFF080",
+      "scheduleNote": "TEST VALUES, not the real sale. Two fields are throwaway rehearsal settings, chosen so the campaign is testable end to end: saleStart/saleEnd/claimStart are a 2-hour window on 2026-08-17 (14:37 / 16:37 / 16:42 UTC), and softCapUsdE6 is $100 instead of $16,000 so one wallet can settle the sale and reach claim. The real presale is 2026-08-20 -> 2026-09-02, public launch 2026-09-04, soft cap $16,000. Use those for mainnet and do not copy these two fields. deploymentBlock is the block to point the campaign event indexer at when backfilling (POST /api/admin/campaign/cursor)."
     }
   }
 }
