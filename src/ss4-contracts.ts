@@ -38,9 +38,17 @@ export interface SS4TokenInfo {
  * is one copy too many.
  */
 export interface SS4CampaignInfo {
-  /** `$SS4` base units reserved for all three bonuses combined. */
+  /** `$SS4` base units reserved for every boost/bonus this sale's campaign pays. */
   bonusAllocation: string;
-  /** Granted against a valid signed voucher. 200 = 2%. */
+  /**
+   * v3 only: the published campaign maximum and the per-purchase ceiling on any voucher.
+   * 550 = +5.50%. Zero on a v2 record, which has no single maximum — it has three fixed rates.
+   *
+   * This is the number the backend must never attest above: `buyWithCampaign` reverts rather than
+   * clamping, so a voucher over this ceiling costs a buyer their gas and tells them nothing.
+   */
+  maxCampaignBoostBps: number;
+  /** v2 only: granted against a valid signed voucher. 200 = 2%. Zero on a v3 record. */
   socialBonusBps: number;
   /** Granted when the buyer's native BOT balance clears `holdRequirementWei`. 300 = 3%. */
   holdBonusBps: number;
@@ -63,12 +71,15 @@ export interface SS4CampaignInfo {
 export interface SS4PresaleInfo {
   address: `0x${string}`;
   /**
-   * 1 for `SS4Presale`, 2 for `SS4PresaleV2`. Consumers that only read the sale terms can
-   * ignore it; anything that builds a transaction must not, because v2's buy path takes a
-   * referrer and a voucher that v1's ABI has no room for.
+   * 1 for `SS4Presale`, 2 for `SS4PresaleV2`, 3 for `SS4PresaleV3`. Consumers that only read the
+   * sale terms can ignore it; anything that builds a transaction must not, because each version's
+   * buy path differs — v2 added a referrer and a voucher v1's ABI has no room for, and v3's voucher
+   * carries a boost rate and a nonce that v2's has no room for.
+   *
+   * The Early Supporter Campaign requires 3: only a v3 voucher can attest a per-wallet rate.
    */
-  version: 1 | 2;
-  /** Set on a v2 record: the contract key it replaces. Null on v1. */
+  version: 1 | 2 | 3;
+  /** Set on a v2/v3 record: the contract key it replaces. Null on v1. */
   supersedes: string | null;
   /** The campaign, or null on a v1 sale which has none. */
   campaign: SS4CampaignInfo | null;
@@ -133,6 +144,7 @@ interface RawEntry {
   SS4Token?: Record<string, unknown>;
   SS4Presale?: Record<string, unknown>;
   SS4PresaleV2?: Record<string, unknown>;
+  SS4PresaleV3?: Record<string, unknown>;
 }
 
 /**
@@ -255,20 +267,31 @@ function parseToken(raw: RawEntry): SS4TokenInfo | null {
   };
 }
 
-/** The sale a client should be pointed at: v2 when it exists, otherwise v1. */
+/** The sale a client should be pointed at: the newest version recorded here. */
 function pickLivePresale(raw: RawEntry): SS4PresaleInfo | null {
-  return parsePresale(raw.SS4PresaleV2, 2) ?? parsePresale(raw.SS4Presale, 1);
+  return (
+    parsePresale(raw.SS4PresaleV3, 3) ?? parsePresale(raw.SS4PresaleV2, 2) ?? parsePresale(raw.SS4Presale, 1)
+  );
 }
 
 /** Everything else that was ever deployed here, newest first. */
 function pickSupersededPresales(raw: RawEntry): SS4PresaleInfo[] {
-  // Only meaningful once a v2 exists; before that there is nothing being superseded.
-  if (!raw.SS4PresaleV2) return [];
-  const v1 = parsePresale(raw.SS4Presale, 1);
-  return v1 ? [v1] : [];
+  const older: SS4PresaleInfo[] = [];
+  // Each version supersedes every earlier one, so what is "superseded" depends on the newest
+  // present. A superseded sale is not a dead one: earlier sales stay frozen with real positions
+  // recorded against them, and their buyers still need claim() and refund() to be reachable.
+  if (raw.SS4PresaleV3) {
+    const v2 = parsePresale(raw.SS4PresaleV2, 2);
+    if (v2) older.push(v2);
+  }
+  if (raw.SS4PresaleV3 || raw.SS4PresaleV2) {
+    const v1 = parsePresale(raw.SS4Presale, 1);
+    if (v1) older.push(v1);
+  }
+  return older;
 }
 
-function parsePresale(p: Record<string, unknown> | undefined, version: 1 | 2): SS4PresaleInfo | null {
+function parsePresale(p: Record<string, unknown> | undefined, version: 1 | 2 | 3): SS4PresaleInfo | null {
   const address = str(p?.address);
   const paymentToken = str(p?.paymentToken);
   if (!p || !address || !paymentToken) return null;
@@ -277,7 +300,7 @@ function parsePresale(p: Record<string, unknown> | undefined, version: 1 | 2): S
     address: address as `0x${string}`,
     version,
     supersedes: str(p.supersedes),
-    campaign: version === 2 ? parseCampaign(p.campaign) : null,
+    campaign: version >= 2 ? parseCampaign(p.campaign, version) : null,
     admin: str(p.admin),
     paymentToken: paymentToken as `0x${string}`,
     paymentSymbol: str(p.paymentSymbol),
@@ -299,15 +322,36 @@ function parsePresale(p: Record<string, unknown> | undefined, version: 1 | 2): S
 }
 
 /**
- * The campaign block on a v2 record.
+ * The default EIP-712 voucher type per sale version, used when the deployment record omits it.
+ *
+ * They are genuinely different types, not a versioned spelling of one: v2 attests only that the
+ * social tasks are done and lets the contract apply its own frozen rate, while v3 carries the earned
+ * rate and a single-use nonce. A signature made for one produces a different digest under the other,
+ * which is what stops a voucher from being moved between the two live sales.
+ */
+const VOUCHER_TYPE_BY_VERSION: Record<2 | 3, string> = {
+  2: 'CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)',
+  3: 'CampaignVoucher(address buyer,uint16 boostBps,uint64 deadline,uint64 nonce,uint64 epoch)',
+};
+
+/**
+ * The campaign block on a v2 or v3 record.
  *
  * Returns null rather than a zeroed object when the block is absent: "this sale has no
  * campaign" and "this sale has a campaign paying 0%" are different facts, and only the
  * second one should ever render a rewards panel.
+ *
+ * The three v2 rate fields and v3's `maxCampaignBoostBps` are both read, whichever version this is,
+ * and the missing side is left at 0. One shape covering both is what lets the networks dashboard and
+ * the campaign service read "the campaign on this sale" without branching on version for anything
+ * except the voucher type — and a v2 record genuinely has no maximum-boost concept, so 0 there is the
+ * truth rather than a placeholder.
  */
-function parseCampaign(value: unknown): SS4CampaignInfo | null {
+function parseCampaign(value: unknown, version: 2 | 3 | 1): SS4CampaignInfo | null {
   if (!value || typeof value !== 'object') return null;
   const c = value as Record<string, unknown>;
+  const voucherVersion: 2 | 3 = version === 3 ? 3 : 2;
+  const defaultType = VOUCHER_TYPE_BY_VERSION[voucherVersion];
 
   const rawEip712 = c.eip712;
   let eip712: SS4CampaignInfo['eip712'] = null;
@@ -315,16 +359,15 @@ function parseCampaign(value: unknown): SS4CampaignInfo | null {
     const e = rawEip712 as Record<string, unknown>;
     eip712 = {
       name: str(e.name, 'SS4Presale') ?? 'SS4Presale',
-      version: str(e.version, '2') ?? '2',
+      version: str(e.version, String(voucherVersion)) ?? String(voucherVersion),
       domainSeparator: str(e.domainSeparator),
-      voucherType:
-        str(e.voucherType, 'CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)') ??
-        'CampaignVoucher(address buyer,uint64 deadline,uint64 epoch)',
+      voucherType: str(e.voucherType, defaultType) ?? defaultType,
     };
   }
 
   return {
     bonusAllocation: amount(c.bonusAllocation),
+    maxCampaignBoostBps: num(c.maxCampaignBoostBps),
     socialBonusBps: num(c.socialBonusBps),
     holdBonusBps: num(c.holdBonusBps),
     referralBonusBps: num(c.referralBonusBps),

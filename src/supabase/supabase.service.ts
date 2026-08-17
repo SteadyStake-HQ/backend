@@ -11,6 +11,7 @@ import { PASS_INDEX_CURSOR_DDL } from '../payments/pass-indexer';
 import { SEASONS_DDL } from './seasons-store';
 import { NFT_AWARDS_DDL } from './nft-awards-store';
 import { CAPACITY_DDL } from './capacity-store';
+import { CAMPAIGN_DDL } from './campaign-store';
 
 export interface RuntimeSessionRecord {
   sessionKey?: string;
@@ -451,6 +452,10 @@ export class SupabaseService implements OnModuleInit, OnModuleDestroy {
       -- Auto Execution Plan capacity: membership tier, and the reservation ledger that makes the
       -- global NFT bonus race-safe (blueprint §15, §16).
       ${CAPACITY_DDL}
+
+      -- Early Supporter Campaign: participants, mission completions, referrals, signed vouchers,
+      -- indexed SS4 purchases and the audit trail. DDL shared with campaign-store.ts.
+      ${CAMPAIGN_DDL}
     `);
   }
 
