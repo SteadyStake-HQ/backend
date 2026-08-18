@@ -98,8 +98,9 @@ export function verifyTelegramLogin(
  * Distinguishes three outcomes rather than two, per verifier-types.ts:
  *  - a `member`-ish status: met
  *  - `left` / `kicked`: not met, and the user can fix it by joining
- *  - a transport error, a missing token, an unconfigured chat, or a bot that is not an administrator
- *    of the chat: unavailable, because none of those are facts about the user
+ *  - a transport error, a missing token, an unconfigured chat, or a chat the bot cannot read at all
+ *    (a private one it has not been added to): unavailable, because none of those are facts about the
+ *    user. A public chat needs no membership on the bot's part — Telegram answers for any @username.
  */
 export async function verifyTelegramMembership(
   missionCode: string,
@@ -137,10 +138,16 @@ export async function verifyTelegramMembership(
 
     if (!body?.ok) {
       const description = body?.description ?? `HTTP ${response.status}`;
-      // "user not found" is the one Bot API error that IS a fact about the user: Telegram is saying
-      // this account has no relationship with this chat at all. Everything else — a bot without admin
-      // rights, a bad chat id, rate limiting — is our problem, not theirs.
-      if (/user not found/i.test(description)) {
+      // Two Bot API errors ARE facts about the user rather than about us, and both have to be read as
+      // "not met" so the page tells them to go and join. Everything else — a bad chat id, a bot without
+      // the rights it needs, rate limiting — is our problem and reports as unavailable.
+      //
+      //   "member not found"  the account exists but is not in this chat. This is the ordinary answer
+      //                       for someone who has not joined yet, and it is what a public supergroup
+      //                       returns; matching only "user not found" sent it down the unavailable
+      //                       path, so a user who simply had not joined was told to try again later.
+      //   "user not found"    no such account at all.
+      if (/(user|member) not found/i.test(description)) {
         return notMet(SOURCE_TELEGRAM, { current: 0, target: 1 }, { channel: target.label });
       }
       return unavailable(SOURCE_TELEGRAM, 'Telegram could not confirm your membership right now. Try again.', {

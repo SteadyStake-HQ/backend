@@ -64,6 +64,7 @@ import {
   campaignReadiness,
   campaignStableToken,
   isCampaignChain,
+  telegramBotToken,
   telegramTargets,
   xTargets,
 } from './campaign-config';
@@ -719,7 +720,12 @@ export class CampaignService {
       case 'x':
         return xVerificationAvailable();
       case 'telegram':
-        return telegramTargets().some((t) => t.missionCode === mission.code);
+        // Both halves, because either one missing makes the check impossible: the chat says *what* to
+        // ask about and the token is *how* we ask. Testing only the chat — as this did — advertised
+        // automatic verification on a deployment with no token, so the mission rendered as checkable
+        // and then failed `unavailable` on every pass. `campaignReadiness()` has always required both;
+        // this is the same rule, in the one place the UI reads.
+        return Boolean(telegramBotToken()) && telegramTargets().some((t) => t.missionCode === mission.code);
       case 'onchain_balance':
         // The BOT reading needs no token; the two stablecoin missions do.
         return mission.code === 'onchain_hold_bot' ? true : Boolean(campaignStableToken());
@@ -733,7 +739,9 @@ export class CampaignService {
       return 'X verification is not available yet — the team confirms this mission manually.';
     }
     if (mission.verificationType === 'telegram') {
-      return 'The Telegram channel for this mission is not configured yet.';
+      return telegramBotToken()
+        ? 'The Telegram channel for this mission is not configured yet.'
+        : 'Telegram verification is not switched on for this deployment yet.';
     }
     return 'This mission cannot be checked automatically on this deployment yet.';
   }

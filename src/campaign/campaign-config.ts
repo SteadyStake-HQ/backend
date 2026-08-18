@@ -119,9 +119,34 @@ export interface TelegramTarget {
  * `TELEGRAM_CAMPAIGN_CHAT` is accepted as an alias for the SteadyStake chat because it is the name
  * already documented in .env.example and possibly already set.
  */
+/**
+ * Normalise whatever an operator pasted into a `chat_id` the Bot API accepts.
+ *
+ * The API takes exactly two forms: a numeric id (negative for groups, e.g. `-1001234567890`) or a
+ * `@username` string. Anything else comes back as `Bad Request: chat not found`, which the verifier
+ * correctly reports as "unavailable" — so the mission silently stays manual and nothing says why.
+ *
+ * The two things an operator actually has in front of them are the invite link on the group's settings
+ * dialog (`t.me/steadystake_org`) and the bare handle, and neither is a valid `chat_id`. Both are
+ * accepted here and turned into `@steadystake_org`. Numeric ids are passed through untouched.
+ */
+function telegramChatId(raw: string): string {
+  const value = raw.trim();
+  if (!value) return '';
+  // A numeric id, with or without the leading minus that every supergroup id carries.
+  if (/^-?\d+$/.test(value)) return value;
+  const handle = value
+    .replace(/^https?:\/\//i, '')
+    .replace(/^t\.me\//i, '')
+    .replace(/^telegram\.me\//i, '')
+    .replace(/^@/, '')
+    .replace(/\/.*$/, '');
+  return handle ? `@${handle}` : '';
+}
+
 export function telegramTargets(): TelegramTarget[] {
   const targets: TelegramTarget[] = [];
-  const steadystake = env('TELEGRAM_STEADYSTAKE_CHAT') || env('TELEGRAM_CAMPAIGN_CHAT');
+  const steadystake = telegramChatId(env('TELEGRAM_STEADYSTAKE_CHAT') || env('TELEGRAM_CAMPAIGN_CHAT'));
   if (steadystake) {
     targets.push({
       missionCode: 'community_join_steadystake_telegram',
@@ -129,7 +154,7 @@ export function telegramTargets(): TelegramTarget[] {
       label: 'SteadyStake Telegram',
     });
   }
-  const botchain = env('TELEGRAM_BOTCHAIN_CHAT');
+  const botchain = telegramChatId(env('TELEGRAM_BOTCHAIN_CHAT'));
   if (botchain) {
     targets.push({
       missionCode: 'community_join_botchain_telegram',
