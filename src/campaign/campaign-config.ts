@@ -24,15 +24,25 @@ function env(name: string): string {
 /**
  * The chain the campaign runs on.
  *
- * Defaults to the BOT Chain testnet for the same reason the presale page does: the sale contracts are
- * deployed and being rehearsed on 968, and defaulting to mainnet would have the backend attesting
- * boosts against a sale that does not exist. `CAMPAIGN_CHAIN_ID` moves it, and a value that is not a
- * BOT Chain id is refused rather than accepted — the campaign's on-chain missions are defined in terms
- * of BOT and BOT Chain USDT, and scoring them on Base would be meaningless.
+ * Defaults to **mainnet (677)** for the same reason the presale page does, and the default was flipped
+ * from 968 alongside it when the sale went live on 2026-08-20. While nothing was deployed to mainnet a
+ * testnet default was the honest one: it kept the backend from attesting boosts against a sale that
+ * did not exist. Now that it does exist, the same default is the dangerous one — this process reads
+ * its environment from a host that keeps it outside the repo, so a deploy that forgets
+ * `CAMPAIGN_CHAIN_ID` would have the backend cheerfully signing vouchers for the *testnet* sale while
+ * the presale page sells the mainnet one. Those vouchers verify against the wrong `domainSeparator`
+ * and every buyer sees `InvalidVoucher` at their wallet, with nothing in the logs saying why.
+ *
+ * The two defaults must therefore agree, and they do: presale `envChainId()` and this function both
+ * fall back to 677. Set `CAMPAIGN_CHAIN_ID=968` explicitly to score against the rehearsal.
+ *
+ * A value that is not a BOT Chain id is refused rather than accepted — the campaign's on-chain
+ * missions are defined in terms of BOT and BOT Chain USDT, and scoring them on Base would be
+ * meaningless.
  */
 export function campaignChainId(): number {
   const raw = Number(env('CAMPAIGN_CHAIN_ID'));
-  return (BOT_CHAIN_IDS as readonly number[]).includes(raw) ? raw : 968;
+  return (BOT_CHAIN_IDS as readonly number[]).includes(raw) ? raw : 677;
 }
 
 export function isCampaignChain(chainId: number): boolean {

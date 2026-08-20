@@ -1,9 +1,100 @@
 {
+  "677": {
+    "chainId": 677,
+    "key": "botchain",
+    "environment": "mainnet",
+    "note": "PRODUCTION LAUNCH. The live $SS4 token and public sale. Deployed by script/DeploySS4Mainnet.s.sol, which is chain-gated to 677 (the two rehearsal scripts are gated to 968 and cannot reach mainnet). Sale terms are frozen and are the published ones -- price $0.004, soft cap $16,000, hard cap $200,000, window Aug 20 - Sep 2 2026. NOT AUDITED. All six token allocations were minted to the deployer EOA, which SS3.3/SS22.1 forbid for production: the owner accepted this deliberately, intending to move the pools to vaults/multisigs afterwards. The supply is transferable so that migration is possible, but the AllocationMinted events and allocationRecipients() record the EOA permanently.",
+    "deployedAt": "2026-08-20T04:53:33Z",
+    "deployer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+    "explorer": "https://scan.botchain.ai",
+    "compiler": "v0.8.35+commit.47b9dedd",
+    "compilationProfile": "ss4-optimized",
+    "SS4Token": {
+      "address": "0xf21f791937263F22c1860DfbcB975deCfCDe5D1f",
+      "verified": false,
+      "verificationNote": "Source not yet verified on BOTScan mainnet: scan.botchain.ai sits behind a Cloudflare WAF that returns 403 to every POST carrying Solidity source, both the v2 multipart route and the legacy verifysourcecode form (plain POSTs and 250KB dummy bodies pass, so it is content inspection, not size or method). Verify from the BOTScan web UI or another network using the standard-json-input in contracts/verification/ -- the bytecode on chain is what this repo compiles at profile ss4-optimized.",
+      "deploymentBlock": 20290315,
+      "deploymentTx": "0x9b597fc33ef5a7a7e2cf09a8790c75db83a9ed6c4dd09b20316987ed5813cfea",
+      "name": "SteadyStake",
+      "symbol": "SS4",
+      "decimals": 18,
+      "totalSupply": "1000000000000000000000000000",
+      "allocations": {
+        "community": {
+          "bps": 3500,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        },
+        "team": {
+          "bps": 1500,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        },
+        "investors": {
+          "bps": 1500,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        },
+        "treasury": {
+          "bps": 1500,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        },
+        "liquidity": {
+          "bps": 1000,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        },
+        "ecosystem": {
+          "bps": 1000,
+          "recipient": "0x1BF1fdC063dF1239a9407767C5be36e746104294"
+        }
+      }
+    },
+    "SS4PresaleV3": {
+      "address": "0x1EfEA1a3A4FA3fdedfAd4005dDB94eDF7B36BD13",
+      "supersedes": null,
+      "note": "The production sale. First and only sale deployed to mainnet -- it supersedes nothing, since the six superseded rehearsals all live on testnet 968. Carries the Early Supporter Campaign: a variable Presale Boost of 0 to the published +5.50%, attested per wallet in an EIP-712 CampaignVoucher and capped by the frozen maxCampaignBoostBps.",
+      "verified": false,
+      "verificationNote": "See SS4Token.verificationNote -- same Cloudflare WAF block, same remedy.",
+      "deploymentBlock": 20290321,
+      "deploymentTx": "0x51a0557b41656551b5a2fa6e3e6d90f8dab82d84b9ecc95f80270bdaa5397ba1",
+      "admin": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
+      "paymentToken": "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C",
+      "paymentSymbol": "USDT",
+      "paymentDecimals": 6,
+      "priceUsdE6": "4000",
+      "saleAllocation": "50000000000000000000000000",
+      "minPurchaseUsdE6": "4000000",
+      "maxPurchasePerWalletUsdE6": "4444000000",
+      "softCapUsdE6": "16000000000",
+      "hardCapUsdE6": "200000000000",
+      "saleStart": 1787184000,
+      "saleEnd": 1788307200,
+      "claimStart": 1788307200,
+      "claimDeadline": 0,
+      "tgeUnlockBps": 10000,
+      "vestCliffSeconds": 0,
+      "vestDurationSeconds": 0,
+      "configFrozen": true,
+      "configHash": "0x53748fb7ef9d3c3ee6d06ca1d9d44453ca2c0a7380b9b0081e4398c30981ff7f",
+      "campaign": {
+        "bonusAllocation": "7500000000000000000000000",
+        "maxCampaignBoostBps": 550,
+        "note": "550 bps = the published +5.50% campaign maximum, frozen into configHash. buyWithCampaign REVERTS above it rather than clamping, so the backend must never attest more -- a voucher over the ceiling costs a buyer their gas and sells them nothing. Worst-case demand if every one of the 50M sale tokens took the full boost is 2.75M SS4, against a funded 7.5M reserve, so the reserve cannot be exhausted by this sale. Vouchers are single-use per (buyer, nonce).",
+        "campaignSigner": "0x5e3EFe20697B858901a21496b49Ac653618104a3",
+        "signerNote": "Backend hot key, generated fresh for mainnet -- deliberately NOT the testnet rehearsal key 0x84FB50F3..., which had lived in a dev .env. Holds CAMPAIGN_SIGNER_ROLE and nothing else, and was NOT granted to the admin/deployer (verified on chain: hasRole(admin) == false). The most it can do is award up to the frozen 550 bps out of the capped, funded reserve. Rotate with grantRole/revokeRole and invalidate outstanding vouchers with bumpCampaignEpoch().",
+        "eip712": {
+          "name": "SS4Presale",
+          "version": "3",
+          "domainSeparator": "0x0883e843d4cf6a35d663e750d6de1e3cf32aba0d4c165e17d89919a685d50063",
+          "voucherType": "CampaignVoucher(address buyer,uint16 boostBps,uint64 deadline,uint64 nonce,uint64 epoch)"
+        }
+      },
+      "explorerUrl": "https://scan.botchain.ai/address/0x1EfEA1a3A4FA3fdedfAd4005dDB94eDF7B36BD13",
+      "scheduleNote": "THESE ARE THE REAL SALE TERMS, unlike every 968 record in this file. The window is the published Aug 20 - Sep 2 2026 and the soft cap is the published $16,000. saleStart 1787184000 was already ~5 hours in the past when the freeze confirmed, which configure() permits (it validates only saleStart != 0 < saleEnd <= claimStart) -- so the sale went Active the moment it was frozen rather than waiting. state() == 1 was confirmed on chain immediately after deploy. deploymentBlock is the block to point the campaign event indexer at when backfilling (POST /api/admin/campaign/cursor)."
+    }
+  },
   "968": {
     "chainId": 968,
     "key": "bot-testnet",
     "environment": "testnet",
-    "note": "Testnet rehearsal only. Every economic value here is a placeholder pending the outline's §29 deployment blockers, and all six token allocations were minted to the deployer EOA, which §3.3 forbids for production. Not audited.",
+    "note": "Testnet rehearsal only. Every economic value here is a placeholder pending the outline's \u00a729 deployment blockers, and all six token allocations were minted to the deployer EOA, which \u00a73.3 forbids for production. Not audited.",
     "deployedAt": "2026-08-13T20:29:33Z",
     "deployer": "0x1BF1fdC063dF1239a9407767C5be36e746104294",
     "explorer": "https://scan.bohr.life",
